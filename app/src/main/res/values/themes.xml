@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme. -->
+    <style name="Theme.Bes2" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your theme here. -->
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/teal_200</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">?attr/colorPrimary</item>
+        <!-- For Material 3, it's generally better to define the full color scheme
+             using attributes like colorPrimaryContainer, colorOnPrimaryContainer,
+             colorSurface, colorOnSurface, etc., or rely on the parent theme's defaults.
+             The attributes colorPrimaryVariant and colorSecondaryVariant are
+             primarily from Material 2. -->
+    </style>
+</resources>

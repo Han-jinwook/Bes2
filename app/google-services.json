@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "241901393967",
+    "project_id": "bes2-5ec78",
+    "storage_bucket": "bes2-5ec78.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241901393967:android:9f74ef973ab33d2e1d4eda",
+        "android_client_info": {
+          "package_name": "com.bes2.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "241901393967-eqa5o9l55n7h0r473cohpnfbpvpgh4pq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bes2.app",
+            "certificate_hash": "677ce36234cb30b7b49df817e09f8fdb6e153bbe"
+          }
+        },
+        {
+          "client_id": "241901393967-tsu5kqjek87sfk36g5n3l6e4691p70he.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCajeIl1Z6AO14moxFj0aoUu83IPFBT1yA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "241901393967-tsu5kqjek87sfk36g5n3l6e4691p70he.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

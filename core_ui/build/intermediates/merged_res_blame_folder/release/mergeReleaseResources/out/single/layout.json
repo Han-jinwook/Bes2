@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-release-45:\\layout\\custom_dialog.xml",
+        "source": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-core-1.13.1-22:\\layout\\custom_dialog.xml"
+    },
+    {
+        "merged": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-release-45:\\layout\\ime_secondary_split_test_activity.xml",
+        "source": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-core-1.13.1-22:\\layout\\ime_secondary_split_test_activity.xml"
+    },
+    {
+        "merged": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-release-45:\\layout\\notification_template_part_time.xml",
+        "source": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-core-1.13.1-22:\\layout\\notification_template_part_time.xml"
+    },
+    {
+        "merged": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-release-45:\\layout\\notification_template_part_chronometer.xml",
+        "source": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-core-1.13.1-22:\\layout\\notification_template_part_chronometer.xml"
+    },
+    {
+        "merged": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-release-45:\\layout\\ime_base_split_test_activity.xml",
+        "source": "C:\\Users\\WD\\.gradle\\daemon\\8.13\\com.bes2.core_ui-core-1.13.1-22:\\layout\\ime_base_split_test_activity.xml"
+    }
+]

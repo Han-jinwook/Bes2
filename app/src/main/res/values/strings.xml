@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Bes2</string>
+    <!-- The correct Web Client ID, taken from google-services.json (client_type: 3) -->
+    <string name="default_web_client_id">241901393967-tsu5kqjek87sfk36g5n3l6e4691p70he.apps.googleusercontent.com</string>
+</resources>

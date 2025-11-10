@@ -1,0 +1,52 @@
+package com.bes2.data.dao
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import com.bes2.data.model.ImageItemEntity // kotlin+java 경로의 엔티티 참조
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface ImageItemDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertImageItem(imageItem: ImageItemEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertImageItems(imageItems: List<ImageItemEntity>): List<Long>
+
+    @Update
+    suspend fun updateImageItem(imageItem: ImageItemEntity)
+
+    @Delete
+    suspend fun deleteImageItem(imageItem: ImageItemEntity)
+
+    @Query("SELECT * FROM image_items WHERE id = :id")
+    fun getImageItemById(id: Long): Flow<ImageItemEntity?>
+
+    @Query("SELECT * FROM image_items ORDER BY timestamp DESC")
+    fun getAllImageItems(): Flow<List<ImageItemEntity>>
+
+    // 기존 Flow 반환 메서드 (UI 등에서 사용)
+    @Query("SELECT * FROM image_items WHERE status = :status ORDER BY timestamp DESC")
+    fun getImageItemsByStatusFlow(status: String): Flow<List<ImageItemEntity>> // 이름 변경 Flow 접미사 추가
+
+    // PhotoAnalysisWorker 등을 위한 suspend List 반환 메서드 추가
+    @Query("SELECT * FROM image_items WHERE status = :status ORDER BY timestamp DESC")
+    suspend fun getImageItemsListByStatus(status: String): List<ImageItemEntity>
+
+    @Query("SELECT * FROM image_items WHERE cluster_id = :clusterId ORDER BY timestamp DESC")
+    fun getImageItemsByClusterId(clusterId: Long): Flow<List<ImageItemEntity>>
+
+    @Query("UPDATE image_items SET status = :newStatus WHERE id = :id")
+    suspend fun updateImageItemStatus(id: Long, newStatus: String): Int
+
+    @Query("DELETE FROM image_items WHERE id IN (:ids)")
+    suspend fun deleteImageItemsByIds(ids: List<Long>): Int
+
+    @Query("DELETE FROM image_items")
+    suspend fun clearAllImageItems()
+}

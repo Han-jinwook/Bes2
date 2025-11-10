@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml:2:13-83
+INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml:2:13-83
+	package
+		INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml
+	xmlns:android
+		ADDED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml:2:23-81
+uses-sdk
+INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml reason: use-sdk injection requested
+INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml
+INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml
+	android:targetSdkVersion
+		INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml
+	android:minSdkVersion
+		INJECTED from D:\Bes2\photos_integration\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17174558534442945502.xml

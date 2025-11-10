@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml:2:13-83
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml:2:13-83
+	package
+		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml
+	xmlns:android
+		ADDED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml:2:23-81
+uses-sdk
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml reason: use-sdk injection requested
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml
+	android:targetSdkVersion
+		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml
+	android:minSdkVersion
+		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest17122648116601571869.xml

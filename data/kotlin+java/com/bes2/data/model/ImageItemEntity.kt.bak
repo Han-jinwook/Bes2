@@ -1,0 +1,43 @@
+package com.bes2.data.model
+
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(
+    tableName = "image_items",
+    foreignKeys = [
+        ForeignKey(
+            entity = ImageClusterEntity::class, // 같은 패키지 내의 ImageClusterEntity 참조
+            parentColumns = ["id"],
+            childColumns = ["cluster_id"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
+    indices = [Index(value = ["cluster_id"])]
+)
+data class ImageItemEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val uri: String,
+    @ColumnInfo(name = "file_path")
+    val filePath: String,
+    val timestamp: Long,
+    @ColumnInfo(name = "phash")
+    val pHash: String? = null,
+    @ColumnInfo(name = "blur_score")
+    val blurScore: Float? = null,
+    @ColumnInfo(name = "exposure_score")
+    val exposureScore: Float? = null,
+    @ColumnInfo(name = "nima_score")
+    val nimaScore: Float? = null,
+    @ColumnInfo(name = "cluster_id")
+    val clusterId: Long? = null,
+    val status: String = "NEW",
+    @ColumnInfo(name = "is_selected_by_user", defaultValue = "0")
+    val isSelectedByUser: Boolean = false,
+    @ColumnInfo(name = "is_uploaded", defaultValue = "0")
+    val isUploaded: Boolean = false
+)
