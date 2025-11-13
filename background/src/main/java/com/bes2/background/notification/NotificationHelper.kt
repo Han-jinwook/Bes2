@@ -52,9 +52,8 @@ object NotificationHelper {
     fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        val intent = Intent(context, Class.forName("com.bes2.app.ui.review.ReviewActivity")).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
+        // DEFINITIVE FIX: Removed FLAG_ACTIVITY_CLEAR_TASK to prevent the activity stack from being cleared.
+        val intent = Intent(context, Class.forName("com.bes2.app.ui.review.ReviewActivity"))
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context,

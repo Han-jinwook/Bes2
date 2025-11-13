@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -35,33 +36,27 @@ class ReviewViewModel @Inject constructor(
     val navigationEvent: SharedFlow<NavigationEvent> = _navigationEvent.asSharedFlow()
 
     init {
+        Timber.d("ReviewViewModel init")
         viewModelScope.launch {
             imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW")
                 .flatMapLatest { clusters ->
+                    Timber.d("PENDING_REVIEW clusters found: ${clusters.size}")
                     if (clusters.isEmpty()) {
-                        viewModelScope.launch { _navigationEvent.emit(NavigationEvent.NavigateToSettings) }
+                        Timber.w("No clusters to review.")
                         kotlinx.coroutines.flow.flowOf(ReviewUiState.NoClustersToReview)
                     } else {
                         val currentCluster = clusters.first()
-                        // DEFINITIVE FIX: Convert Long to String to match DAO function signature
+                        Timber.d("Processing cluster ID: ${currentCluster.id}")
                         imageItemDao.getImageItemsByClusterId(currentCluster.id.toString())
+                            .filter { it.isNotEmpty() } 
                             .map { images ->
-                                if (images.isEmpty()) {
-                                    imageClusterDao.updateImageClusterReviewStatus(currentCluster.id, "REVIEW_COMPLETED")
-                                    ReviewUiState.Loading
-                                } else {
-                                    // **FIX:** Re-calculate the best images from scratch to ensure correctness.
-                                    val sortedImages = images
-                                        .filter { it.status != "STATUS_REJECTED" }
-                                        .sortedWith(
-                                            compareBy<ImageItemEntity> { it.areEyesClosed == true } // Penalize closed eyes first
-                                            .thenByDescending { calculateFinalScore(it) }     // Then sort by score
-                                        )
+                                val candidates = images.filter { it.status == "ANALYZED" }
+                                val sortedCandidates = candidates.sortedByDescending { calculateFinalScore(it) }
 
-                                    val initialBest = sortedImages.getOrNull(0)
-                                    val initialSecond = sortedImages.getOrNull(1)
-                                    calculateReadyState(currentCluster, images, initialBest, initialSecond)
-                                }
+                                val initialBest = sortedCandidates.getOrNull(0)
+                                val initialSecond = sortedCandidates.getOrNull(1)
+
+                                calculateReadyState(currentCluster, images, initialBest, initialSecond)
                             }
                     }
                 }
@@ -72,6 +67,8 @@ class ReviewViewModel @Inject constructor(
     fun selectImage(imageToSelect: ImageItemEntity) {
         val currentState = _uiState.value
         if (currentState is ReviewUiState.Ready) {
+            if (imageToSelect.status != "ANALYZED") return
+
             val allSelected = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage)
             val alreadySelected = allSelected.any { it.id == imageToSelect.id }
 
@@ -81,34 +78,32 @@ class ReviewViewModel @Inject constructor(
                 if (allSelected.size < 2) {
                     allSelected + imageToSelect
                 } else {
-                    val sortedSelection = allSelected.sortedBy { calculateFinalScore(it) }
+                    val sortedSelection = allSelected.sortedBy { calculateFinalScore(it) } 
                     listOf(sortedSelection.last(), imageToSelect)
                 }
             }
-            
-            val newBest = newSelection.getOrNull(0)
-            val newSecond = newSelection.getOrNull(1)
+
+            val selectionSortedByScore = newSelection.sortedByDescending { calculateFinalScore(it) }
+            val newBest = selectionSortedByScore.getOrNull(0)
+            val newSecond = selectionSortedByScore.getOrNull(1)
 
             _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages, newBest, newSecond)
         }
     }
     
-    // Restored to original logic
+    // DEFINITIVE FIX: Restore the correct proportional smile bonus logic.
     private fun calculateFinalScore(image: ImageItemEntity): Float {
         val nimaScore = (image.nimaScore ?: 0f) * 10
         val smileBonus = (image.smilingProbability ?: 0f) * 10
         return nimaScore + smileBonus
     }
 
-    // Restored to original, robust sorting logic
     private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>, newFirst: ImageItemEntity?, newSecond: ImageItemEntity?): ReviewUiState.Ready {
-        val (analyzedImages, rejectedImages) = allImages.partition { it.status != "STATUS_REJECTED" }
+        val (analyzedImages, rejectedImages) = allImages.partition { it.status == "ANALYZED" }
 
         val selection = listOfNotNull(newFirst, newSecond)
-            .sortedWith(
-                compareBy<ImageItemEntity> { it.areEyesClosed == true } // 1. Penalize closed eyes
-                .thenByDescending { calculateFinalScore(it) }      // 2. Sort by final score
-            )
+            .sortedByDescending { calculateFinalScore(it) }
+      
         val finalBest = selection.getOrNull(0)
         val finalSecond = selection.getOrNull(1)
         

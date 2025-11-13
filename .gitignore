@@ -1,0 +1,26 @@
+# IDE files
+*.iml
+.idea
+.gradle
+
+# Local properties
+local.properties
+
+# Build files
+/build
+/app/build
+
+# APK files
+*.apk
+*.ap_
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google services
+app/google-services.json
+
+# Misc
+.DS_Store
+capture.props

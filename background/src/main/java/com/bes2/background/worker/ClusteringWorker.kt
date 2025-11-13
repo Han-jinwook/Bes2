@@ -6,31 +6,38 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.bes2.background.notification.NotificationHelper
 import com.bes2.core_common.provider.ResourceProvider
+import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
+import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.util.UUID
 
 @HiltWorker
 class ClusteringWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val imageDao: ImageItemDao,
+    private val imageClusterDao: ImageClusterDao,
     private val resourceProvider: ResourceProvider
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
         const val WORK_NAME = "ClusteringWorker"
+        const val HAMMING_DISTANCE_THRESHOLD = 10 // pHash 유사도 임계값 완화
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         Timber.d("ClusteringWorker started.")
         try {
-            val imagesToCluster = imageDao.getImageItemsListByStatus("ANALYZED")
+            // DEFINITIVE FIX: Cluster both ANALYZED and REJECTED images together.
+            val analyzedImages = imageDao.getImageItemsListByStatus("ANALYZED")
+            val rejectedImages = imageDao.getImageItemsListByStatus("STATUS_REJECTED")
+            val imagesToCluster = (analyzedImages + rejectedImages).filter { it.clusterId == null }
+
             if (imagesToCluster.isEmpty()) {
                 Timber.d("No new images to cluster.")
                 NotificationHelper.dismissAllAppNotifications(appContext)
@@ -42,30 +49,42 @@ class ClusteringWorker @AssistedInject constructor(
             val clusters = clusterImages(imagesToCluster)
             Timber.d("Clustered into ${clusters.size} groups.")
 
-            val clusterInfos = clusters.map { cluster ->
-                val clusterId = "CLUSTER_" + UUID.randomUUID().toString()
-                // Restore the smile score bonus logic
-                val bestImage = cluster.images.maxByOrNull { image ->
-                    var score = image.nimaScore ?: 0.0f
-                    if ((image.smilingProbability ?: 0.0f) > 0.7f) {
-                        score *= 1.1f // 10% bonus
+            var newClustersForReview = 0
+            for (cluster in clusters) {
+                if (cluster.images.isEmpty() || cluster.images.all { it.status == "STATUS_REJECTED" }) {
+                    // 모든 사진이 실패한 클러스터는 리뷰할 필요가 없음
+                    val allImageUris = cluster.images.map { it.uri }
+                    if (allImageUris.isNotEmpty()) {
+                        // 클러스터 ID는 할당해주되, 리뷰 대상에서는 제외
+                        val clusterIdString = "CLUSTER_REJECTED_${System.currentTimeMillis()}"
+                        imageDao.updateClusterIdByUris(allImageUris, clusterIdString)
                     }
-                    score
+                    continue
                 }
+
+                val newClusterEntity = ImageClusterEntity(creationTime = System.currentTimeMillis())
+                val newClusterId = imageClusterDao.insertImageCluster(newClusterEntity)
+                val clusterIdString = newClusterId.toString()
+
+                // 점수 계산은 정상 사진(ANALYZED) 내에서만 수행
+                val bestImage = cluster.images.filter { it.status == "ANALYZED" }.maxByOrNull { image ->
+                    val nimaScore = (image.nimaScore ?: 0f) * 10
+                    val smileBonus = if ((image.smilingProbability ?: 0f) > 0.7f) 10f else 0f
+                    nimaScore + smileBonus
+                }
+
+                val allImageUris = cluster.images.map { it.uri }
+                imageDao.updateClusterIdByUris(allImageUris, clusterIdString)
 
                 bestImage?.let {
-                    imageDao.updateImageItem(it.copy(isBestInCluster = true, clusterId = clusterId))
-                    val otherImageUris = cluster.images.filter { img -> img.id != it.id }.map { i -> i.uri }
-                    if (otherImageUris.isNotEmpty()) {
-                        imageDao.updateClusterIdByUris(otherImageUris, clusterId)
-                    }
+                    imageDao.updateImageItem(it.copy(isBestInCluster = true))
                 }
-                ClusterInfo(clusterId, cluster.images.size)
+                newClustersForReview++
             }
 
-            val validClusters = clusterInfos.filter { it.count > 0 }
-            if (validClusters.isNotEmpty()) {
-                NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, validClusters.size)
+            if (newClustersForReview > 0) {
+                Timber.d("Notifying user about $newClustersForReview new clusters.")
+                NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, newClustersForReview)
             }
 
             Result.success()
@@ -76,7 +95,6 @@ class ClusteringWorker @AssistedInject constructor(
     }
 
     private fun clusterImages(images: List<ImageItemEntity>): List<Cluster> {
-        // Simple pHash-based clustering for now
         val clusters = mutableListOf<Cluster>()
         val unclusteredImages = images.toMutableList()
 
@@ -98,11 +116,14 @@ class ClusteringWorker @AssistedInject constructor(
     }
 
     private fun areSimilar(image1: ImageItemEntity, image2: ImageItemEntity): Boolean {
-        // This is a placeholder. A real implementation would use a more robust
-        // image similarity metric (like pHash distance).
-        return (image1.pHash != null && image1.pHash == image2.pHash)
+        val pHash1 = image1.pHash
+        val pHash2 = image2.pHash
+        if (pHash1 == null || pHash2 == null || pHash1.length != pHash2.length) {
+            return false
+        }
+        val distance = pHash1.zip(pHash2).count { (c1, c2) -> c1 != c2 }
+        return distance <= HAMMING_DISTANCE_THRESHOLD
     }
 
     data class Cluster(val images: MutableList<ImageItemEntity>)
-    data class ClusterInfo(val clusterId: String, val count: Int)
 }

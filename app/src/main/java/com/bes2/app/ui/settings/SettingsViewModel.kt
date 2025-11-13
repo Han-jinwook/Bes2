@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.bes2.app.R
 import com.bes2.background.worker.DailyCloudSyncWorker
@@ -18,7 +19,9 @@ import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.common.api.ApiException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -29,6 +32,7 @@ import timber.log.Timber
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZonedDateTime
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -37,8 +41,14 @@ private const val DEBUG_TAG = "AuthFlowDebug"
 data class SettingsUiState(
     val isLoggedIn: Boolean = false,
     val selectedProvider: String = "google_photos",
-    val syncTime: LocalTime = LocalTime.of(2, 0)
+    val syncTime: LocalTime = LocalTime.of(2, 0),
+    val isSyncing: Boolean = false // Sync status
 )
+
+sealed interface SettingsEvent {
+    data class SyncCompleted(val message: String) : SettingsEvent
+    object SyncFailed : SettingsEvent
+}
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -51,15 +61,16 @@ class SettingsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState.asStateFlow()
 
+    private val _events = MutableSharedFlow<SettingsEvent>()
+    val events = _events.asSharedFlow()
+
     init {
         Timber.tag(DEBUG_TAG).d("[ViewModel] Initializing.")
-        // Reactively observe the login state from the auth manager.
         authManager.account
             .onEach { account ->
                 val isLoggedIn = account != null
                 Timber.tag(DEBUG_TAG).d("[ViewModel] AuthManager account state changed. Logged in: $isLoggedIn")
                 _uiState.update { it.copy(isLoggedIn = isLoggedIn) }
-                // Re-evaluate scheduling whenever login state changes
                 if (isLoggedIn) {
                     scheduleDailySync()
                 } else {
@@ -157,8 +168,35 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onManualSyncClicked() {
+        if (_uiState.value.isSyncing) return
+        
         Timber.d("Manual sync triggered.")
+        _uiState.update { it.copy(isSyncing = true) }
+
         val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>().build()
+        val workId = syncWorkRequest.id
         workManager.enqueue(syncWorkRequest)
+
+        viewModelScope.launch {
+            workManager.getWorkInfoByIdFlow(workId).collect { workInfo ->
+                if (workInfo.state.isFinished) {
+                    _uiState.update { it.copy(isSyncing = false) }
+                    when (workInfo.state) {
+                        WorkInfo.State.SUCCEEDED -> {
+                            val syncedCount = workInfo.outputData.getInt(DailyCloudSyncWorker.KEY_SYNCED_COUNT, 0)
+                            val message = if (syncedCount > 0) {
+                                "베스트 사진 $syncedCount 장이 백업되었습니다."
+                            } else {
+                                "백업할 새로운 베스트 사진이 없습니다."
+                            }
+                            _events.emit(SettingsEvent.SyncCompleted(message))
+                        }
+                        else -> {
+                            _events.emit(SettingsEvent.SyncFailed)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

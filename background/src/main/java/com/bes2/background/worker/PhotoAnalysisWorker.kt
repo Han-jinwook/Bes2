@@ -79,34 +79,35 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     appContext.contentResolver.openInputStream(imageItem.uri.toUri())?.use {
                         bitmap = BitmapFactory.decodeStream(it)
                     } ?: throw FileNotFoundException("ContentResolver returned null stream for ${imageItem.uri}")
-                    
+
+                    // Perform all analysis first
+                    val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap!!)
+                    val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap!!)
                     val faceEmbedding = faceEmbedder.getFaceEmbedding(bitmap!!)
+                    val pHash = ImagePhashGenerator.generatePhash(bitmap!!)
+                    val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap!!)
+                    val smilingProbability = smileDetector.getSmilingProbability(bitmap!!)
+
+                    val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()
                     val faceEmbeddingBytes = faceEmbedding?.let { floatArray ->
                         val byteBuffer = ByteBuffer.allocate(floatArray.size * 4)
                         floatArray.forEach { byteBuffer.putFloat(it) }
                         byteBuffer.array()
                     }
-                    val pHash = ImagePhashGenerator.generatePhash(bitmap!!)
 
-                    val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap!!)
-                    val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap!!)
-                    val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap!!)
-                    val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()
-                    val smilingProbability = smileDetector.getSmilingProbability(bitmap!!)
-
-                    // DEFINITIVE FIX: Restore the correct eye-closed logic
-                    val finalStatus = when {
-                        areEyesClosed -> "STATUS_REJECTED"
-                        blurScore < BLUR_THRESHOLD -> "STATUS_REJECTED"
-                        nimaMeanScore == null -> "ERROR_ANALYSIS"
-                        else -> "ANALYZED"
+                    // DEFINITIVE FIX: NIMA failure should not cause a photo to be rejected.
+                    val finalStatus = if (areEyesClosed || blurScore < BLUR_THRESHOLD) {
+                        "STATUS_REJECTED"
+                    } else {
+                        "ANALYZED"
                     }
 
+                    // Finally, update the item with all collected data
                     val updatedItem = imageItem.copy(
                         status = finalStatus,
                         pHash = pHash,
                         faceEmbedding = faceEmbeddingBytes,
-                        nimaScore = nimaMeanScore,
+                        nimaScore = nimaMeanScore, // This will be null if NIMA failed, which is ok
                         blurScore = blurScore,
                         areEyesClosed = areEyesClosed,
                         smilingProbability = smilingProbability
