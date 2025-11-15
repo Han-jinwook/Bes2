@@ -8,7 +8,7 @@ import android.provider.MediaStore
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.bes2.background.worker.PhotoAnalysisWorker
+import com.bes2.background.worker.ClusteringWorker
 import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.model.ImageItemEntity
 import kotlinx.coroutines.CoroutineScope
@@ -67,18 +67,17 @@ class MediaChangeObserver(
                         imageItemDao.insertImageItem(newImage)
                         Timber.tag(DEBUG_TAG).i("SUCCESS: Saved new image to DB. URI: ${newImage.uri}")
 
-                        // --- CORE LOGIC RESTORED ---
-                        // Schedule the analysis to run in 1 minute, replacing any pending analysis.
-                        val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>()
-                            .setInitialDelay(1, TimeUnit.MINUTES) // 1-minute delay for testing
+                        // --- PIPELINE FIX: START WITH CLUSTERING ---
+                        val clusteringWorkRequest = OneTimeWorkRequestBuilder<ClusteringWorker>()
+                            .setInitialDelay(1, TimeUnit.MINUTES)
                             .build()
                         
                         workManager.enqueueUniqueWork(
-                            PhotoAnalysisWorker.WORK_NAME, 
-                            ExistingWorkPolicy.REPLACE, // This is the key to the debounce/update logic
-                            analysisWorkRequest
+                            ClusteringWorker.WORK_NAME,
+                            ExistingWorkPolicy.REPLACE,
+                            clusteringWorkRequest
                         )
-                        Timber.tag(DEBUG_TAG).i("Enqueued/Updated analysis work. Will run in 1 minute.")
+                        Timber.tag(DEBUG_TAG).i("Enqueued clustering work. Will run in 1 minute.")
 
                     } else {
                         Timber.tag(DEBUG_TAG).w("Could not move cursor to first. URI: $uri may no longer exist.")

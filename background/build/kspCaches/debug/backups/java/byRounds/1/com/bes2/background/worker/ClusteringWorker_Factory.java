@@ -1,8 +1,8 @@
 package com.bes2.background.worker;
 
 import android.content.Context;
+import androidx.work.WorkManager;
 import androidx.work.WorkerParameters;
-import com.bes2.core_common.provider.ResourceProvider;
 import com.bes2.data.dao.ImageClusterDao;
 import com.bes2.data.dao.ImageItemDao;
 import dagger.internal.DaggerGenerated;
@@ -30,28 +30,28 @@ public final class ClusteringWorker_Factory {
 
   private final Provider<ImageClusterDao> imageClusterDaoProvider;
 
-  private final Provider<ResourceProvider> resourceProvider;
+  private final Provider<WorkManager> workManagerProvider;
 
   public ClusteringWorker_Factory(Provider<ImageItemDao> imageDaoProvider,
       Provider<ImageClusterDao> imageClusterDaoProvider,
-      Provider<ResourceProvider> resourceProvider) {
+      Provider<WorkManager> workManagerProvider) {
     this.imageDaoProvider = imageDaoProvider;
     this.imageClusterDaoProvider = imageClusterDaoProvider;
-    this.resourceProvider = resourceProvider;
+    this.workManagerProvider = workManagerProvider;
   }
 
   public ClusteringWorker get(Context appContext, WorkerParameters workerParams) {
-    return newInstance(appContext, workerParams, imageDaoProvider.get(), imageClusterDaoProvider.get(), resourceProvider.get());
+    return newInstance(appContext, workerParams, imageDaoProvider.get(), imageClusterDaoProvider.get(), workManagerProvider.get());
   }
 
   public static ClusteringWorker_Factory create(Provider<ImageItemDao> imageDaoProvider,
       Provider<ImageClusterDao> imageClusterDaoProvider,
-      Provider<ResourceProvider> resourceProvider) {
-    return new ClusteringWorker_Factory(imageDaoProvider, imageClusterDaoProvider, resourceProvider);
+      Provider<WorkManager> workManagerProvider) {
+    return new ClusteringWorker_Factory(imageDaoProvider, imageClusterDaoProvider, workManagerProvider);
   }
 
   public static ClusteringWorker newInstance(Context appContext, WorkerParameters workerParams,
-      ImageItemDao imageDao, ImageClusterDao imageClusterDao, ResourceProvider resourceProvider) {
-    return new ClusteringWorker(appContext, workerParams, imageDao, imageClusterDao, resourceProvider);
+      ImageItemDao imageDao, ImageClusterDao imageClusterDao, WorkManager workManager) {
+    return new ClusteringWorker(appContext, workerParams, imageDao, imageClusterDao, workManager);
   }
 }

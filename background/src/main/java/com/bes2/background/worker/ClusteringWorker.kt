@@ -1,20 +1,26 @@
 package com.bes2.background.worker
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.bes2.background.notification.NotificationHelper
-import com.bes2.core_common.provider.ResourceProvider
 import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
+import com.bes2.ml.ImagePhashGenerator
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.io.FileNotFoundException
 
 @HiltWorker
 class ClusteringWorker @AssistedInject constructor(
@@ -22,76 +28,82 @@ class ClusteringWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val imageDao: ImageItemDao,
     private val imageClusterDao: ImageClusterDao,
-    private val resourceProvider: ResourceProvider
+    private val workManager: WorkManager
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
         const val WORK_NAME = "ClusteringWorker"
-        const val HAMMING_DISTANCE_THRESHOLD = 10 // pHash 유사도 임계값 완화
+        const val HAMMING_DISTANCE_THRESHOLD = 10
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Timber.d("ClusteringWorker started.")
+        Timber.tag(WORK_NAME).d("Worker started. Following PLAN.md: Clustering -> Analysis.")
         try {
-            // DEFINITIVE FIX: Cluster both ANALYZED and REJECTED images together.
-            val analyzedImages = imageDao.getImageItemsListByStatus("ANALYZED")
-            val rejectedImages = imageDao.getImageItemsListByStatus("STATUS_REJECTED")
-            val imagesToCluster = (analyzedImages + rejectedImages).filter { it.clusterId == null }
-
-            if (imagesToCluster.isEmpty()) {
-                Timber.d("No new images to cluster.")
-                NotificationHelper.dismissAllAppNotifications(appContext)
+            // 1. Get NEW images
+            val newImages = imageDao.getImageItemsListByStatus("NEW")
+            if (newImages.isEmpty()) {
+                Timber.tag(WORK_NAME).d("No new images to process.")
                 return@withContext Result.success()
             }
+            Timber.tag(WORK_NAME).d("Found ${newImages.size} new images.")
 
-            Timber.d("Found ${imagesToCluster.size} images to cluster.")
-
-            val clusters = clusterImages(imagesToCluster)
-            Timber.d("Clustered into ${clusters.size} groups.")
-
-            var newClustersForReview = 0
-            for (cluster in clusters) {
-                if (cluster.images.isEmpty() || cluster.images.all { it.status == "STATUS_REJECTED" }) {
-                    // 모든 사진이 실패한 클러스터는 리뷰할 필요가 없음
-                    val allImageUris = cluster.images.map { it.uri }
-                    if (allImageUris.isNotEmpty()) {
-                        // 클러스터 ID는 할당해주되, 리뷰 대상에서는 제외
-                        val clusterIdString = "CLUSTER_REJECTED_${System.currentTimeMillis()}"
-                        imageDao.updateClusterIdByUris(allImageUris, clusterIdString)
-                    }
-                    continue
+            // 2. Calculate pHash for each new image
+            val imagesWithPhash = newImages.mapNotNull { image ->
+                try {
+                    val bitmap = loadBitmap(image.uri)
+                    // Call the object method directly
+                    val pHash = ImagePhashGenerator.generatePhash(bitmap)
+                    bitmap.recycle()
+                    image.copy(pHash = pHash, status = "PRE_CLUSTERING")
+                } catch (e: Exception) {
+                    Timber.tag(WORK_NAME).e(e, "Failed to calculate pHash for ${image.uri}. Marking as error.")
+                    imageDao.updateImageItem(image.copy(status = "ERROR_ANALYSIS"))
+                    null
                 }
+            }
+            // Use a loop with the existing 'updateImageItem' function
+            imagesWithPhash.forEach { image ->
+                imageDao.updateImageItem(image)
+            }
+            Timber.tag(WORK_NAME).d("Calculated pHash for ${imagesWithPhash.size} images.")
 
+            // 3. Cluster images that now have a pHash
+            val imagesToCluster = imageDao.getImageItemsListByStatus("PRE_CLUSTERING")
+            val clusters = clusterImages(imagesToCluster)
+            Timber.tag(WORK_NAME).d("Clustered into ${clusters.size} groups.")
+
+            // 4. Save clusters and prepare for next step (Analysis)
+            for (cluster in clusters) {
                 val newClusterEntity = ImageClusterEntity(creationTime = System.currentTimeMillis())
                 val newClusterId = imageClusterDao.insertImageCluster(newClusterEntity)
-                val clusterIdString = newClusterId.toString()
-
-                // 점수 계산은 정상 사진(ANALYZED) 내에서만 수행
-                val bestImage = cluster.images.filter { it.status == "ANALYZED" }.maxByOrNull { image ->
-                    val nimaScore = (image.nimaScore ?: 0f) * 10
-                    val smileBonus = if ((image.smilingProbability ?: 0f) > 0.7f) 10f else 0f
-                    nimaScore + smileBonus
-                }
-
-                val allImageUris = cluster.images.map { it.uri }
-                imageDao.updateClusterIdByUris(allImageUris, clusterIdString)
-
-                bestImage?.let {
-                    imageDao.updateImageItem(it.copy(isBestInCluster = true))
-                }
-                newClustersForReview++
+                val imageUrisInCluster = cluster.images.map { it.uri }
+                
+                // Use existing functions to update clusterId and then status
+                imageDao.updateClusterIdByUris(imageUrisInCluster, newClusterId.toString())
+                val imageIdsInCluster = cluster.images.map { it.id }
+                imageDao.updateImageStatusesByIds(imageIdsInCluster, "PENDING_ANALYSIS")
             }
 
-            if (newClustersForReview > 0) {
-                Timber.d("Notifying user about $newClustersForReview new clusters.")
-                NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, newClustersForReview)
-            }
+            // 5. Trigger the next worker in the pipeline
+            Timber.tag(WORK_NAME).d("Clustering complete. Enqueuing PhotoAnalysisWorker.")
+            val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+            workManager.enqueueUniqueWork(
+                PhotoAnalysisWorker.WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                analysisWorkRequest
+            )
 
-            Result.success()
+            return@withContext Result.success()
         } catch (e: Exception) {
-            Timber.e(e, "Error in ClusteringWorker")
-            Result.failure()
+            Timber.tag(WORK_NAME).e(e, "Error in ClusteringWorker")
+            return@withContext Result.failure()
         }
+    }
+
+    private fun loadBitmap(uri: String): Bitmap {
+        return appContext.contentResolver.openInputStream(uri.toUri())?.use {
+            BitmapFactory.decodeStream(it)
+        } ?: throw FileNotFoundException("ContentResolver returned null stream for $uri")
     }
 
     private fun clusterImages(images: List<ImageItemEntity>): List<Cluster> {

@@ -110,21 +110,24 @@ private fun AppNavigation(
 ) {
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
-            HomeScreen(navController = navController, onStartAnalysisAndExit = onStartAnalysisAndExit)
+            HomeScreen(
+                onStartAnalysisAndExit = onStartAnalysisAndExit,
+                onNavigateToSettings = { navController.navigate("settings") }
+            )
         }
         composable("settings") {
-            SettingsScreen(viewModel = hiltViewModel(), navController = navController)
+            SettingsScreen(viewModel = hiltViewModel())
         }
         composable("review") {
-            ReviewScreen(viewModel = hiltViewModel(), navController = navController)
+            ReviewScreen(viewModel = hiltViewModel())
         }
     }
 }
 
 @Composable
 private fun HomeScreen(
-    navController: NavHostController,
-    onStartAnalysisAndExit: () -> Unit
+    onStartAnalysisAndExit: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -141,7 +144,7 @@ private fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = { navController.navigate("settings") }, modifier = Modifier.width(200.dp)) {
+        Button(onClick = onNavigateToSettings, modifier = Modifier.width(200.dp)) {
             Text("설정")
         }
     }

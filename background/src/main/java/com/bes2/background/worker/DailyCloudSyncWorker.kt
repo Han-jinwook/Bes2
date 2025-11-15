@@ -3,6 +3,7 @@ package com.bes2.background.worker
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.WorkerParameters
 import com.bes2.background.notification.NotificationHelper
 import com.bes2.data.dao.ImageItemDao
@@ -22,6 +23,7 @@ class DailyCloudSyncWorker @AssistedInject constructor(
 
     companion object {
         const val WORK_NAME = "DailyCloudSyncWorker"
+        const val KEY_SYNCED_COUNT = "synced_count"
     }
 
     override suspend fun doWork(): Result {
@@ -29,10 +31,12 @@ class DailyCloudSyncWorker @AssistedInject constructor(
 
         try {
             val imagesToUpload = imageItemDao.getImagesByStatusAndUploadFlag("KEPT", false)
+            var successfulUploadCount = 0
 
             if (imagesToUpload.isEmpty()) {
                 Timber.d("No new images to upload.")
-                return Result.success()
+                val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, 0).build()
+                return Result.success(outputData)
             }
 
             Timber.d("Found ${imagesToUpload.size} images to upload.")
@@ -45,7 +49,8 @@ class DailyCloudSyncWorker @AssistedInject constructor(
             if (successfulUploads.isNotEmpty()) {
                 val successfullyUploadedUris = successfulUploads.map { it.originalUri }
                 imageItemDao.updateUploadedStatusByUris(successfullyUploadedUris, true)
-                Timber.d("Successfully marked ${successfulUploads.size} images as uploaded.")
+                successfulUploadCount = successfulUploads.size
+                Timber.d("Successfully marked $successfulUploadCount images as uploaded.")
             }
 
             if (failedUploads.isNotEmpty()) {
@@ -57,7 +62,8 @@ class DailyCloudSyncWorker @AssistedInject constructor(
             }
 
             Timber.d("All images uploaded successfully.")
-            return Result.success()
+            val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, successfulUploadCount).build()
+            return Result.success(outputData)
 
         } catch (e: ConsentRequiredException) {
             // DEFINITIVE FIX based on PLAN.md: Show a notification instead of retrying.

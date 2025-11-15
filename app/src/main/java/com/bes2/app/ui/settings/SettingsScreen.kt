@@ -2,6 +2,7 @@ package com.bes2.app.ui.settings
 
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +37,7 @@ private const val DEBUG_TAG = "AuthFlowDebug"
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val signInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
@@ -64,7 +67,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         verticalArrangement = Arrangement.Center
     ) {
         if (uiState.isLoggedIn) {
-            Text("로그인되었습니다.", style = typography.headlineSmall)
+            Text("로그인되었습니다.", style = MaterialTheme.typography.headlineSmall)
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = viewModel::onLogoutClicked) {
                 Text("로그아웃")
@@ -85,15 +88,15 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
             }
 
         } else {
-            Text("Google 포토에 로그인하여 선택한 사진을 백업하세요.", style = typography.bodyLarge)
+            Text("Google 포토에 로그인하여 선택한 사진을 백업하세요.", style = MaterialTheme.typography.bodyLarge)
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { 
+            Button(onClick = {
                 Timber.tag(DEBUG_TAG).d("Sign-in button clicked.")
-                launch {
+                scope.launch {
                     val intentSender = viewModel.beginSignIn()
                     if (intentSender != null) {
                         Timber.tag(DEBUG_TAG).d("Intent Sender is not null, launching sign-in flow.")
-                        signInLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(intentSender).build())
+                        signInLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
                     } else {
                         Timber.tag(DEBUG_TAG).w("Intent Sender is null, cannot start sign-in flow.")
                         Toast.makeText(context, "로그인에 실패했습니다. 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()

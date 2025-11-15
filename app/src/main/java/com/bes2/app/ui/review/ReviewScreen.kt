@@ -58,14 +58,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.bes2.background.worker.PhotoAnalysisWorker
 import com.bes2.data.model.ImageItemEntity
 import kotlinx.coroutines.flow.collectLatest
 
 @Composable
-fun ReviewScreen(viewModel: ReviewViewModel, navController: NavController) {
+fun ReviewScreen(viewModel: ReviewViewModel) {
     val uiState by viewModel.uiState.collectAsState()
 
     var zoomedImageInfo by remember { mutableStateOf<Pair<List<ImageItemEntity>, Int>?>(null) }
@@ -80,20 +79,6 @@ fun ReviewScreen(viewModel: ReviewViewModel, navController: NavController) {
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         viewModel.onDeletionRequestHandled(result.resultCode == AppCompatActivity.RESULT_OK)
-    }
-
-    // Listen for navigation events
-    LaunchedEffect(key1 = true) {
-        viewModel.navigationEvent.collectLatest {
-            when (it) {
-                is NavigationEvent.NavigateToSettings -> {
-                    navController.navigate("settings") {
-                        // Clear the back stack to prevent going back to the empty review screen
-                        popUpTo("home") { inclusive = false }
-                    }
-                }
-            }
-        }
     }
 
     when (val state = uiState) {
