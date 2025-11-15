@@ -1,9 +1,11 @@
 package com.bes2.app.ui.settings
 
+import android.app.TimePickerDialog
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,32 +14,67 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.time.format.DateTimeFormatter
 
 private const val DEBUG_TAG = "AuthFlowDebug"
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    val timePickerDialog = TimePickerDialog(
+        context,
+        { _, hourOfDay, minute ->
+            viewModel.setSyncTime(hourOfDay, minute)
+            showTimePicker = false
+        },
+        uiState.syncTime.hour,
+        uiState.syncTime.minute,
+        false // 24-hour format
+    )
+
+    if (showTimePicker) {
+        timePickerDialog.show()
+    }
+
 
     val signInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
@@ -59,63 +96,105 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        if (uiState.isLoggedIn) {
-            Text("로그인되었습니다.", style = MaterialTheme.typography.headlineSmall)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("설정") },
+                navigationIcon = {
+                    Row(
+                        modifier = Modifier.clickable { onNavigateBack() },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to Home"
+                        )
+                        Text("홈")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            Text("클라우드 자동 동기화", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = viewModel::onLogoutClicked) {
-                Text("로그아웃")
-            }
-            Spacer(modifier = Modifier.height(32.dp))
 
+            // Cloud Service Selection
+            SettingItem(
+                title = "클라우드 서비스 선택",
+                value = "Google 포토"
+            ) {
+                if (uiState.isLoggedIn) {
+                    Button(onClick = viewModel::onLogoutClicked) {
+                        Text("로그아웃")
+                    }
+                } else {
+                    Button(onClick = {
+                        scope.launch {
+                            val intentSender = viewModel.beginSignIn()
+                            if (intentSender != null) {
+                                signInLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                            } else {
+                                Toast.makeText(context, "로그인에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }) {
+                        Text("Google 계정으로 로그인")
+                    }
+                }
+            }
+
+            // Auto Sync Time
+            val formatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+            SettingItem(
+                title = "자동 동기화 시간",
+                value = "매일 ${uiState.syncTime.format(formatter)}"
+            ) {
+                Button(onClick = { showTimePicker = true }) {
+                    Text("시간 변경")
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Manual Sync Button
             Button(
                 onClick = viewModel::onManualSyncClicked,
-                enabled = !uiState.isSyncing // Disable button when syncing
+                modifier = Modifier.fillMaxWidth(),
+                enabled = uiState.isLoggedIn && !uiState.isSyncing
             ) {
                 if (uiState.isSyncing) {
                     CircularProgressIndicator(modifier = Modifier.height(24.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("동기화 중...")
+                    Text(" 동기화 중...", modifier = Modifier.padding(start = 8.dp))
                 } else {
-                    Text("수동 동기화")
+                    Text("지금 바로 동기화")
                 }
             }
-
-        } else {
-            Text("Google 포토에 로그인하여 선택한 사진을 백업하세요.", style = MaterialTheme.typography.bodyLarge)
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = {
-                Timber.tag(DEBUG_TAG).d("Sign-in button clicked.")
-                scope.launch {
-                    val intentSender = viewModel.beginSignIn()
-                    if (intentSender != null) {
-                        Timber.tag(DEBUG_TAG).d("Intent Sender is not null, launching sign-in flow.")
-                        signInLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
-                    } else {
-                        Timber.tag(DEBUG_TAG).w("Intent Sender is null, cannot start sign-in flow.")
-                        Toast.makeText(context, "로그인에 실패했습니다. 다시 시도해 주세요.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }) {
-                Text("Google 계정으로 로그인")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Wi-Fi에서만 업로드")
-            Switch(checked = false, onCheckedChange = { /* TODO */ })
         }
     }
+}
+
+@Composable
+private fun SettingItem(
+    title: String,
+    value: String,
+    content: @Composable () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(title, fontSize = 14.sp, color = Color.Gray)
+            Text(value, fontSize = 18.sp)
+        }
+        content()
+    }
+    Spacer(modifier = Modifier.height(24.dp))
 }

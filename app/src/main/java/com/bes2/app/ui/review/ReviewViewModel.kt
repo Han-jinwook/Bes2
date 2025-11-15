@@ -42,13 +42,16 @@ class ReviewViewModel @Inject constructor(
                 .flatMapLatest { clusters ->
                     Timber.d("PENDING_REVIEW clusters found: ${clusters.size}")
                     if (clusters.isEmpty()) {
-                        Timber.w("No clusters to review.")
+                        Timber.w("No clusters to review. Emitting NavigateToHome event.")
+                        // --- MINIMAL CODING FIX ---
+                        // Emit navigation event to go home when there are no more clusters.
+                        _navigationEvent.emit(NavigationEvent.NavigateToHome)
                         kotlinx.coroutines.flow.flowOf(ReviewUiState.NoClustersToReview)
                     } else {
                         val currentCluster = clusters.first()
                         Timber.d("Processing cluster ID: ${currentCluster.id}")
                         imageItemDao.getImageItemsByClusterId(currentCluster.id.toString())
-                            .filter { it.isNotEmpty() } 
+                            .filter { it.isNotEmpty() }
                             .map { images ->
                                 val candidates = images.filter { it.status == "ANALYZED" }
                                 val sortedCandidates = candidates.sortedByDescending { calculateFinalScore(it) }
@@ -78,7 +81,7 @@ class ReviewViewModel @Inject constructor(
                 if (allSelected.size < 2) {
                     allSelected + imageToSelect
                 } else {
-                    val sortedSelection = allSelected.sortedBy { calculateFinalScore(it) } 
+                    val sortedSelection = allSelected.sortedBy { calculateFinalScore(it) }
                     listOf(sortedSelection.last(), imageToSelect)
                 }
             }
@@ -190,5 +193,8 @@ sealed interface ReviewUiState {
 }
 
 sealed interface NavigationEvent {
+    // --- MINIMAL CODING FIX ---
+    // Add a new event for navigating home.
+    object NavigateToHome : NavigationEvent
     object NavigateToSettings : NavigationEvent
 }

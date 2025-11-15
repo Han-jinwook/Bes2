@@ -18,8 +18,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             Bes2Theme {
-                // The Bes2App composable now takes a lambda to finish the activity.
-                Bes2App(onStartAnalysisAndExit = { finish() })
+                // Restore the version that moves the task to the background instead of finishing.
+                Bes2App(onStartAnalysisAndExit = { moveTaskToBack(true) })
             }
         }
         startMediaDetectionService()

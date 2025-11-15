@@ -56,6 +56,9 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        // --- DEBUG LOG ---
+        Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker TRIGGERED by WorkManager ---")
+        
         Timber.tag(WORK_NAME).d("Worker started. Analyzing images with PENDING_ANALYSIS status.")
 
         try {

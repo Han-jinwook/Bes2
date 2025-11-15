@@ -33,7 +33,7 @@ class ClusteringWorker @AssistedInject constructor(
 
     companion object {
         const val WORK_NAME = "ClusteringWorker"
-        const val HAMMING_DISTANCE_THRESHOLD = 10
+        const val HAMMING_DISTANCE_THRESHOLD = 15 // Increased threshold as per user feedback
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -107,6 +107,9 @@ class ClusteringWorker @AssistedInject constructor(
     }
 
     private fun clusterImages(images: List<ImageItemEntity>): List<Cluster> {
+        val imageIds = images.joinToString(", ") { it.id.toString() }
+        Timber.tag(WORK_NAME).d("[clusterImages] Starting with ${images.size} images: [$imageIds]")
+
         val clusters = mutableListOf<Cluster>()
         val unclusteredImages = images.toMutableList()
 
@@ -131,9 +134,11 @@ class ClusteringWorker @AssistedInject constructor(
         val pHash1 = image1.pHash
         val pHash2 = image2.pHash
         if (pHash1 == null || pHash2 == null || pHash1.length != pHash2.length) {
+            Timber.tag(WORK_NAME).w("[areSimilar] Cannot compare: pHash is null or lengths differ. Image1: ${image1.id}, Image2: ${image2.id}")
             return false
         }
-        val distance = pHash1.zip(pHash2).count { (c1, c2) -> c1 != c2 }
+        val distance = ImagePhashGenerator.calculateHammingDistance(pHash1, pHash2)
+        Timber.tag(WORK_NAME).d("[areSimilar] Comparing #${image1.id} ('$pHash1') and #${image2.id} ('$pHash2'): Distance = $distance")
         return distance <= HAMMING_DISTANCE_THRESHOLD
     }
 

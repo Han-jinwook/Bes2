@@ -116,7 +116,10 @@ private fun AppNavigation(
             )
         }
         composable("settings") {
-            SettingsScreen(viewModel = hiltViewModel())
+            SettingsScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable("review") {
             ReviewScreen(viewModel = hiltViewModel())

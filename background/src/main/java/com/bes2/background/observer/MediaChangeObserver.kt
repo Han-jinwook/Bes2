@@ -22,25 +22,47 @@ class MediaChangeObserver(
     private val context: Context,
     handler: Handler,
     private val imageItemDao: ImageItemDao,
-    private val workManager: WorkManager, // Re-added WorkManager dependency
+    private val workManager: WorkManager,
     private val scope: CoroutineScope
 ) : ContentObserver(handler) {
 
+    // --- DEBOUNCE LOGIC ENHANCEMENT ---
+    // Use a simple in-memory cache to track recently processed URIs.
+    private val recentlyProcessedUris = mutableSetOf<Uri>()
+    private val handlerForDebounce = Handler(handler.looper)
+
     override fun onChange(selfChange: Boolean, uri: Uri?) {
+        Timber.tag(DEBUG_TAG).d("--- onChange TRIGGERED by system --- URI: $uri")
         super.onChange(selfChange, uri)
         uri ?: return
 
-        if (uri == lastProcessedUri && (System.currentTimeMillis() - lastProcessedTime) < 1000) {
-            Timber.tag(DEBUG_TAG).d("Debounced duplicate URI: $uri")
-            return
+        // --- DEBOUNCE LOGIC ENHANCEMENT ---
+        // If the URI is already in our recent set, ignore this trigger.
+        synchronized(this) {
+            if (recentlyProcessedUris.contains(uri)) {
+                Timber.tag(DEBUG_TAG).d("Debounced duplicate URI: $uri")
+                return
+            }
+            recentlyProcessedUris.add(uri)
         }
-        lastProcessedUri = uri
-        lastProcessedTime = System.currentTimeMillis()
+
+        // Remove the URI from the set after a delay to allow for legitimate new events.
+        handlerForDebounce.postDelayed({
+            synchronized(this) {
+                recentlyProcessedUris.remove(uri)
+            }
+        }, 2000) // Increased debounce window to 2 seconds for stability.
 
         Timber.tag(DEBUG_TAG).i("Media change detected for URI: $uri")
 
         scope.launch {
             try {
+                // Check if this exact URI has been fully processed and saved to DB
+                if (imageItemDao.isUriProcessed(uri.toString())) {
+                    Timber.tag(DEBUG_TAG).w("URI has already been saved to DB: $uri")
+                    return@launch
+                }
+                
                 context.contentResolver.query(
                     uri,
                     arrayOf(MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_ADDED),
@@ -50,12 +72,7 @@ class MediaChangeObserver(
                         val path = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA))
                         val timestamp = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED))
                         Timber.tag(DEBUG_TAG).d("Queried image details: Path=$path, Timestamp=$timestamp")
-
-                        if (imageItemDao.isUriProcessed(uri.toString())) {
-                            Timber.tag(DEBUG_TAG).w("URI has already been processed: $uri")
-                            return@launch
-                        }
-
+                        
                         val newImage = ImageItemEntity(
                             uri = uri.toString(),
                             filePath = path,
@@ -67,7 +84,6 @@ class MediaChangeObserver(
                         imageItemDao.insertImageItem(newImage)
                         Timber.tag(DEBUG_TAG).i("SUCCESS: Saved new image to DB. URI: ${newImage.uri}")
 
-                        // --- PIPELINE FIX: START WITH CLUSTERING ---
                         val clusteringWorkRequest = OneTimeWorkRequestBuilder<ClusteringWorker>()
                             .setInitialDelay(1, TimeUnit.MINUTES)
                             .build()
@@ -87,10 +103,5 @@ class MediaChangeObserver(
                 Timber.tag(DEBUG_TAG).e(e, "Error processing media change for URI: $uri")
             }
         }
-    }
-
-    companion object {
-        private var lastProcessedUri: Uri? = null
-        private var lastProcessedTime: Long = 0
     }
 }

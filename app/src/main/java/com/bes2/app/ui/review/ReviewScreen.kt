@@ -1,6 +1,7 @@
 package com.bes2.app.ui.review
 
 import android.content.Context
+import android.content.Intent
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.bes2.app.MainActivity
 import com.bes2.background.worker.PhotoAnalysisWorker
 import com.bes2.data.model.ImageItemEntity
 import kotlinx.coroutines.flow.collectLatest
@@ -66,9 +68,26 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun ReviewScreen(viewModel: ReviewViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    // --- MINIMAL CODING FIX ---
+    // Listen for navigation events from the ViewModel.
+    LaunchedEffect(key1 = viewModel.navigationEvent) {
+        viewModel.navigationEvent.collectLatest { event ->
+            when (event) {
+                NavigationEvent.NavigateToHome -> {
+                    val intent = Intent(context, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    context.startActivity(intent)
+                }
+                // Handle other navigation events if they exist
+                else -> {}
+            }
+        }
+    }
 
     var zoomedImageInfo by remember { mutableStateOf<Pair<List<ImageItemEntity>, Int>?>(null) }
-    val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE) }
     var showCoachMark by remember {
         val shouldShow = !prefs.getBoolean("coach_mark_shown_long_press", false)
@@ -86,6 +105,8 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
             LoadingState()
         }
         is ReviewUiState.NoClustersToReview -> {
+            // This state is now primarily handled by the navigation event,
+            // but we keep a fallback UI just in case.
             NoClustersState()
         }
         is ReviewUiState.Ready -> {
@@ -150,7 +171,7 @@ fun NoClustersState() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "검토할 사진 그룹이 없습니다.")
+        Text(text = "모든 사진 검토가 끝났습니다. 홈으로 이동합니다...")
     }
 }
 
