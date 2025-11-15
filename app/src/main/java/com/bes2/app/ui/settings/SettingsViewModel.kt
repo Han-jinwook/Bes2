@@ -6,7 +6,9 @@ import android.content.IntentSender
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -40,7 +42,8 @@ data class SettingsUiState(
     val isLoggedIn: Boolean = false,
     val selectedProvider: String = "google_photos",
     val syncTime: LocalTime = LocalTime.of(2, 0),
-    val isSyncing: Boolean = false // Sync status
+    val isSyncing: Boolean = false,
+    val uploadOnWifiOnly: Boolean = true
 )
 
 sealed interface SettingsEvent {
@@ -78,8 +81,12 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
 
         settingsRepository.storedSettings
-            .onEach { (time, provider) ->
-                _uiState.update { it.copy(syncTime = time, selectedProvider = provider) }
+            .onEach { settings ->
+                _uiState.update { it.copy(
+                    syncTime = settings.syncTime,
+                    selectedProvider = settings.provider,
+                    uploadOnWifiOnly = settings.uploadOnWifiOnly
+                ) }
             }
             .launchIn(viewModelScope)
     }
@@ -132,7 +139,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val newTime = LocalTime.of(hour, minute)
             settingsRepository.saveSyncTime(newTime)
-            scheduleDailySync()
+            scheduleDailySync() // Reschedule with the new time
+        }
+    }
+
+    fun onUploadOnWifiOnlyChanged(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.saveUploadOnWifiOnly(enabled)
+            scheduleDailySync() // Reschedule with the new constraint
         }
     }
 
@@ -140,6 +154,12 @@ class SettingsViewModel @Inject constructor(
         if (!_uiState.value.isLoggedIn) {
             Timber.d("User not logged in. Sync scheduling cancelled.")
             return
+        }
+
+        val constraints = if (_uiState.value.uploadOnWifiOnly) {
+            Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build()
+        } else {
+            Constraints.NONE
         }
 
         val syncTime = _uiState.value.syncTime
@@ -152,18 +172,18 @@ class SettingsViewModel @Inject constructor(
 
         val initialDelay = Duration.between(now, nextSync).toMillis()
 
-        // --- FUNDAMENTAL FIX: Use OneTimeWorkRequest for reliability ---
         val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>()
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+            .setConstraints(constraints)
             .build()
 
         workManager.enqueueUniqueWork(
             DailyCloudSyncWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE, // Use REPLACE for one-time work
+            ExistingWorkPolicy.REPLACE,
             syncWorkRequest
         )
 
-        Timber.d("Daily sync (one-time) scheduled for ${nextSync.toLocalTime()}. Will run in ${TimeUnit.MILLISECONDS.toMinutes(initialDelay)} minutes.")
+        Timber.d("Daily sync (one-time) scheduled for ${nextSync.toLocalTime()}. Will run in ${TimeUnit.MILLISECONDS.toMinutes(initialDelay)} minutes. Wi-Fi only: ${_uiState.value.uploadOnWifiOnly}")
     }
 
     fun onManualSyncClicked() {
@@ -171,8 +191,17 @@ class SettingsViewModel @Inject constructor(
         
         Timber.d("Manual sync triggered.")
         _uiState.update { it.copy(isSyncing = true) }
+        
+        val constraints = if (_uiState.value.uploadOnWifiOnly) {
+            Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build()
+        } else {
+            Constraints.NONE
+        }
 
-        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>().build()
+        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>()
+            .setConstraints(constraints)
+            .build()
+            
         val workId = syncWorkRequest.id
         workManager.enqueue(syncWorkRequest)
 
@@ -191,7 +220,7 @@ class SettingsViewModel @Inject constructor(
                             _events.emit(SettingsEvent.SyncCompleted(message))
                         }
                         else -> {
-                            _events.emit(SettingsEvent.SyncFailed)
+                             _events.emit(SettingsEvent.SyncFailed)
                         }
                     }
                 }
