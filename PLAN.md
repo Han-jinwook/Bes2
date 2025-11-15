@@ -1,4 +1,4 @@
-Best2 앱 개발 계획 (PLAN.md) - v2.6
+Best2 앱 개발 계획 (PLAN.md) - v2.8
 
 1. 앱의 핵심 목표
 
@@ -80,13 +80,25 @@ PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러�
 
 모든 분석이 완료되면 사용자에게 검토 알림을 보낸다.
 
-3단계: 점수화 및 UI 분리 표시 (ReviewViewModel & ReviewScreen):
+3단계: 점수화 및 UI 분리 표시 (ReviewViewModel & Screen):
 
 (기존과 동일) 검토 화면에서는 ANALYZED 상태의 사진들만을 대상으로 최종 점수를 계산하여 '베스트'와 '나머지'를 선정한다.
 
 (기존과 동일) STATUS_REJECTED 사진은 '실패' 섹션으로 분리하여 사용자에게 보여준다.
 
 (기존 '구현 노트'는 v2.5의 본문과 내용이 일치하므로 삭제)
+
+자동 동기화 규칙 (안정적인 주기적 실행 보장) - v2.7 신규
+
+원칙: 안드로이드의 배터리 최적화 정책으로 인해 신뢰도가 낮은 주기적 작업(PeriodicWorkRequest)을 사용하는 대신, 신뢰도 높은 일회성 작업(OneTimeWorkRequest)을 체인 형태로 연결하여 안정성을 보장합니다.
+
+실행 순서:
+
+SettingsViewModel: 사용자가 설정한 시간에 맞춰, 정확한 지연 시간(initialDelay)을 가진 OneTimeWorkRequest를 단 한 번만 예약합니다.
+
+DailyCloudSyncWorker: 동기화 작업을 성공적으로 마친 후, 스스로 다음 날 같은 시간에 실행될 새로운 OneTimeWorkRequest를 다시 예약하고 작업을 종료합니다.
+
+결과: 이 '릴레이' 방식을 통해, 시스템에 의해 작업이 무기한 연기되는 문제를 방지하고 매일 설정된 시간에 안정적으로 동기화를 실행할 수 있습니다.
 
 클러스터링 규칙 (사진 묶음 기준) - v2.6 신규
 
@@ -164,7 +176,7 @@ Post-MVP
 
 클라우드 스토리지 확장: Google Photos 외에 'Naver MyBox' 등 추가적인 클라우드 백업 옵션 제공.
 
-7. 협업 원칙 (v2.4)
+7. 협업 원칙 (v2.8)
 
 7.1. Android Studio 에이전트 (AS Agent)
 
@@ -207,10 +219,8 @@ git commit -m "커밋 메시지 제목 (1줄 요약)
 
 사용자가 해당 내용을 **컨펌(승인)**하면, (Gemini는) 이 캔버스에 있는 plan.md 파일을 그 내용대로만 업데이트한다.
 
-원칙 2 (Git 커밋 연동):
+원칙 2 (수동 반영):
 
-plan.md가 캔버스에서 성공적으로 업데이트되면, (Gemini는) 터미널 3줄 요약(add, commit, push) 및 커밋 메시지(요약)를 함께 제공한다.
+(Gemini는) plan.md 변경분에 대한 Git 명령어를 제공하지 않는다.
 
-원칙 3 (수동 반영):
-
-최종 plan.md 파일과 Git 명령어의 실제 반영은 캔버스 밖(Android Studio)에서 총감독(사용자)이 직접 수동으로 수행한다.
+최종 plan.md 파일의 반영 및 모든 Git 명령어 실행 (코드 변경분, plan.md 변경분 모두)은 캔버스 밖(Android Studio)에서 총감독(사용자)이 AS 에이전트의 보고를 받아 직접 수동으로 수행한다.

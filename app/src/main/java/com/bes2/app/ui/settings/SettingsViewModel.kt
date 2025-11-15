@@ -6,9 +6,8 @@ import android.content.IntentSender
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.bes2.app.R
@@ -32,7 +31,6 @@ import timber.log.Timber
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZonedDateTime
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -154,17 +152,18 @@ class SettingsViewModel @Inject constructor(
 
         val initialDelay = Duration.between(now, nextSync).toMillis()
 
-        val syncWorkRequest = PeriodicWorkRequestBuilder<DailyCloudSyncWorker>(
-            24, TimeUnit.HOURS
-        ).setInitialDelay(initialDelay, TimeUnit.MILLISECONDS).build()
+        // --- FUNDAMENTAL FIX: Use OneTimeWorkRequest for reliability ---
+        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>()
+            .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+            .build()
 
-        workManager.enqueueUniquePeriodicWork(
+        workManager.enqueueUniqueWork(
             DailyCloudSyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingWorkPolicy.REPLACE, // Use REPLACE for one-time work
             syncWorkRequest
         )
 
-        Timber.d("Daily sync scheduled for ${nextSync.toLocalTime()}. Will run in ${TimeUnit.MILLISECONDS.toMinutes(initialDelay)} minutes.")
+        Timber.d("Daily sync (one-time) scheduled for ${nextSync.toLocalTime()}. Will run in ${TimeUnit.MILLISECONDS.toMinutes(initialDelay)} minutes.")
     }
 
     fun onManualSyncClicked() {

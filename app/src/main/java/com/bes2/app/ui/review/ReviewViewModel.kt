@@ -43,8 +43,6 @@ class ReviewViewModel @Inject constructor(
                     Timber.d("PENDING_REVIEW clusters found: ${clusters.size}")
                     if (clusters.isEmpty()) {
                         Timber.w("No clusters to review. Emitting NavigateToHome event.")
-                        // --- MINIMAL CODING FIX ---
-                        // Emit navigation event to go home when there are no more clusters.
                         _navigationEvent.emit(NavigationEvent.NavigateToHome)
                         kotlinx.coroutines.flow.flowOf(ReviewUiState.NoClustersToReview)
                     } else {
@@ -94,10 +92,11 @@ class ReviewViewModel @Inject constructor(
         }
     }
     
-    // DEFINITIVE FIX: Restore the correct proportional smile bonus logic.
+    // --- ONE-SHOT FIX ---
+    // Restore the correct smile bonus logic as defined in PLAN.md
     private fun calculateFinalScore(image: ImageItemEntity): Float {
         val nimaScore = (image.nimaScore ?: 0f) * 10
-        val smileBonus = (image.smilingProbability ?: 0f) * 10
+        val smileBonus = if ((image.smilingProbability ?: 0f) > 0.7f) 10f else 0f
         return nimaScore + smileBonus
     }
 
@@ -193,8 +192,6 @@ sealed interface ReviewUiState {
 }
 
 sealed interface NavigationEvent {
-    // --- MINIMAL CODING FIX ---
-    // Add a new event for navigating home.
     object NavigateToHome : NavigationEvent
     object NavigateToSettings : NavigationEvent
 }
