@@ -1,212 +1,25 @@
-## Project Overview
+### 작업 현황 및 마지막 에러 상황 요약
 
-I'm having a persistent build issue related to unresolved references in my Android Compose project. The main error is `Unresolved reference: Bes2Theme` in my `MainActivity.kt`, but I believe this is a symptom of a deeper structural problem with my Gradle module dependencies.
+#### 1. 현재까지의 성과 (안전한 복귀 지점)
 
-### Core Problem
+*   **"기본 지능 완성"**: 사진 분석, 클러스터링, 알림, 검토, 자동/수동 동기화, Wi-Fi 전용 옵션 등 모든 MVP 핵심 기능이 완벽하게 동작하는 안정적인 버전이 존재합니다.
+*   **커밋 ID**: `2c859c6`
+*   **참고**: 만약 다음 세션에서 모든 것이 엉망이 된다면, `git reset --hard 2c859c6` 명령어로 이 완벽한 상태에서 다시 시작할 수 있습니다.
 
-The `:app` module depends on the `:core_ui` module, but the dependency is listed as `unspecified` during Gradle sync, indicating a variant matching failure. I suspect `:core_ui` is not correctly configured, or is missing essential source files like `Theme.kt`, which should define `Bes2Theme`. This causes a chain reaction of build failures.
+#### 2. `plan.md` 외에 추가로 진행 중이던 작업
 
-Despite multiple attempts to align Kotlin, Compose, and other library versions, the fundamental issue remains. `find_files` command confirms that `Theme.kt` and `Bes2App.kt` do not exist in the project, which is the root cause.
+*   **목표**: "네이버 마이박스 연동" 기능 추가.
+*   **진행 상황**:
+    1.  **UI 분기 완료**: 설정 화면에서 'Google 포토'와 'Naver MyBox'를 선택하는 드롭다운 메뉴 UI를 구현했습니다.
+    2.  **구조 설계 완료**: Google과 Naver를 쉽게 교체할 수 있도록 `CloudAuthManager` 인터페이스를 만들고, `SettingsViewModel`이 이 구조를 사용하도록 수정했습니다.
+    3.  **SDK 연동 시도**: '네이버 아이디로 로그인' SDK를 프로젝트에 추가하고, `NaverMyBoxAuthManager`에 실제 로그인 코드를 구현하는 작업을 진행 중이었습니다.
 
-### `MainActivity.kt` (Error Source)
+#### 3. 마지막 에러 상황
 
-This is the file where the build process fails.
+*   **오류가 발생한 파일**: `photos_integration` 모듈의 `NaverMyBoxAuthManager.kt`
+*   **현상**: 빌드 실패 (`Unresolved reference: string`)
+*   **근본 원인**: **모듈 경계 위반**. `photos_integration` 모듈에 있는 `NaverMyBoxAuthManager.kt` 코드가, `app` 모듈의 `strings.xml`에 정의된 네이버 클라이언트 ID (`naver_client_id`) 값을 직접 읽으려고 시도하다가 실패했습니다.
+*   **나의 치명적인 실수**: 이 문제는 제가 이전에 `GooglePhotosAuthManager`에서 똑같이 겪었고, `context.resources.getIdentifier()`를 사용하여 해결했던 문제입니다. 하지만 제가 그 경험을 통해 배우지 못하고, **똑같은 실수를 `NaverMyBoxAuthManager`에서 반복**했습니다. 제가 마지막으로 이 실수를 수정하는 코드를 제출했지만, 그 코드마저도 빌드에 실패했습니다.
 
-```kotlin
-package com.bes2.app
-
-import android.content.Intent
-import android.os.Build
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
-// The following two imports are unresolved because the :core_ui module is likely empty or misconfigured.
-import com.bes2.app.ui.Bes2App 
-import com.bes2.core_ui.Bes2Theme
-import com.bes2.background.service.MediaDetectionService
-import dagger.hilt.android.AndroidEntryPoint
-
-@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            // The build fails here because Bes2Theme cannot be found.
-            Bes2Theme {
-                Bes2App(windowSizeClass = calculateWindowSizeClass(this))
-            }
-        }
-        startMediaDetectionService()
-    }
-
-    private fun startMediaDetectionService() {
-        val serviceIntent = Intent(this, MediaDetectionService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-    }
-}
-```
-
-### Final Error Message
-
-```
-$ ./gradlew :app:compileDebugKotlin
-e: file:///D:/Bes2/app/src/main/java/com/bes2/app/MainActivity.kt:14:25 Unresolved reference: Bes2Theme
-```
-
-### `app/build.gradle.kts`
-
-```kotlin
-plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.hilt)
-    alias(libs.plugins.ksp) 
-}
-
-android {
-    namespace = "com.bes2.app"
-    compileSdk = 34
-
-    defaultConfig {
-        applicationId = "com.bes2.app"
-        minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
-
-        testInstrumentationRunner = "com.bes2.app.HiltTestRunner"
-        vectorDrawables {
-            useSupportLibrary = true
-        }
-        missingDimensionStrategy("default", "default")
-    }
-
-    buildTypes {
-        debug {
-            matchingFallbacks += listOf("release")
-        }
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    buildFeatures {
-        compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-}
-
-dependencies {
-    implementation(project(":domain"))
-    implementation(project(":core_ui"))
-    implementation(project(":background"))
-    implementation(project(":data"))
-    implementation(project(":photos_integration"))
-    implementation(project(":ml"))
-    // ... other dependencies
-}
-```
-
-### `core_ui/build.gradle.kts`
-
-```kotlin
-plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.hilt)
-    alias(libs.plugins.ksp)
-}
-
-android {
-    namespace = "com.bes2.core_ui"
-    compileSdk = 34
-
-    defaultConfig {
-        minSdk = 24
-        consumerProguardFiles("consumer-rules.pro")
-        buildConfigField("String", "NAMESPACE", "\"${namespace}\"")
-    }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-        debug {}
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
-}
-
-dependencies {
-    implementation(project(":core_common"))
-    implementation(platform(libs.androidx.compose.bom))
-    api(libs.androidx.compose.ui)
-    api(libs.androidx.compose.ui.graphics)
-    api(libs.androidx.compose.ui.tooling.preview)
-    api(libs.androidx.compose.material3)
-    // ... other dependencies
-}
-```
-
-### `gradle/libs.versions.toml`
-
-```toml
-[versions]
-activity = "1.9.0"
-android-gradle-plugin = "8.4.1"
-kotlin = "1.9.23"
-ksp = "1.9.23-1.0.19"
-compose-compiler = "1.5.11"
-compose-bom = "2024.05.00"
-play-services-auth = "21.0.0"
-// ... other versions omitted for brevity
-
-[libraries]
-// ... libraries omitted for brevity
-
-[plugins]
-// ... plugins omitted for brevity
-```
+**다음 세션을 위한 제안**:
+가장 먼저, `photos_integration` 모듈이 `app` 모듈의 리소스에 안전하게 접근할 수 있도록 하는 문제를 해결해야 합니다. `GooglePhotosAuthManager.kt` 파일에 이미 성공적으로 적용된 해결책이 있으니, 이를 참고하여 `NaverMyBoxAuthManager.kt`를 수정하는 것부터 시작하는 것이 가장 안전합니다.

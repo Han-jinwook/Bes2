@@ -1,1 +1,0 @@
-com.bes2.core_common

@@ -6,34 +6,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.bes2.app.ui.settings.SettingsEvent
+import com.navercorp.nid.NaverIdLoginSDK
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
@@ -55,7 +34,6 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
     var showTimePicker by remember { mutableStateOf(false) }
 
     if (showTimePicker) {
@@ -73,20 +51,16 @@ fun SettingsScreen(
         timePickerDialog.show()
     }
 
-    val signInLauncher = rememberLauncherForActivityResult(
+    val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult(),
-        onResult = viewModel::handleSignInResult
+        onResult = viewModel::handleGoogleSignInResult
     )
 
     LaunchedEffect(viewModel.events) {
         viewModel.events.collectLatest { event ->
             when (event) {
-                is SettingsEvent.SyncCompleted -> {
-                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
-                }
-                is SettingsEvent.SyncFailed -> {
-                    Toast.makeText(context, "동기화에 실패했습니다.", Toast.LENGTH_SHORT).show()
-                }
+                is SettingsEvent.SyncCompleted -> Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+                is SettingsEvent.SyncFailed -> Toast.makeText(context, "동기화에 실패했습니다.", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -121,30 +95,28 @@ fun SettingsScreen(
             Text("클라우드 자동 동기화", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Cloud Service Selection
-            SettingItem(
-                title = "클라우드 서비스 선택",
-                value = "Google 포토",
-                content = {
-                    if (uiState.isLoggedIn) {
-                        Button(onClick = viewModel::onLogoutClicked) { Text("로그아웃") }
-                    } else {
-                        Button(onClick = {
-                            scope.launch {
-                                val intentSender = viewModel.beginSignIn()
-                                if (intentSender != null) {
-                                    signInLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
-                                } else {
-                                    Toast.makeText(context, "로그인에 실패했습니다.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }) { Text("Google 계정으로 로그인") }
+            CloudProviderSelection(
+                selectedProvider = uiState.selectedProvider,
+                isLoggedIn = uiState.isLoggedIn,
+                onProviderSelected = viewModel::onProviderSelected,
+                onGoogleLoginClick = {
+                    scope.launch {
+                        val intentSender = viewModel.beginGoogleSignIn()
+                        if (intentSender != null) {
+                            googleSignInLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                        } else {
+                            Toast.makeText(context, "Google 로그인에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                }
+                },
+                onNaverLoginClick = {
+                    val naverLoginCallback = viewModel.getNaverLoginCallback()
+                    NaverIdLoginSDK.authenticate(context, naverLoginCallback)
+                },
+                onLogoutClick = viewModel::onLogoutClicked
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Auto Sync Time
             val formatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
             SettingItem(
                 title = "자동 동기화 시간",
@@ -155,7 +127,6 @@ fun SettingsScreen(
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Wi-Fi Only Switch
             SettingRow(
                 title = "Wi-Fi에서만 업로드",
                 content = {
@@ -168,20 +139,72 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Manual Sync Button
             Button(
                 onClick = viewModel::onManualSyncClicked,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 enabled = uiState.isLoggedIn && !uiState.isSyncing
             ) {
                 if (uiState.isSyncing) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.height(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                        Text(" 동기화 중...", modifier = Modifier.padding(start = 16.dp))
-                    }
+                    CircularProgressIndicator(modifier = Modifier.height(24.dp))
+                    Text(" 동기화 중...", modifier = Modifier.padding(start = 8.dp))
                 } else {
                     Text("지금 바로 동기화")
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CloudProviderSelection(
+    selectedProvider: String,
+    isLoggedIn: Boolean,
+    onProviderSelected: (String) -> Unit,
+    onGoogleLoginClick: () -> Unit,
+    onNaverLoginClick: () -> Unit,
+    onLogoutClick: () -> Unit
+) {
+    val providers = mapOf("google_photos" to "Google 포토", "naver_mybox" to "Naver MyBox")
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text("클라우드 서비스 선택", fontSize = 14.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = providers[selectedProvider] ?: "",
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.menuAnchor().fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                providers.forEach { (key, value) ->
+                    DropdownMenuItem(
+                        text = { Text(value) },
+                        onClick = {
+                            onProviderSelected(key)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if(isLoggedIn) {
+            Button(onClick = onLogoutClick) { Text("로그아웃") }
+        } else {
+            when(selectedProvider) {
+                "google_photos" -> Button(onClick = onGoogleLoginClick) { Text("Google 계정으로 로그인") }
+                "naver_mybox" -> Button(onClick = onNaverLoginClick) { Text("Naver 계정으로 로그인") }
             }
         }
     }
@@ -194,7 +217,7 @@ private fun SettingItem(
     content: @Composable () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -207,12 +230,14 @@ private fun SettingItem(
 }
 
 @Composable
-private fun SettingRow(
+fun SettingRow(
     title: String,
     content: @Composable () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

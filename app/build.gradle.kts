@@ -92,6 +92,9 @@ dependencies {
     implementation(libs.androidx.material)
     implementation(libs.google.auth)
     implementation(libs.google.fido)
+    
+    // Naver Login
+    implementation("com.navercorp.nid:oauth:5.9.0")
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.play.services)

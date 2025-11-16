@@ -49,12 +49,15 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // [FINAL FIX] Use the correct aliases defined in libs.versions.toml
+    // Google Auth & API
     implementation(libs.google.auth)
     implementation(libs.google.api.client)
     implementation(libs.google.http.client.gson)
 
-    // [FINAL FIX] Networking (for REST API) with correct aliases and OkHttp BOM
+    // Naver Login
+    implementation("com.navercorp.nid:oauth:5.9.0") // Downgraded to a compatible version
+
+    // Networking (for REST API) with OkHttp BOM
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
