@@ -70,8 +70,6 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // --- MINIMAL CODING FIX ---
-    // Listen for navigation events from the ViewModel.
     LaunchedEffect(key1 = viewModel.navigationEvent) {
         viewModel.navigationEvent.collectLatest { event ->
             when (event) {
@@ -81,7 +79,6 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                     }
                     context.startActivity(intent)
                 }
-                // Handle other navigation events if they exist
                 else -> {}
             }
         }
@@ -105,8 +102,6 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
             LoadingState()
         }
         is ReviewUiState.NoClustersToReview -> {
-            // This state is now primarily handled by the navigation event,
-            // but we keep a fallback UI just in case.
             NoClustersState()
         }
         is ReviewUiState.Ready -> {
@@ -126,8 +121,7 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                         zoomedImageInfo = list to index
                     }
                 },
-                onKeepSelected = { viewModel.keepSelectedImages() },
-                onDeleteOthers = { viewModel.deleteOtherImages() }
+                onCompleteSelection = { viewModel.deleteOtherImages() }
             )
 
             if (zoomedImageInfo != null) {
@@ -180,8 +174,7 @@ fun ReviewReadyState(
     state: ReviewUiState.Ready,
     onImageClick: (ImageItemEntity) -> Unit,
     onImageLongPress: (List<ImageItemEntity>, ImageItemEntity) -> Unit,
-    onKeepSelected: () -> Unit,
-    onDeleteOthers: () -> Unit
+    onCompleteSelection: () -> Unit
 ) {
     val bestImages = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
 
@@ -204,7 +197,7 @@ fun ReviewReadyState(
                         .weight(1f)
                         .fillMaxSize()
                         .clip(RoundedCornerShape(8.dp))
-                        .pointerInput(bestImages) { // Pass the whole list as a key
+                        .pointerInput(bestImages) {
                             detectTapGestures(
                                 onTap = { _ -> onImageClick(image) },
                                 onLongPress = { _ -> onImageLongPress(bestImages, image) }
@@ -219,7 +212,7 @@ fun ReviewReadyState(
                         .weight(1f)
                         .fillMaxSize()
                         .clip(RoundedCornerShape(8.dp))
-                        .pointerInput(bestImages) { // Pass the whole list as a key
+                        .pointerInput(bestImages) {
                             detectTapGestures(
                                 onTap = { _ -> onImageClick(image) },
                                 onLongPress = { _ -> onImageLongPress(bestImages, image) }
@@ -242,7 +235,7 @@ fun ReviewReadyState(
                         .height(80.dp)
                         .aspectRatio(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .pointerInput(state.otherImages) { // Pass the whole list as a key
+                        .pointerInput(state.otherImages) {
                             detectTapGestures(
                                 onTap = { _ -> onImageClick(image) },
                                 onLongPress = { _ -> onImageLongPress(state.otherImages, image) }
@@ -268,7 +261,7 @@ fun ReviewReadyState(
                             .height(80.dp)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .pointerInput(state.rejectedImages) { // Pass the whole list as a key
+                            .pointerInput(state.rejectedImages) {
                                 detectTapGestures(
                                     onLongPress = { _ -> onImageLongPress(state.rejectedImages, image) }
                                 )
@@ -280,17 +273,12 @@ fun ReviewReadyState(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        Row(
+        Button(
+            onClick = onCompleteSelection,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            enabled = true 
         ) {
-            val totalDeletableCount = state.otherImages.size + state.rejectedImages.size
-            Button(onClick = onDeleteOthers, enabled = totalDeletableCount > 0) {
-                Text(if (totalDeletableCount > 0) "나머지 ${totalDeletableCount}장 삭제" else "나머지 삭제")
-            }
-            Button(onClick = onKeepSelected) {
-                Text("선택 사진 유지")
-            }
+            Text("나머지/실패 사진 삭제하기")
         }
     }
 }
@@ -316,7 +304,7 @@ fun ImageWithInfo(
             }
         } else {
             val nimaScore = (image.nimaScore ?: 0f) * 10
-            val smileBonus = (image.smilingProbability ?: 0f) * 10
+            val smileBonus = (image.smilingProbability ?: 0f) * 20f
             val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
             "${displayScore}점"
         }
@@ -365,7 +353,6 @@ fun ZoomedImageDialog(
                 offset += offsetChange
             }
 
-            // Reset scale and offset when image changes
             LaunchedEffect(currentIndex) {
                 scale = 1f
                 offset = Offset.Zero
@@ -397,7 +384,7 @@ fun ZoomedImageDialog(
                     }
                 } else {
                     val nimaScore = (currentImage.nimaScore ?: 0f) * 10
-                    val smileBonus = (currentImage.smilingProbability ?: 0f) * 10
+                    val smileBonus = (currentImage.smilingProbability ?: 0f) * 20f
                     val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
                     "${displayScore}점"
                 }
@@ -510,7 +497,6 @@ fun ReviewScreenPreview() {
         state = readyState,
         onImageClick = {},
         onImageLongPress = { _, _ -> },
-        onKeepSelected = {},
-        onDeleteOthers = {}
+        onCompleteSelection = {}
     )
 }

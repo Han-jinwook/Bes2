@@ -28,7 +28,7 @@ class EyeClosedDetector @Inject constructor(
             val faces = detector.process(image).await()
             if (faces.isEmpty()) {
                 Timber.d("No faces detected in EyeClosedDetector, returning false.")
-                return false // No faces detected, so can't be a bad photo in this context
+                return false
             }
             
             var eyeClosedDetected = false
@@ -37,8 +37,8 @@ class EyeClosedDetector @Inject constructor(
                 val rightProb = face.rightEyeOpenProbability
                 Timber.d("Face #$index in image: Left eye open probability: $leftProb, Right eye open probability: $rightProb")
 
-                val isLeftEyeClosed = leftProb?.let { it < 0.5 } ?: false
-                val isRightEyeClosed = rightProb?.let { it < 0.5 } ?: false
+                val isLeftEyeClosed = leftProb?.let { it < 0.3 } ?: false
+                val isRightEyeClosed = rightProb?.let { it < 0.3 } ?: false
 
                 if (isLeftEyeClosed || isRightEyeClosed) {
                     Timber.i("Eye closed DETECTED for face #$index. Left closed: $isLeftEyeClosed (Prob: $leftProb), Right closed: $isRightEyeClosed (Prob: $rightProb)")

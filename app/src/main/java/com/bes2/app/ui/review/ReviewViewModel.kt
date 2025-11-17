@@ -1,13 +1,22 @@
 package com.bes2.app.ui.review
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.Data
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.bes2.background.worker.DailyCloudSyncWorker
 import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
+import com.bes2.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,17 +25,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReviewViewModel @Inject constructor(
     private val imageClusterDao: ImageClusterDao,
-    private val imageItemDao: ImageItemDao
+    private val imageItemDao: ImageItemDao,
+    private val settingsRepository: SettingsRepository,
+    private val workManager: WorkManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReviewUiState>(ReviewUiState.Loading)
@@ -42,7 +56,8 @@ class ReviewViewModel @Inject constructor(
                 .flatMapLatest { clusters ->
                     Timber.d("PENDING_REVIEW clusters found: ${clusters.size}")
                     if (clusters.isEmpty()) {
-                        Timber.w("No clusters to review. Emitting NavigateToHome event.")
+                        Timber.w("No clusters to review. Triggering post-review sync and navigating home.")
+                        schedulePostReviewSync()
                         _navigationEvent.emit(NavigationEvent.NavigateToHome)
                         kotlinx.coroutines.flow.flowOf(ReviewUiState.NoClustersToReview)
                     } else {
@@ -92,11 +107,9 @@ class ReviewViewModel @Inject constructor(
         }
     }
     
-    // --- ONE-SHOT FIX ---
-    // Restore the correct smile bonus logic as defined in PLAN.md
     private fun calculateFinalScore(image: ImageItemEntity): Float {
         val nimaScore = (image.nimaScore ?: 0f) * 10
-        val smileBonus = if ((image.smilingProbability ?: 0f) > 0.7f) 10f else 0f
+        val smileBonus = (image.smilingProbability ?: 0f) * 20f
         return nimaScore + smileBonus
     }
 
@@ -125,21 +138,36 @@ class ReviewViewModel @Inject constructor(
         )
     }
 
-    fun keepSelectedImages() {
-        viewModelScope.launch {
-            val currentState = _uiState.value
-            if (currentState is ReviewUiState.Ready) {
-                val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
-                if (keptImageIds.isNotEmpty()) {
-                    imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
-                }
-                val otherImageIds = currentState.otherImages.map { it.id }
-                if (otherImageIds.isNotEmpty()) {
-                    imageItemDao.updateImageStatusesByIds(otherImageIds, "REVIEWED")
-                }
-                imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
-            }
+    private suspend fun schedulePostReviewSync() {
+        val settings = settingsRepository.storedSettings.first()
+        if (settings.syncOption == "NONE" || settings.syncOption == "DAILY") {
+            Timber.d("Post-review sync skipped for sync option: ${settings.syncOption}")
+            return
         }
+
+        val delayInMillis = if (settings.syncOption == "DELAYED") {
+            TimeUnit.HOURS.toMillis(settings.syncDelayHours.toLong()) + TimeUnit.MINUTES.toMillis(settings.syncDelayMinutes.toLong())
+        } else {
+            0L // IMMEDIATE
+        }
+
+        val constraints = if (settings.uploadOnWifiOnly) {
+            Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build()
+        } else {
+            Constraints.NONE
+        }
+        
+        val inputData = Data.Builder().putBoolean(DailyCloudSyncWorker.KEY_IS_ONE_TIME_SYNC, true).build()
+
+        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>()
+            .setInitialDelay(delayInMillis, TimeUnit.MILLISECONDS)
+            .setConstraints(constraints)
+            .setInputData(inputData)
+            .build()
+        
+        workManager.enqueue(syncWorkRequest)
+
+        Timber.d("Enqueued post-review sync with option: ${settings.syncOption}, Delay: $delayInMillis ms, Wi-Fi only: ${settings.uploadOnWifiOnly}")
     }
 
     fun deleteOtherImages() {
@@ -150,6 +178,12 @@ class ReviewViewModel @Inject constructor(
                 if (imagesToDelete.isNotEmpty()) {
                     val urisToDelete = imagesToDelete.map { Uri.parse(it.uri) }
                      _uiState.value = currentState.copy(pendingDeleteRequest = urisToDelete)
+                } else {
+                    val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
+                    if (keptImageIds.isNotEmpty()) {
+                        imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+                    }
+                    imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
                 }
             }
         }
@@ -161,17 +195,24 @@ class ReviewViewModel @Inject constructor(
             if (currentState is ReviewUiState.Ready) {
                 _uiState.value = currentState.copy(pendingDeleteRequest = null)
 
+                val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
+                if (keptImageIds.isNotEmpty()) {
+                    imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+                }
+
                 if (successfullyDeleted) {
                     val imageIdsToDelete = (currentState.otherImages + currentState.rejectedImages).map { it.id }
                     if (imageIdsToDelete.isNotEmpty()) {
                         imageItemDao.updateImageStatusesByIds(imageIdsToDelete, "DELETED")
                     }
-                    val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
-                    if (keptImageIds.isNotEmpty()) {
-                        imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+                } else {
+                    val otherImageIds = currentState.otherImages.map { it.id }
+                    if (otherImageIds.isNotEmpty()) {
+                        imageItemDao.updateImageStatusesByIds(otherImageIds, "REVIEWED")
                     }
-                    imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
                 }
+                
+                imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
             }
         }
     }
