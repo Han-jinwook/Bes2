@@ -37,8 +37,8 @@ class EyeClosedDetector @Inject constructor(
                 val rightProb = face.rightEyeOpenProbability
                 Timber.d("Face #$index in image: Left eye open probability: $leftProb, Right eye open probability: $rightProb")
 
-                val isLeftEyeClosed = leftProb?.let { it < 0.4 } ?: false
-                val isRightEyeClosed = rightProb?.let { it < 0.4 } ?: false
+                val isLeftEyeClosed = leftProb?.let { it < 0.5 } ?: false
+                val isRightEyeClosed = rightProb?.let { it < 0.5 } ?: false
 
                 if (isLeftEyeClosed || isRightEyeClosed) {
                     Timber.i("Eye closed DETECTED for face #$index. Left closed: $isLeftEyeClosed (Prob: $leftProb), Right closed: $isRightEyeClosed (Prob: $rightProb)")

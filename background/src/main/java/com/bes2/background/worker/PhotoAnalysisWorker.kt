@@ -7,13 +7,18 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.bes2.background.notification.NotificationHelper
 import com.bes2.core_common.provider.ResourceProvider
 import com.bes2.data.dao.ImageItemDao
+import com.bes2.data.repository.SettingsRepository
 import com.bes2.ml.EyeClosedDetector
 import com.bes2.ml.FaceEmbedder
 import com.bes2.ml.ImageQualityAssessor
@@ -22,22 +27,25 @@ import com.bes2.ml.SmileDetector
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.FileNotFoundException
 import java.util.concurrent.CancellationException
+import java.util.concurrent.TimeUnit
 
 @HiltWorker
 class PhotoAnalysisWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val imageDao: ImageItemDao,
-    private val workManager: WorkManager, // Restored for Hilt dependency graph
+    private val workManager: WorkManager,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val eyeClosedDetector: EyeClosedDetector,
-    private val faceEmbedder: FaceEmbedder, // Restored for Hilt dependency graph
+    private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
-    private val resourceProvider: ResourceProvider
+    private val resourceProvider: ResourceProvider,
+    private val settingsRepository: SettingsRepository // SettingsRepository 주입
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -56,13 +64,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        // --- DEBUG LOG ---
         Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker TRIGGERED by WorkManager ---")
-        
         Timber.tag(WORK_NAME).d("Worker started. Analyzing images with PENDING_ANALYSIS status.")
 
         try {
-            // 1. Get images marked for analysis by the ClusteringWorker
             val imagesToAnalyze = imageDao.getImageItemsListByStatus("PENDING_ANALYSIS")
             if (imagesToAnalyze.isEmpty()) {
                 Timber.tag(WORK_NAME).d("No images pending analysis.")
@@ -97,7 +102,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                             continue
                         }
                         
-                        // --- Scoring for valid images ---
                         val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap)
                         val smilingProbability = smileDetector.getSmilingProbability(bitmap)
                         val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()
@@ -130,10 +134,11 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                 }
             }
             
-            // 3. Notify the user that the process is complete.
             if (clustersForReviewCount > 0) {
                  Timber.tag(WORK_NAME).d("Analysis complete. Notifying user about $clustersForReviewCount new clusters.")
                  NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, clustersForReviewCount)
+                 // 동기화 작업 스케줄링 로직 추가
+                 schedulePostAnalysisSync()
             } else {
                 Timber.tag(WORK_NAME).d("Analysis complete, but no new clusters need review.")
                 NotificationHelper.dismissAllAppNotifications(appContext)
@@ -144,6 +149,39 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             Timber.tag(WORK_NAME).e(e, "An error occurred in PhotoAnalysisWorker: ${e.message}")
             return@withContext Result.failure()
         }
+    }
+
+    private suspend fun schedulePostAnalysisSync() {
+        val settings = settingsRepository.storedSettings.first()
+        if (settings.syncOption == "NONE" || settings.syncOption == "DAILY") {
+            Timber.d("Post-analysis sync skipped for sync option: ${settings.syncOption}")
+            return
+        }
+
+        val delayInMillis = if (settings.syncOption == "DELAYED") {
+            TimeUnit.HOURS.toMillis(settings.syncDelayHours.toLong()) + TimeUnit.MINUTES.toMillis(settings.syncDelayMinutes.toLong())
+        } else {
+            0L // IMMEDIATE
+        }
+
+        val constraints = if (settings.uploadOnWifiOnly) {
+            Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build()
+        } else {
+            Constraints.NONE
+        }
+        
+        val inputData = Data.Builder().putBoolean(DailyCloudSyncWorker.KEY_IS_ONE_TIME_SYNC, true).build()
+
+        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>()
+            .setInitialDelay(delayInMillis, TimeUnit.MILLISECONDS)
+            .setConstraints(constraints)
+            .setInputData(inputData)
+            .build()
+        
+        // Use a unique name to prevent multiple syncs from queuing up if analysis runs frequently
+        workManager.enqueue(syncWorkRequest)
+
+        Timber.d("Enqueued post-analysis sync with option: ${settings.syncOption}, Delay: $delayInMillis ms, Wi-Fi only: ${settings.uploadOnWifiOnly}")
     }
 
     private fun loadBitmap(uri: String): Bitmap {

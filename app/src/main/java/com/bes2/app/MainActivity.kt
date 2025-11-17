@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.bes2.app.ui.Bes2App
+import com.bes2.app.ui.review.ReviewActivity
 import com.bes2.background.service.MediaDetectionService
 import com.bes2.core_ui.theme.Bes2Theme
 import dagger.hilt.android.AndroidEntryPoint
@@ -18,11 +19,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             Bes2Theme {
-                // Restore the version that moves the task to the background instead of finishing.
                 Bes2App(onStartAnalysisAndExit = { moveTaskToBack(true) })
             }
         }
         startMediaDetectionService()
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.getStringExtra("NAVIGATE_TO") == "REVIEW_SCREEN") {
+            startActivity(Intent(this, ReviewActivity::class.java))
+        }
     }
 
     private fun startMediaDetectionService() {

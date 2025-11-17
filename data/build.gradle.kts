@@ -26,6 +26,9 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            // 빌드 Variant 일치를 위해 debug 유형을 명시적으로 추가
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

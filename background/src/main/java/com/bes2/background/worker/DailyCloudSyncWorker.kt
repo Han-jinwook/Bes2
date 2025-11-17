@@ -34,10 +34,12 @@ class DailyCloudSyncWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "DailyCloudSyncWorker"
         const val KEY_SYNCED_COUNT = "synced_count"
+        const val KEY_IS_ONE_TIME_SYNC = "is_one_time_sync" // 상수 추가
     }
 
     override suspend fun doWork(): Result {
         Timber.d("DailyCloudSyncWorker started.")
+        val isOneTimeSync = inputData.getBoolean(KEY_IS_ONE_TIME_SYNC, false)
 
         try {
             val imagesToUpload = imageItemDao.getImagesByStatusAndUploadFlag("KEPT", false)
@@ -45,13 +47,14 @@ class DailyCloudSyncWorker @AssistedInject constructor(
 
             if (imagesToUpload.isEmpty()) {
                 Timber.d("No new images to upload.")
-                rescheduleNextSync()
+                if (!isOneTimeSync) rescheduleNextSync() // 수동 동기화가 아닐 때만 재스케줄
                 val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, 0).build()
                 return Result.success(outputData)
             }
 
             Timber.d("Found ${imagesToUpload.size} images to upload.")
 
+            // TODO: 실제 클라우드 제공자를 선택하는 로직 필요
             val uploadResults = googlePhotosProvider.uploadImages(imagesToUpload)
 
             val successfulUploads = uploadResults.filter { it.isSuccess }
@@ -68,11 +71,17 @@ class DailyCloudSyncWorker @AssistedInject constructor(
                 failedUploads.forEach { result ->
                     Timber.w(result.cause, "Upload failed for ${result.originalUri}")
                 }
+                // 실패한 것이 있어도, 성공한 것이 있다면 일단 성공으로 처리하고 다음 동기화 시 재시도
+                if (successfulUploads.isNotEmpty()) {
+                     val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, successfulUploadCount).build()
+                     if (!isOneTimeSync) rescheduleNextSync()
+                     return Result.success(outputData)
+                }
                 return Result.retry()
             }
 
             Timber.d("All images uploaded successfully.")
-            rescheduleNextSync()
+            if (!isOneTimeSync) rescheduleNextSync() // 수동 동기화가 아닐 때만 재스케줄
             val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, successfulUploadCount).build()
             return Result.success(outputData)
 
@@ -87,16 +96,24 @@ class DailyCloudSyncWorker @AssistedInject constructor(
     }
 
     private suspend fun rescheduleNextSync() {
-        val (syncTime, _) = settingsRepository.storedSettings.first()
+        val settings = settingsRepository.storedSettings.first()
+        // 일일 동기화 옵션일 때만 재스케줄
+        if (settings.syncOption != "DAILY") {
+            Timber.d("Rescheduling skipped as sync option is not DAILY.")
+            return
+        }
+        val syncTime = settings.syncTime
         val now = ZonedDateTime.now()
-        // Always schedule for the next day to ensure a 24-hour cycle.
-        var nextSync = now.withHour(syncTime.hour).withMinute(syncTime.minute).withSecond(0).plusDays(1)
+        var nextSync = now.withHour(syncTime.hour).withMinute(syncTime.minute).withSecond(0)
+        if (nextSync.isBefore(now) || nextSync.isEqual(now)) {
+            nextSync = nextSync.plusDays(1)
+        }
 
         val initialDelay = Duration.between(now, nextSync).toMillis()
 
         val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>()
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
-            .build()
+            .build() // 제약 조건은 ViewModel에서 설정하므로 여기서는 추가하지 않음
 
         workManager.enqueueUniqueWork(
             WORK_NAME,
