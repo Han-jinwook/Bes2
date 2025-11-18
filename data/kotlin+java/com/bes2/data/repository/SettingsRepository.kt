@@ -21,7 +21,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 // Define a data class for settings for better organization
 data class StoredSettings(
     val syncTime: LocalTime,
-    val provider: String,
+    val cloudStorageProvider: String,
     val uploadOnWifiOnly: Boolean,
     val syncOption: String,
     val syncDelayHours: Int,
@@ -55,7 +55,7 @@ class SettingsRepository @Inject constructor(
             
             StoredSettings(
                 syncTime = LocalTime.of(hour, minute),
-                provider = provider,
+                cloudStorageProvider = provider,
                 uploadOnWifiOnly = uploadOnWifiOnly,
                 syncOption = syncOption,
                 syncDelayHours = syncDelayHours,

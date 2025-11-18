@@ -64,7 +64,7 @@ class SettingsViewModel @Inject constructor(
             .onEach { settings ->
                 _uiState.update { it.copy(
                     syncTime = settings.syncTime,
-                    selectedProvider = settings.provider,
+                    selectedProvider = settings.cloudStorageProvider,
                     uploadOnWifiOnly = settings.uploadOnWifiOnly,
                     syncOption = settings.syncOption,
                     syncDelayHours = settings.syncDelayHours,

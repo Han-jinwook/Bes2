@@ -43,8 +43,10 @@ dependencies {
     implementation(project(":core_model"))
     implementation(project(":domain"))
     implementation(project(":data"))
-    implementation(project(":ml")) // :ml 모듈 의존성 추가
-    implementation(project(":photos_integration")) // [FIX] Add dependency to access providers
+    implementation(project(":ml"))
+    
+    // photos_integration is just a library, not an annotation processor.
+    implementation(project(":photos_integration"))
 
     // Logging
     implementation(libs.timber)
@@ -58,10 +60,11 @@ dependencies {
 
     // Hilt (for Worker injection)
     implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
     implementation(libs.hilt.work)
-    ksp(libs.androidx.hilt.compiler)
 
+    // KSP should only contain the annotation processors (compilers).
+    ksp(libs.hilt.compiler)
+    ksp(libs.androidx.hilt.compiler)
 
     // Testing
     testImplementation(libs.junit)

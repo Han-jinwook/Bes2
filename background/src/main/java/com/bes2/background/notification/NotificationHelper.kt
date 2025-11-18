@@ -28,20 +28,26 @@ object NotificationHelper {
             .build()
     }
 
-    fun showConsentRequiredNotification(context: Context, consentIntent: Intent) {
+    fun showConsentRequiredNotification(context: Context, consentIntent: Intent, providerName: String) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context, 
-            CONSENT_NOTIFICATION_ID, 
-            consentIntent, // The intent from Google is used here
+            context,
+            CONSENT_NOTIFICATION_ID,
+            consentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        val readableProviderName = when(providerName) {
+            "google_photos" -> "Google 포토"
+            "naver_mybox" -> "네이버 MYBOX"
+            else -> "클라우드"
+        }
 
         val builder = NotificationCompat.Builder(context, USER_INTERACTION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("동기화 권한 필요")
-            .setContentText("Google 포토와 동기화하려면 권한이 필요합니다. 탭하여 권한을 부여하세요.")
+            .setContentText("$readableProviderName 와(과) 동기화하려면 권한이 필요합니다. 탭하여 권한을 부여하세요.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -57,7 +63,7 @@ object NotificationHelper {
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context,
-            REVIEW_NOTIFICATION_ID, 
+            REVIEW_NOTIFICATION_ID,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

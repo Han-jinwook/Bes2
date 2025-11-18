@@ -38,9 +38,11 @@ android {
 }
 
 dependencies {
-    implementation(project(":core_model"))
+    // Other modules in this project can access the types from the following modules
+    api(project(":core_model"))
+    api(project(":data"))
+
     implementation(project(":core_common"))
-    implementation(project(":data"))
 
     // AndroidX & Coroutines
     implementation(libs.androidx.core.ktx)
@@ -48,8 +50,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
-    // Hilt
-    implementation(libs.hilt.android)
+    // Hilt - use api so that other modules can access hilt types
+    api(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
     // Google Auth & API
