@@ -23,7 +23,8 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-class ConsentRequiredException(val resolutionIntent: Intent) : Exception()
+// Allow the intent to be nullable to support cases where no specific UI action can be triggered from the background.
+class ConsentRequiredException(val resolutionIntent: Intent?) : Exception()
 
 private const val PREFS_NAME = "google_auth_prefs"
 private const val KEY_ACCOUNT_NAME = "google_account_name"

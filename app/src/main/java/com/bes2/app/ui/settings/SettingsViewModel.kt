@@ -10,13 +10,11 @@ import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo // Added missing import
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.bes2.background.worker.DailyCloudSyncWorker
 import com.bes2.data.repository.SettingsRepository
 import com.bes2.photos_integration.auth.GooglePhotosAuthManager
-import com.bes2.photos_integration.auth.NaverMyBoxAuthManager
-import com.navercorp.nid.oauth.OAuthLoginCallback
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -48,7 +46,6 @@ sealed interface SettingsEvent {
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val googleAuthManager: GooglePhotosAuthManager,
-    private val naverAuthManager: NaverMyBoxAuthManager,
     private val workManager: WorkManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -62,9 +59,15 @@ class SettingsViewModel @Inject constructor(
     init {
         settingsRepository.storedSettings
             .onEach { settings ->
+                // Force Google Photos if somehow it was set to Naver previously
+                val provider = if (settings.cloudStorageProvider == "naver_mybox") "google_photos" else settings.cloudStorageProvider
+                if (settings.cloudStorageProvider == "naver_mybox") {
+                    settingsRepository.saveCloudProvider("google_photos")
+                }
+
                 _uiState.update { it.copy(
                     syncTime = settings.syncTime,
-                    selectedProvider = settings.cloudStorageProvider,
+                    selectedProvider = provider,
                     uploadOnWifiOnly = settings.uploadOnWifiOnly,
                     syncOption = settings.syncOption,
                     syncDelayHours = settings.syncDelayHours,
@@ -77,9 +80,8 @@ class SettingsViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
-        googleAuthManager.account.combine(naverAuthManager.account) { googleAcct, naverAcct ->
-            googleAcct != null || naverAcct != null
-        }.onEach { isLoggedIn ->
+        googleAuthManager.account.onEach { googleAcct ->
+            val isLoggedIn = googleAcct != null
             _uiState.update { it.copy(isLoggedIn = isLoggedIn) }
             if (!isLoggedIn) {
                 workManager.cancelUniqueWork(DailyCloudSyncWorker.WORK_NAME)
@@ -89,21 +91,11 @@ class SettingsViewModel @Inject constructor(
 
     suspend fun beginGoogleSignIn(): IntentSender? = googleAuthManager.beginSignIn()
     fun handleGoogleSignInResult(result: ActivityResult) = googleAuthManager.handleSignInResult(result)
-    fun getNaverLoginCallback(): OAuthLoginCallback = naverAuthManager.oauthLoginCallback
 
     fun onLogoutClicked() {
         viewModelScope.launch {
-            when (_uiState.value.selectedProvider) {
-                "google_photos" -> googleAuthManager.signOut()
-                "naver_mybox" -> naverAuthManager.signOut()
-            }
-        }
-    }
-
-    fun onProviderSelected(providerKey: String) {
-        viewModelScope.launch {
-            if (_uiState.value.isLoggedIn) { onLogoutClicked() }
-            settingsRepository.saveCloudProvider(providerKey)
+            // Only Google logout logic needed
+            googleAuthManager.signOut()
         }
     }
 
@@ -205,4 +197,6 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+    
+    // Removed onProviderSelected as there is only one provider now
 }

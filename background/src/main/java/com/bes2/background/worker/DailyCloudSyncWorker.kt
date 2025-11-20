@@ -14,7 +14,6 @@ import com.bes2.data.repository.SettingsRepository
 import com.bes2.photos_integration.CloudStorageProvider
 import com.bes2.photos_integration.auth.ConsentRequiredException
 import com.bes2.photos_integration.google.GooglePhotosProvider
-import com.bes2.photos_integration.naver.NaverMyBoxProvider
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -29,7 +28,6 @@ class DailyCloudSyncWorker @AssistedInject constructor(
     @Assisted private val workerParams: WorkerParameters,
     private val imageItemDao: ImageItemDao,
     private val googlePhotosProvider: GooglePhotosProvider,
-    private val naverMyBoxProvider: NaverMyBoxProvider, // 주입 추가
     private val workManager: WorkManager,
     private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
@@ -46,11 +44,18 @@ class DailyCloudSyncWorker @AssistedInject constructor(
         lateinit var provider: CloudStorageProvider
 
         try {
+            // DIAGNOSTIC LOGGING START
+            val allKeptImages = imageItemDao.getImageItemsListByStatus("KEPT")
+            val alreadyUploadedCount = allKeptImages.count { it.isUploaded }
+            val notUploadedCount = allKeptImages.count { !it.isUploaded }
+            Timber.d("DIAGNOSIS: Total KEPT images: ${allKeptImages.size}, Already Uploaded: $alreadyUploadedCount, Pending Upload: $notUploadedCount")
+            // DIAGNOSTIC LOGGING END
+
             val imagesToUpload = imageItemDao.getImagesByStatusAndUploadFlag("KEPT", false)
             var successfulUploadCount = 0
 
             if (imagesToUpload.isEmpty()) {
-                Timber.d("No new images to upload.")
+                Timber.d("No new images to upload. (Checked ${allKeptImages.size} KEPT images)")
                 if (!isOne_timeSync) rescheduleNextSync()
                 val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, 0).build()
                 return Result.success(outputData)
@@ -58,17 +63,8 @@ class DailyCloudSyncWorker @AssistedInject constructor(
 
             Timber.d("Found ${imagesToUpload.size} images to upload.")
 
-            // 설정값에 따라 올바른 Provider 선택
-            val currentCloudProviderKey = settingsRepository.storedSettings.first().cloudStorageProvider
-            provider = when (currentCloudProviderKey) {
-                googlePhotosProvider.providerKey -> googlePhotosProvider
-                naverMyBoxProvider.providerKey -> naverMyBoxProvider
-                else -> {
-                    Timber.e("Unsupported cloud provider: $currentCloudProviderKey")
-                    // 기본값 또는 오류 처리
-                    googlePhotosProvider
-                }
-            }
+            // Always use Google Photos
+            provider = googlePhotosProvider
             Timber.d("Using cloud provider: ${provider.providerKey}")
             
             val uploadResults = provider.uploadImages(imagesToUpload)
@@ -81,17 +77,21 @@ class DailyCloudSyncWorker @AssistedInject constructor(
                 imageItemDao.updateUploadedStatusByUris(successfullyUploadedUris, true)
                 successfulUploadCount = successfulUploads.size
                 Timber.d("Successfully marked $successfulUploadCount images as uploaded.")
+                
+                // Notify user about success
+                NotificationHelper.showSyncSuccessNotification(appContext, successfulUploadCount)
             }
 
             if (failedUploads.isNotEmpty()) {
                 failedUploads.forEach { result ->
-                    Timber.w(result.cause, "Upload failed for ${result.originalUri}")
+                    Timber.w(result.cause, "Upload failed for ${result.originalUri}: ${result.errorMessage}")
                 }
                 if (successfulUploads.isNotEmpty()) {
                      val outputData = Data.Builder().putInt(KEY_SYNCED_COUNT, successfulUploadCount).build()
                      if (!isOne_timeSync) rescheduleNextSync()
                      return Result.success(outputData)
                 }
+                
                 return Result.retry()
             }
 
@@ -101,8 +101,15 @@ class DailyCloudSyncWorker @AssistedInject constructor(
             return Result.success(outputData)
 
         } catch (e: ConsentRequiredException) {
-            Timber.w(e, "Consent required for sync. Passing intent to notification.")
-            NotificationHelper.showConsentRequiredNotification(appContext, e.resolutionIntent, provider.providerKey)
+            Timber.w(e, "Consent required for sync.")
+            val intent = e.resolutionIntent
+            if (intent != null) {
+                Timber.d("Showing notification with resolution intent.")
+                NotificationHelper.showConsentRequiredNotification(appContext, intent, provider.providerKey)
+            } else {
+                Timber.d("Showing generic login required notification.")
+                NotificationHelper.showLoginRequiredNotification(appContext, provider.providerKey)
+            }
             return Result.failure()
         } catch (e: Exception) {
             Timber.e(e, "Error in DailyCloudSyncWorker")

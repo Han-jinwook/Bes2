@@ -40,15 +40,34 @@ class ClusteringWorker @AssistedInject constructor(
         Timber.tag(WORK_NAME).d("Worker started. Following PLAN.md: Clustering -> Analysis.")
         try {
             // 1. Get NEW images
-            val newImages = imageDao.getImageItemsListByStatus("NEW")
-            if (newImages.isEmpty()) {
+            val allNewImages = imageDao.getImageItemsListByStatus("NEW")
+            if (allNewImages.isEmpty()) {
                 Timber.tag(WORK_NAME).d("No new images to process.")
                 return@withContext Result.success()
             }
-            Timber.tag(WORK_NAME).d("Found ${newImages.size} new images.")
+            
+            // Filter out screenshots based on path
+            val (validImages, invalidImages) = allNewImages.partition { image ->
+                !image.filePath.contains("Screenshot", ignoreCase = true) &&
+                !image.filePath.contains("Capture", ignoreCase = true)
+            }
+            
+            // Mark screenshots as IGNORED
+            if (invalidImages.isNotEmpty()) {
+                Timber.tag(WORK_NAME).d("Filtering out ${invalidImages.size} screenshots/captures.")
+                val invalidIds = invalidImages.map { it.id }
+                imageDao.updateImageStatusesByIds(invalidIds, "IGNORED")
+            }
+
+            if (validImages.isEmpty()) {
+                Timber.tag(WORK_NAME).d("No valid images to process after filtering.")
+                return@withContext Result.success()
+            }
+
+            Timber.tag(WORK_NAME).d("Found ${validImages.size} valid new images.")
 
             // 2. Calculate pHash for each new image
-            val imagesWithPhash = newImages.mapNotNull { image ->
+            val imagesWithPhash = validImages.mapNotNull { image ->
                 try {
                     val bitmap = loadBitmap(image.uri)
                     // Call the object method directly

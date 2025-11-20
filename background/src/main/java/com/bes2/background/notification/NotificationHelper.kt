@@ -16,7 +16,9 @@ object NotificationHelper {
     private const val USER_INTERACTION_CHANNEL_ID = "user_interaction_channel"
 
     private const val CONSENT_NOTIFICATION_ID = 101
+    private const val LOGIN_NOTIFICATION_ID = 103 // New ID for login notification
     private const val REVIEW_NOTIFICATION_ID = 102
+    private const val SYNC_SUCCESS_NOTIFICATION_ID = 104
     const val APP_STATUS_NOTIFICATION_ID = 1
 
     fun createForegroundNotification(context: Context, @DrawableRes notificationIcon: Int): android.app.Notification {
@@ -55,6 +57,42 @@ object NotificationHelper {
         notificationManager.notify(CONSENT_NOTIFICATION_ID, builder.build())
     }
 
+    // New function for showing a simple login prompt notification.
+    fun showLoginRequiredNotification(context: Context, providerName: String) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // This Intent will just open the app, as there's no specific screen to navigate to from the background.
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val pendingIntent: PendingIntent? = if (intent != null) {
+            PendingIntent.getActivity(
+                context,
+                LOGIN_NOTIFICATION_ID,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else null
+
+        val readableProviderName = when(providerName) {
+            "google_photos" -> "Google 포토"
+            "naver_mybox" -> "네이버 MYBOX"
+            else -> "클라우드"
+        }
+
+        val builder = NotificationCompat.Builder(context, USER_INTERACTION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("$readableProviderName 동기화 실패")
+            .setContentText("로그인이 필요합니다. 앱의 설정 화면에서 로그인해 주세요.")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+        
+        pendingIntent?.let {
+            builder.setContentIntent(it)
+        }
+
+        notificationManager.notify(LOGIN_NOTIFICATION_ID, builder.build())
+    }
+
+
     fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -83,6 +121,37 @@ object NotificationHelper {
             .setAutoCancel(true)
 
         notificationManager.notify(REVIEW_NOTIFICATION_ID, builder.build())
+    }
+
+    // UPDATED: Added clusterCount parameter
+    fun showSyncSuccessNotification(context: Context, successCount: Int, clusterCount: Int) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Clicking the notification opens the app
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val pendingIntent: PendingIntent? = if (intent != null) {
+            PendingIntent.getActivity(
+                context,
+                SYNC_SUCCESS_NOTIFICATION_ID,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else null
+        
+        val contentText = "${clusterCount}개 묶음 중 베스트 ${successCount}장이 구글 포토로 안전하게 백업되었습니다."
+
+        val builder = NotificationCompat.Builder(context, USER_INTERACTION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification) // Assuming this icon exists
+            .setContentTitle("동기화 완료")
+            .setContentText(contentText)
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Less intrusive
+            .setAutoCancel(true)
+
+        pendingIntent?.let {
+            builder.setContentIntent(it)
+        }
+
+        notificationManager.notify(SYNC_SUCCESS_NOTIFICATION_ID, builder.build())
     }
 
     fun dismissAllAppNotifications(context: Context) {

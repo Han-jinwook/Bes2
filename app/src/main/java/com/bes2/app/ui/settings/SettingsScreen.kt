@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +13,9 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bes2.app.ui.settings.SettingsEvent
-import com.navercorp.nid.NaverIdLoginSDK
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
@@ -119,10 +122,9 @@ fun SettingsScreen(
             Text("클라우드 자동 동기화", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(16.dp))
 
-            CloudProviderSelection(
-                selectedProvider = uiState.selectedProvider,
+            // Google Photos Only UI
+            CloudProviderSection(
                 isLoggedIn = uiState.isLoggedIn,
-                onProviderSelected = viewModel::onProviderSelected,
                 onGoogleLoginClick = {
                     scope.launch {
                         val intentSender = viewModel.beginGoogleSignIn()
@@ -133,13 +135,14 @@ fun SettingsScreen(
                         }
                     }
                 },
-                onNaverLoginClick = {
-                    val naverLoginCallback = viewModel.getNaverLoginCallback()
-                    NaverIdLoginSDK.authenticate(context, naverLoginCallback)
-                },
                 onLogoutClick = viewModel::onLogoutClicked
             )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // Tip for other cloud users
+            Spacer(modifier = Modifier.height(8.dp))
+            OtherCloudTipAccordion()
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             UnifiedSyncOptions(
                 uiState = uiState,
@@ -148,7 +151,7 @@ fun SettingsScreen(
                 onDelayTimeClick = { showDelayTimePicker = true }
             )
             
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             SettingRow(
                 title = "Wi-Fi에서만 업로드",
@@ -220,14 +223,24 @@ fun UnifiedSyncOptions(
                     Text(text)
                     if (key == "DAILY" && uiState.syncOption == "DAILY") {
                         val formatter = remember { DateTimeFormatter.ofPattern("a hh:mm", Locale.KOREAN) }
-                        TextButton(onClick = onDailyTimeClick, contentPadding = PaddingValues(start = 0.dp)) {
-                            Text("매일 ${uiState.syncTime.format(formatter)}")
-                        }
+                        // Changed TextButton to Text with clickable modifier to remove extra padding
+                        Text(
+                            text = "매일 ${uiState.syncTime.format(formatter)}",
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(top = 0.dp) // Remove top padding
+                                .clickable { onDailyTimeClick() }
+                        )
                     }
                     if (key == "DELAYED" && uiState.syncOption == "DELAYED") {
-                        TextButton(onClick = onDelayTimeClick, contentPadding = PaddingValues(start = 0.dp)) {
-                             Text("지연 시간 설정: ${uiState.syncDelayHours}시간 ${uiState.syncDelayMinutes}분 뒤")
-                        }
+                         // Changed TextButton to Text with clickable modifier to remove extra padding
+                         Text(
+                             text = "지연 시간 설정: ${uiState.syncDelayHours}시간 ${uiState.syncDelayMinutes}분 뒤",
+                             color = MaterialTheme.colorScheme.primary,
+                             modifier = Modifier
+                                 .padding(top = 0.dp) // Remove top padding
+                                 .clickable { onDelayTimeClick() }
+                         )
                     }
                 }
             }
@@ -235,59 +248,103 @@ fun UnifiedSyncOptions(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CloudProviderSelection(
-    selectedProvider: String,
+private fun CloudProviderSection(
     isLoggedIn: Boolean,
-    onProviderSelected: (String) -> Unit,
     onGoogleLoginClick: () -> Unit,
-    onNaverLoginClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
-    val providers = mapOf("google_photos" to "Google 포토", "naver_mybox" to "Naver MyBox")
-    var expanded by remember { mutableStateOf(false) }
-
-    Column {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
-            OutlinedTextField(
-                value = providers[selectedProvider] ?: "",
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("연결된 클라우드", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                providers.forEach { (key, value) ->
-                    DropdownMenuItem(
-                        text = { Text(value) },
-                        onClick = {
-                            onProviderSelected(key)
-                            expanded = false
-                        }
-                    )
+                Text(
+                    text = "Google 포토",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                if (isLoggedIn) {
+                    OutlinedButton(onClick = onLogoutClick) {
+                        Text("로그아웃")
+                    }
+                } else {
+                    Button(onClick = onGoogleLoginClick) {
+                        Text("로그인")
+                    }
                 }
             }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Google Photos Guide
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = "Info",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "평소 '구글 포토' 앱의 [백업] 기능은 OFF로 해두세요.\nBes2가 정리한 베스트 사진만 백업됩니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
 
-        if(isLoggedIn) {
-            OutlinedButton(
-                onClick = onLogoutClick,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("로그아웃") }
-        } else {
-            Button(
-                onClick = if (selectedProvider == "google_photos") onGoogleLoginClick else onNaverLoginClick,
+@Composable
+private fun OtherCloudTipAccordion() {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(16.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (selectedProvider == "google_photos") "Google 계정으로 로그인" else "Naver 계정으로 로그인")
+                Text(
+                    text = "다른 클라우드(네이버 MyBox 등) 이용 팁",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Expand",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text(
+                        text = "평소 클라우드 자동 백업 기능은 꺼두세요.\n" +
+                               "Bes2 앱이 사진 정리를 완료하면, 그때 원하는 클라우드 앱(네이버 MyBox, One Drive 등)을 열어 수동으로 동기화하시면 가장 깔끔하게 정리된 사진만 백업할 수 있습니다.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 20.sp
+                    )
+                }
             }
         }
     }

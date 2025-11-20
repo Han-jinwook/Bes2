@@ -6,7 +6,6 @@ import androidx.work.WorkerParameters;
 import com.bes2.data.dao.ImageItemDao;
 import com.bes2.data.repository.SettingsRepository;
 import com.bes2.photos_integration.google.GooglePhotosProvider;
-import com.bes2.photos_integration.naver.NaverMyBoxProvider;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.QualifierMetadata;
 import dagger.internal.ScopeMetadata;
@@ -32,38 +31,34 @@ public final class DailyCloudSyncWorker_Factory {
 
   private final Provider<GooglePhotosProvider> googlePhotosProvider;
 
-  private final Provider<NaverMyBoxProvider> naverMyBoxProvider;
-
   private final Provider<WorkManager> workManagerProvider;
 
   private final Provider<SettingsRepository> settingsRepositoryProvider;
 
   public DailyCloudSyncWorker_Factory(Provider<ImageItemDao> imageItemDaoProvider,
       Provider<GooglePhotosProvider> googlePhotosProvider,
-      Provider<NaverMyBoxProvider> naverMyBoxProvider, Provider<WorkManager> workManagerProvider,
+      Provider<WorkManager> workManagerProvider,
       Provider<SettingsRepository> settingsRepositoryProvider) {
     this.imageItemDaoProvider = imageItemDaoProvider;
     this.googlePhotosProvider = googlePhotosProvider;
-    this.naverMyBoxProvider = naverMyBoxProvider;
     this.workManagerProvider = workManagerProvider;
     this.settingsRepositoryProvider = settingsRepositoryProvider;
   }
 
   public DailyCloudSyncWorker get(Context appContext, WorkerParameters workerParams) {
-    return newInstance(appContext, workerParams, imageItemDaoProvider.get(), googlePhotosProvider.get(), naverMyBoxProvider.get(), workManagerProvider.get(), settingsRepositoryProvider.get());
+    return newInstance(appContext, workerParams, imageItemDaoProvider.get(), googlePhotosProvider.get(), workManagerProvider.get(), settingsRepositoryProvider.get());
   }
 
   public static DailyCloudSyncWorker_Factory create(Provider<ImageItemDao> imageItemDaoProvider,
       Provider<GooglePhotosProvider> googlePhotosProvider,
-      Provider<NaverMyBoxProvider> naverMyBoxProvider, Provider<WorkManager> workManagerProvider,
+      Provider<WorkManager> workManagerProvider,
       Provider<SettingsRepository> settingsRepositoryProvider) {
-    return new DailyCloudSyncWorker_Factory(imageItemDaoProvider, googlePhotosProvider, naverMyBoxProvider, workManagerProvider, settingsRepositoryProvider);
+    return new DailyCloudSyncWorker_Factory(imageItemDaoProvider, googlePhotosProvider, workManagerProvider, settingsRepositoryProvider);
   }
 
   public static DailyCloudSyncWorker newInstance(Context appContext, WorkerParameters workerParams,
-      ImageItemDao imageItemDao, GooglePhotosProvider googlePhotosProvider,
-      NaverMyBoxProvider naverMyBoxProvider, WorkManager workManager,
+      ImageItemDao imageItemDao, GooglePhotosProvider googlePhotosProvider, WorkManager workManager,
       SettingsRepository settingsRepository) {
-    return new DailyCloudSyncWorker(appContext, workerParams, imageItemDao, googlePhotosProvider, naverMyBoxProvider, workManager, settingsRepository);
+    return new DailyCloudSyncWorker(appContext, workerParams, imageItemDao, googlePhotosProvider, workManager, settingsRepository);
   }
 }

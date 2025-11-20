@@ -3,6 +3,7 @@ package com.bes2.app.ui.review
 import android.content.Context
 import android.content.Intent
 import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,6 +75,7 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
         viewModel.navigationEvent.collectLatest { event ->
             when (event) {
                 NavigationEvent.NavigateToHome -> {
+                    Toast.makeText(context, "오늘의 사진 정리가 완료되었습니다.", Toast.LENGTH_SHORT).show()
                     val intent = Intent(context, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     }
@@ -304,7 +306,9 @@ fun ImageWithInfo(
             }
         } else {
             val nimaScore = (image.nimaScore ?: 0f) * 10
-            val smileBonus = (image.smilingProbability ?: 0f) * 20f
+            val smileProb = image.smilingProbability ?: 0f
+            // UI Logic updated to match ReviewViewModel
+            val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
             val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
             "${displayScore}점"
         }
@@ -384,7 +388,9 @@ fun ZoomedImageDialog(
                     }
                 } else {
                     val nimaScore = (currentImage.nimaScore ?: 0f) * 10
-                    val smileBonus = (currentImage.smilingProbability ?: 0f) * 20f
+                    val smileProb = currentImage.smilingProbability ?: 0f
+                    // UI Logic updated to match ReviewViewModel
+                    val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
                     val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
                     "${displayScore}점"
                 }

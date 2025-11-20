@@ -18,6 +18,7 @@ import com.bes2.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -109,7 +111,16 @@ class ReviewViewModel @Inject constructor(
     
     private fun calculateFinalScore(image: ImageItemEntity): Float {
         val nimaScore = (image.nimaScore ?: 0f) * 10
-        val smileBonus = (image.smilingProbability ?: 0f) * 20f
+        val smileProb = image.smilingProbability ?: 0f
+        
+        // Penalize frowning/neutral expressions (low smile probability)
+        // Boost happy expressions (high smile probability)
+        val smileBonus = if (smileProb < 0.1f) {
+            -10f // Deduction for potential frown or neutral face
+        } else {
+            smileProb * 30f // Boost for smile
+        }
+        
         return nimaScore + smileBonus
     }
 
@@ -179,11 +190,17 @@ class ReviewViewModel @Inject constructor(
                     val urisToDelete = imagesToDelete.map { Uri.parse(it.uri) }
                      _uiState.value = currentState.copy(pendingDeleteRequest = urisToDelete)
                 } else {
-                    val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
-                    if (keptImageIds.isNotEmpty()) {
-                        imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+                    // This is the original, correct logic that was mistakenly removed.
+                    // It handles the case where there are no images to delete.
+                    withContext(NonCancellable) {
+                        val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
+                        if (keptImageIds.isNotEmpty()) {
+                            val updatedCount = imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+                            Timber.d("Updated $updatedCount images to KEPT (no deletion needed)")
+                        }
+                        imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
+                        Timber.d("Updated cluster ${currentState.cluster.id} to REVIEW_COMPLETED (no deletion needed)")
                     }
-                    imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
                 }
             }
         }
@@ -195,24 +212,26 @@ class ReviewViewModel @Inject constructor(
             if (currentState is ReviewUiState.Ready) {
                 _uiState.value = currentState.copy(pendingDeleteRequest = null)
 
-                val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
-                if (keptImageIds.isNotEmpty()) {
-                    imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
-                }
+                withContext(NonCancellable) {
+                    val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
+                    if (keptImageIds.isNotEmpty()) {
+                        val updatedCount = imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+                        Timber.d("Updated $updatedCount images to KEPT")
+                    }
 
-                if (successfullyDeleted) {
-                    val imageIdsToDelete = (currentState.otherImages + currentState.rejectedImages).map { it.id }
-                    if (imageIdsToDelete.isNotEmpty()) {
-                        imageItemDao.updateImageStatusesByIds(imageIdsToDelete, "DELETED")
+                    if (successfullyDeleted) {
+                        val imageIdsToDelete = (currentState.otherImages + currentState.rejectedImages).map { it.id }
+                        if (imageIdsToDelete.isNotEmpty()) {
+                            val deletedCount = imageItemDao.updateImageStatusesByIds(imageIdsToDelete, "DELETED")
+                            Timber.d("Updated $deletedCount images to DELETED")
+                        }
                     }
-                } else {
-                    val otherImageIds = currentState.otherImages.map { it.id }
-                    if (otherImageIds.isNotEmpty()) {
-                        imageItemDao.updateImageStatusesByIds(otherImageIds, "REVIEWED")
-                    }
+                    // No need to handle the 'else' for !successfullyDeleted,
+                    // as the kept images are already marked and the cluster will be completed.
+                    
+                    imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
+                    Timber.d("Updated cluster ${currentState.cluster.id} to REVIEW_COMPLETED")
                 }
-                
-                imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
             }
         }
     }

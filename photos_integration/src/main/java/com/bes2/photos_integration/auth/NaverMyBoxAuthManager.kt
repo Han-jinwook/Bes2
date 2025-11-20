@@ -26,7 +26,7 @@ class NaverMyBoxAuthManager @Inject constructor(
         override fun onSuccess() {
             val token = NaverIdLoginSDK.getAccessToken()
             Timber.d("Naver Login Success. Token: $token")
-            // Create a pseudo-account for Naver
+            // Create a pseudo-account for Naver to indicate login status.
             _account.value = Account("Naver User", "com.naver")
         }
         override fun onFailure(httpStatus: Int, message: String) {
@@ -38,6 +38,11 @@ class NaverMyBoxAuthManager @Inject constructor(
         override fun onError(errorCode: Int, message: String) {
             onFailure(errorCode, message)
         }
+    }
+
+    // Function to get the current access token from the Naver SDK.
+    fun getAccessToken(): String? {
+        return NaverIdLoginSDK.getAccessToken()
     }
 
     override suspend fun beginSignIn(): IntentSender? {
@@ -65,6 +70,10 @@ class NaverMyBoxAuthManager @Inject constructor(
                 naverAuthInfo.clientSecret,
                 naverAuthInfo.clientName
             )
+            // Check initial login state
+            if (NaverIdLoginSDK.getAccessToken() != null) {
+                _account.value = Account("Naver User", "com.naver")
+            }
             Timber.d("NaverIdLoginSDK initialized.")
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize NaverIdLoginSDK. Check string resources.")
