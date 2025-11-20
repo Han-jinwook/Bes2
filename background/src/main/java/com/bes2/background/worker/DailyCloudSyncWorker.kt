@@ -78,8 +78,12 @@ class DailyCloudSyncWorker @AssistedInject constructor(
                 successfulUploadCount = successfulUploads.size
                 Timber.d("Successfully marked $successfulUploadCount images as uploaded.")
                 
+                // Calculate distinct cluster count
+                val uploadedImages = imagesToUpload.filter { it.uri in successfullyUploadedUris }
+                val clusterCount = uploadedImages.mapNotNull { it.clusterId }.distinct().size
+                
                 // Notify user about success
-                NotificationHelper.showSyncSuccessNotification(appContext, successfulUploadCount)
+                NotificationHelper.showSyncSuccessNotification(appContext, successfulUploadCount, clusterCount)
             }
 
             if (failedUploads.isNotEmpty()) {
