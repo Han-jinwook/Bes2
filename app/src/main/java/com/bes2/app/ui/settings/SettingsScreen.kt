@@ -20,7 +20,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -119,8 +121,14 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Removed title "클라우드 자동 동기화"
-            Spacer(modifier = Modifier.height(8.dp))
+            // --- EMOTIONAL SLOGAN ---
+            Text(
+                text = "AI가 분석하고, 당신은 가벼운 터치만.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray,
+                fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
             // Google Photos Only UI
             CloudProviderSection(

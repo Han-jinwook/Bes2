@@ -3,11 +3,14 @@ package com.bes2.app.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bes2.data.dao.ImageItemDao
+import com.bes2.data.repository.GalleryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
@@ -16,12 +19,14 @@ import javax.inject.Inject
 data class HomeUiState(
     val dailyTotal: Int = 0,
     val dailyKept: Int = 0,
-    val dailyDeleted: Int = 0
+    val dailyDeleted: Int = 0,
+    val galleryTotalCount: Int = 0 // Added field for total gallery count
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val imageItemDao: ImageItemDao
+    private val imageItemDao: ImageItemDao,
+    private val galleryRepository: GalleryRepository // Injected
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -29,6 +34,14 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadDailyStats()
+        loadGalleryTotalCount()
+    }
+
+    private fun loadGalleryTotalCount() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val totalCount = galleryRepository.getTotalImageCount()
+            _uiState.update { it.copy(galleryTotalCount = totalCount) }
+        }
     }
 
     private fun loadDailyStats() {
@@ -44,7 +57,6 @@ class HomeViewModel @Inject constructor(
                 var deleted = 0
 
                 // Only count photos that have been processed or analyzed.
-                // Exclude: NEW, IGNORED (Screenshots), PRE_CLUSTERING, PENDING_ANALYSIS
                 val processedStatuses = setOf("ANALYZED", "KEPT", "DELETED", "STATUS_REJECTED")
 
                 statsList.forEach { statusCount ->
@@ -59,12 +71,17 @@ class HomeViewModel @Inject constructor(
                     }
                 }
                 
-                _uiState.value = HomeUiState(
+                _uiState.update { it.copy(
                     dailyTotal = total,
                     dailyKept = kept,
                     dailyDeleted = deleted
-                )
+                ) }
             }
         }
+    }
+    
+    // Method to refresh gallery count (can be called onResume)
+    fun refreshGalleryCount() {
+        loadGalleryTotalCount()
     }
 }
