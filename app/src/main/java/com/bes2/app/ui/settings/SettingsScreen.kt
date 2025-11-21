@@ -119,8 +119,8 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            Text("클라우드 자동 동기화", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(16.dp))
+            // Removed title "클라우드 자동 동기화"
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Google Photos Only UI
             CloudProviderSection(
@@ -259,8 +259,7 @@ private fun CloudProviderSection(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("연결된 클라우드", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
+            // Removed subtitle "연결된 클라우드"
             
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -268,9 +267,9 @@ private fun CloudProviderSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Google 포토",
+                    text = "Google 포토 자동 동기화", // Updated Text
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold // Changed to Bold for emphasis
                 )
                 
                 if (isLoggedIn) {

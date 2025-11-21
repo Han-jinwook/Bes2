@@ -15,6 +15,7 @@ import androidx.room.util.DBUtil;
 import androidx.room.util.StringUtil;
 import androidx.sqlite.db.SupportSQLiteStatement;
 import com.bes2.data.model.ImageItemEntity;
+import com.bes2.data.model.StatusCount;
 import java.lang.Boolean;
 import java.lang.Class;
 import java.lang.Exception;
@@ -1434,6 +1435,43 @@ public final class ImageItemDao_Impl implements ImageItemDao {
         }
       }
     }, $completion);
+  }
+
+  @Override
+  public Flow<List<StatusCount>> getDailyStatsFlow(final long startTime) {
+    final String _sql = "SELECT status, COUNT(*) as count FROM image_items WHERE timestamp >= ? GROUP BY status";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, startTime);
+    return CoroutinesRoom.createFlow(__db, false, new String[] {"image_items"}, new Callable<List<StatusCount>>() {
+      @Override
+      @NonNull
+      public List<StatusCount> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfStatus = 0;
+          final int _cursorIndexOfCount = 1;
+          final List<StatusCount> _result = new ArrayList<StatusCount>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final StatusCount _item;
+            final String _tmpStatus;
+            _tmpStatus = _cursor.getString(_cursorIndexOfStatus);
+            final int _tmpCount;
+            _tmpCount = _cursor.getInt(_cursorIndexOfCount);
+            _item = new StatusCount(_tmpStatus,_tmpCount);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+        }
+      }
+
+      @Override
+      protected void finalize() {
+        _statement.release();
+      }
+    });
   }
 
   @Override

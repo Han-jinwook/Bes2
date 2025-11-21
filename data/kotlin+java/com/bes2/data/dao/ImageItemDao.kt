@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.bes2.data.model.ImageItemEntity
+import com.bes2.data.model.StatusCount
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -84,4 +85,8 @@ interface ImageItemDao {
     // DEFINITIVE FIX: Add the missing function that caused the build error
     @Query("UPDATE image_items SET cluster_id = :clusterId WHERE uri IN (:uris)")
     suspend fun updateClusterIdByUris(uris: List<String>, clusterId: String)
+
+    // New query for daily statistics
+    @Query("SELECT status, COUNT(*) as count FROM image_items WHERE timestamp >= :startTime GROUP BY status")
+    fun getDailyStatsFlow(startTime: Long): Flow<List<StatusCount>>
 }
