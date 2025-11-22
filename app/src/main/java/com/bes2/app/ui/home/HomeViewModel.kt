@@ -2,6 +2,7 @@ package com.bes2.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.repository.GalleryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -21,12 +23,14 @@ data class HomeUiState(
     val dailyKept: Int = 0,
     val dailyDeleted: Int = 0,
     val galleryTotalCount: Int = 0,
-    val screenshotCount: Int = 0
+    val screenshotCount: Int = 0,
+    val hasPendingReview: Boolean = false // New field
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val imageItemDao: ImageItemDao,
+    private val imageClusterDao: ImageClusterDao, // Injected
     private val galleryRepository: GalleryRepository
 ) : ViewModel() {
 
@@ -36,6 +40,16 @@ class HomeViewModel @Inject constructor(
     init {
         loadDailyStats()
         loadGalleryCounts()
+        checkPendingReviews()
+    }
+
+    private fun checkPendingReviews() {
+        viewModelScope.launch {
+            imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW")
+                .collectLatest { clusters ->
+                    _uiState.update { it.copy(hasPendingReview = clusters.isNotEmpty()) }
+                }
+        }
     }
 
     private fun loadGalleryCounts() {
@@ -45,12 +59,7 @@ class HomeViewModel @Inject constructor(
             // Get all screenshots from MediaStore
             val allScreenshots = galleryRepository.getScreenshots()
             
-            // Filter out processed ones (KEPT or DELETED) to get the count of 'Cleaning Targets'
-            // We need to check status for each uri.
-            // Optimization: Fetch all processed URIs? Or check one by one?
-            // Checking one by one might be slow if there are many screenshots.
-            // But let's stick to consistency for now.
-            
+            // Filter out processed ones
             var unprocessedCount = 0
             for (item in allScreenshots) {
                 val status = imageItemDao.getImageStatusByUri(item.uri.toString())

@@ -120,7 +120,8 @@ private fun AppNavigation(
                 viewModel = hiltViewModel(),
                 onStartAnalysisAndExit = onStartAnalysisAndExit,
                 onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") }
+                onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") },
+                onNavigateToReview = { navController.navigate("review") }
             )
         }
         composable("settings") {
@@ -146,7 +147,8 @@ private fun HomeScreen(
     viewModel: HomeViewModel,
     onStartAnalysisAndExit: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToScreenshotClean: () -> Unit
+    onNavigateToScreenshotClean: () -> Unit,
+    onNavigateToReview: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -166,12 +168,12 @@ private fun HomeScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Settings Button (Top Right) - Adjusted padding
+        // Settings Button (Top Right)
         IconButton(
             onClick = onNavigateToSettings,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 48.dp, end = 16.dp) // Increased top padding
+                .padding(top = 48.dp, end = 16.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
@@ -340,7 +342,6 @@ private fun HomeScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
-                            // UPDATED: Dynamic count
                             Text(
                                 text = if (uiState.screenshotCount > 0) "${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 스크린샷이 없습니다",
                                 style = MaterialTheme.typography.bodySmall
@@ -356,19 +357,27 @@ private fun HomeScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Main Action Button (Standby)
+            // Main Action Button (Dynamic)
+            val hasPending = uiState.hasPendingReview
             Button(
                 onClick = {
-                    isStandbyMode = true
-                    onStartAnalysisAndExit()
+                    if (hasPending) {
+                        onNavigateToReview()
+                    } else {
+                        isStandbyMode = true
+                        onStartAnalysisAndExit()
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                colors = if (isStandbyMode) ButtonDefaults.buttonColors(containerColor = Color.Gray) else ButtonDefaults.buttonColors()
+                colors = if (isStandbyMode && !hasPending) ButtonDefaults.buttonColors(containerColor = Color.Gray) else ButtonDefaults.buttonColors()
             ) {
+                // Updated Text for clarity
                 Text(
-                    text = if (isStandbyMode) "스탠바이 중..." else "촬영 감지 스탠바이 (백그라운드)",
+                    text = if (hasPending) "리뷰 이어서 하기 (분석 완료)" 
+                           else if (isStandbyMode) "홈 화면으로 나가기 (백그라운드 감지 중)" 
+                           else "홈 화면으로 나가기 (백그라운드 감지 중)", 
                     fontSize = 18.sp
                 )
             }

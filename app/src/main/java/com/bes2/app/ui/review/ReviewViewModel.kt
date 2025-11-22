@@ -51,6 +51,10 @@ class ReviewViewModel @Inject constructor(
     private val _navigationEvent = MutableSharedFlow<NavigationEvent>()
     val navigationEvent: SharedFlow<NavigationEvent> = _navigationEvent.asSharedFlow()
 
+    // Session statistics
+    private var sessionClusterCount = 0
+    private var sessionSavedImageCount = 0
+
     init {
         Timber.d("ReviewViewModel init")
         viewModelScope.launch {
@@ -60,7 +64,10 @@ class ReviewViewModel @Inject constructor(
                     if (clusters.isEmpty()) {
                         Timber.w("No clusters to review. Triggering post-review sync and navigating home.")
                         schedulePostReviewSync()
-                        _navigationEvent.emit(NavigationEvent.NavigateToHome)
+                        
+                        // Emit navigation event with stats
+                        _navigationEvent.emit(NavigationEvent.NavigateToHome(sessionClusterCount, sessionSavedImageCount))
+                        
                         kotlinx.coroutines.flow.flowOf(ReviewUiState.NoClustersToReview)
                     } else {
                         val currentCluster = clusters.first()
@@ -113,12 +120,10 @@ class ReviewViewModel @Inject constructor(
         val nimaScore = (image.nimaScore ?: 0f) * 10
         val smileProb = image.smilingProbability ?: 0f
         
-        // Penalize frowning/neutral expressions (low smile probability)
-        // Boost happy expressions (high smile probability)
         val smileBonus = if (smileProb < 0.1f) {
-            -10f // Deduction for potential frown or neutral face
+            -10f 
         } else {
-            smileProb * 30f // Boost for smile
+            smileProb * 30f
         }
         
         return nimaScore + smileBonus
@@ -185,13 +190,14 @@ class ReviewViewModel @Inject constructor(
         viewModelScope.launch {
             val currentState = _uiState.value
             if (currentState is ReviewUiState.Ready) {
+                // Update stats before state change
+                updateSessionStats(currentState)
+
                 val imagesToDelete = currentState.otherImages + currentState.rejectedImages
                 if (imagesToDelete.isNotEmpty()) {
                     val urisToDelete = imagesToDelete.map { Uri.parse(it.uri) }
                      _uiState.value = currentState.copy(pendingDeleteRequest = urisToDelete)
                 } else {
-                    // This is the original, correct logic that was mistakenly removed.
-                    // It handles the case where there are no images to delete.
                     withContext(NonCancellable) {
                         val keptImageIds = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage).map { it.id }
                         if (keptImageIds.isNotEmpty()) {
@@ -210,6 +216,24 @@ class ReviewViewModel @Inject constructor(
         viewModelScope.launch {
             val currentState = _uiState.value
             if (currentState is ReviewUiState.Ready) {
+                // Stats were already updated in deleteOtherImages (if called from there)
+                // But if called after permission result, we need to ensure we don't double count.
+                // Actually, deleteOtherImages sets pendingDeleteRequest and returns. It does NOT finish the cluster.
+                // So stats should be updated here if we came from permission request.
+                // However, deleteOtherImages is the trigger.
+                // Let's move stats update to a helper function called in both paths, but carefully.
+                
+                // The simplest way: Update stats right before completing the cluster.
+                // Check if we already updated for this cluster? No, easier to just update now.
+                // Wait, deleteOtherImages calls this logic ONLY if imagesToDelete is empty.
+                // If not empty, it sets pending request.
+                // So we should update stats here OR in the else block of deleteOtherImages.
+                
+                // Correction: I added updateSessionStats in deleteOtherImages. That covers both cases?
+                // No, if permission is needed, deleteOtherImages sets state and returns.
+                // Then onDeletionRequestHandled is called.
+                // So session stats would be updated.
+                
                 _uiState.value = currentState.copy(pendingDeleteRequest = null)
 
                 withContext(NonCancellable) {
@@ -226,14 +250,18 @@ class ReviewViewModel @Inject constructor(
                             Timber.d("Updated $deletedCount images to DELETED")
                         }
                     }
-                    // No need to handle the 'else' for !successfullyDeleted,
-                    // as the kept images are already marked and the cluster will be completed.
                     
                     imageClusterDao.updateImageClusterReviewStatus(currentState.cluster.id, "REVIEW_COMPLETED")
                     Timber.d("Updated cluster ${currentState.cluster.id} to REVIEW_COMPLETED")
                 }
             }
         }
+    }
+    
+    private fun updateSessionStats(state: ReviewUiState.Ready) {
+        sessionClusterCount++
+        val keptCount = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage).size
+        sessionSavedImageCount += keptCount
     }
 }
 
@@ -252,6 +280,6 @@ sealed interface ReviewUiState {
 }
 
 sealed interface NavigationEvent {
-    object NavigateToHome : NavigationEvent
+    data class NavigateToHome(val clusterCount: Int, val savedCount: Int) : NavigationEvent
     object NavigateToSettings : NavigationEvent
 }

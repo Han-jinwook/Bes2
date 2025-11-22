@@ -1,5 +1,6 @@
 package com.bes2.app.ui.review
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.provider.MediaStore
@@ -13,41 +14,21 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -64,22 +45,33 @@ import coil.compose.AsyncImage
 import com.bes2.app.MainActivity
 import com.bes2.background.worker.PhotoAnalysisWorker
 import com.bes2.data.model.ImageItemEntity
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReviewScreen(viewModel: ReviewViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val activity = LocalContext.current as? Activity
+
+    fun navigateToHome() {
+        // Explicitly start MainActivity to ensure we don't exit the app
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        context.startActivity(intent)
+        // Finish current activity to remove it from back stack
+        activity?.finish()
+    }
 
     LaunchedEffect(key1 = viewModel.navigationEvent) {
         viewModel.navigationEvent.collectLatest { event ->
             when (event) {
-                NavigationEvent.NavigateToHome -> {
-                    Toast.makeText(context, "오늘의 사진 정리가 완료되었습니다.", Toast.LENGTH_SHORT).show()
-                    val intent = Intent(context, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    }
-                    context.startActivity(intent)
+                is NavigationEvent.NavigateToHome -> {
+                    val message = "${event.clusterCount}개 묶음 중 베스트 ${event.savedCount}장을 정리했습니다."
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    navigateToHome()
                 }
                 else -> {}
             }
@@ -104,7 +96,8 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
             LoadingState()
         }
         is ReviewUiState.NoClustersToReview -> {
-            NoClustersState()
+            // Added navigation callback to force exit if stuck
+            NoClustersState(onNavigateHome = { navigateToHome() })
         }
         is ReviewUiState.Ready -> {
             state.pendingDeleteRequest?.let { urisToDelete ->
@@ -114,17 +107,74 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                 }
             }
 
-            ReviewReadyState(
-                state = state,
-                onImageClick = { image -> viewModel.selectImage(image) },
-                onImageLongPress = { list, image ->
-                    val index = list.indexOf(image)
-                    if (index != -1) {
-                        zoomedImageInfo = list to index
+            Scaffold(
+                topBar = {
+                    Column {
+                        TopAppBar(
+                            title = { Text("사진 정리") },
+                            navigationIcon = {
+                                IconButton(onClick = { 
+                                    navigateToHome()
+                                }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                }
+                            }
+                        )
+                        
+                        // Action Button (Moved to Top)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.deleteOtherImages() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("나머지/실패 사진 삭제하기")
+                            }
+                        }
                     }
                 },
-                onCompleteSelection = { viewModel.deleteOtherImages() }
-            )
+                bottomBar = {
+                    // AdMob Placeholder
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding() 
+                            .height(60.dp) 
+                            .background(Color.LightGray.copy(alpha = 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "광고 영역 (AdMob Banner)",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            ) { padding ->
+                Box(modifier = Modifier.padding(padding)) {
+                    ReviewReadyState(
+                        state = state,
+                        onImageClick = { image -> viewModel.selectImage(image) },
+                        onImageLongPress = { list, image ->
+                            val index = list.indexOf(image)
+                            if (index != -1) {
+                                zoomedImageInfo = list to index
+                            }
+                        }
+                    )
+                }
+            }
 
             if (zoomedImageInfo != null) {
                 ZoomedImageDialog(
@@ -161,13 +211,19 @@ fun LoadingState() {
 }
 
 @Composable
-fun NoClustersState() {
+fun NoClustersState(onNavigateHome: () -> Unit) {
+    // Force navigation after a short delay
+    LaunchedEffect(Unit) {
+        delay(500) // 0.5 second delay
+        onNavigateHome()
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "모든 사진 검토가 끝났습니다. 홈으로 이동합니다...")
+        Text(text = "모든 사진 검토가 끝났습니다.")
     }
 }
 
@@ -175,8 +231,7 @@ fun NoClustersState() {
 fun ReviewReadyState(
     state: ReviewUiState.Ready,
     onImageClick: (ImageItemEntity) -> Unit,
-    onImageLongPress: (List<ImageItemEntity>, ImageItemEntity) -> Unit,
-    onCompleteSelection: () -> Unit
+    onImageLongPress: (List<ImageItemEntity>, ImageItemEntity) -> Unit
 ) {
     val bestImages = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
 
@@ -272,16 +327,6 @@ fun ReviewReadyState(
                 }
             }
         }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Button(
-            onClick = onCompleteSelection,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = true 
-        ) {
-            Text("나머지/실패 사진 삭제하기")
-        }
     }
 }
 
@@ -307,7 +352,6 @@ fun ImageWithInfo(
         } else {
             val nimaScore = (image.nimaScore ?: 0f) * 10
             val smileProb = image.smilingProbability ?: 0f
-            // UI Logic updated to match ReviewViewModel
             val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
             val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
             "${displayScore}점"
@@ -344,7 +388,7 @@ fun ZoomedImageDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.8f))
+                .background(Color.Transparent)
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismiss() })
                 },
@@ -368,7 +412,9 @@ fun ZoomedImageDialog(
                     contentDescription = "Zoomed Image",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.75f)
+                        .fillMaxHeight(0.75f)
+                        .shadow(12.dp, RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .border(2.dp, Color.White, RoundedCornerShape(16.dp))
                         .graphicsLayer(
@@ -389,7 +435,6 @@ fun ZoomedImageDialog(
                 } else {
                     val nimaScore = (currentImage.nimaScore ?: 0f) * 10
                     val smileProb = currentImage.smilingProbability ?: 0f
-                    // UI Logic updated to match ReviewViewModel
                     val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
                     val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
                     "${displayScore}점"
@@ -430,8 +475,8 @@ fun ZoomedImageDialog(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
                             contentDescription = "Previous Image",
-                            tint = if (!isAtStart) Color.White else Color.Transparent,
-                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp)
+                            tint = if (!isAtStart) Color.White else Color.Black.copy(alpha=0.5f),
+                            modifier = Modifier.size(48.dp).background(Color.White.copy(alpha=0.7f), CircleShape).padding(8.dp)
                         )
                     }
                     IconButton(
@@ -441,8 +486,8 @@ fun ZoomedImageDialog(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                             contentDescription = "Next Image",
-                            tint = if (!isAtEnd) Color.White else Color.Transparent,
-                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp)
+                            tint = if (!isAtEnd) Color.White else Color.Black.copy(alpha=0.5f),
+                            modifier = Modifier.size(48.dp).background(Color.White.copy(alpha=0.7f), CircleShape).padding(8.dp)
                         )
                     }
                 }
@@ -450,7 +495,6 @@ fun ZoomedImageDialog(
         }
     }
 }
-
 
 @Composable
 fun CoachMark(text: String, onDismiss: () -> Unit) {
@@ -478,31 +522,4 @@ fun CoachMark(text: String, onDismiss: () -> Unit) {
             )
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ReviewScreenPreview() {
-    val fakeCluster = com.bes2.data.model.ImageClusterEntity(id=1, creationTime=0, reviewStatus="PENDING_REVIEW", bestImageUri="", secondBestImageUri=null)
-    val fakeImages = listOf(
-        ImageItemEntity(id = 1, uri = "", filePath = "", timestamp = 0, status = "ANALYZED", pHash = "1", nimaScore = 8.7f, blurScore = 90f, areEyesClosed = false, exposureScore = 0.5f, smilingProbability = 0.8f),
-        ImageItemEntity(id = 2, uri = "", filePath = "", timestamp = 0, status = "ANALYZED", pHash = "2", nimaScore = 7.2f, blurScore = 80f, areEyesClosed = false, exposureScore = 0.6f, smilingProbability = 0.6f),
-        ImageItemEntity(id = 3, uri = "", filePath = "", timestamp = 0, status = "ANALYZED", pHash = "3", nimaScore = 6.5f, blurScore = 70f, areEyesClosed = false, exposureScore = 0.7f, smilingProbability = 0.2f),
-        ImageItemEntity(id = 4, uri = "", filePath = "", timestamp = 0, status = "STATUS_REJECTED", pHash = "4", nimaScore = 4.1f, blurScore = 20f, areEyesClosed = false, exposureScore = 0.8f, smilingProbability = 0.1f),
-        ImageItemEntity(id = 5, uri = "", filePath = "", timestamp = 0, status = "STATUS_REJECTED", pHash = "5", nimaScore = 3.5f, blurScore = 60f, areEyesClosed = true, exposureScore = 0.9f, smilingProbability = 0.0f)
-    )
-    val readyState = ReviewUiState.Ready(
-        cluster = fakeCluster,
-        allImages = fakeImages,
-        otherImages = listOf(fakeImages[2]),
-        rejectedImages = listOf(fakeImages[3], fakeImages[4]),
-        selectedBestImage = fakeImages[0],
-        selectedSecondBestImage = fakeImages[1]
-    )
-    ReviewReadyState(
-        state = readyState,
-        onImageClick = {},
-        onImageLongPress = { _, _ -> },
-        onCompleteSelection = {}
-    )
 }

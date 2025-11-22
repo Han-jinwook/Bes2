@@ -93,7 +93,7 @@ object NotificationHelper {
     }
 
 
-    fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int) {
+    fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int, photoCount: Int) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // DEFINITIVE FIX: Removed FLAG_ACTIVITY_CLEAR_TASK to prevent the activity stack from being cleared.
@@ -106,8 +106,8 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val contentText = if (clusterCount > 1) {
-            "${clusterCount}개의 새로운 사진 묶음이 준비되었습니다."
+        val contentText = if (clusterCount > 0) {
+            "${clusterCount}개 묶음(${photoCount}장)의 정리가 완료되었습니다."
         } else {
             "새로운 사진 묶음이 준비되었습니다."
         }

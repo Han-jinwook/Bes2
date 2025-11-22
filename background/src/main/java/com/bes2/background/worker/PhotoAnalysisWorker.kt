@@ -45,7 +45,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
     private val resourceProvider: ResourceProvider,
-    private val settingsRepository: SettingsRepository // SettingsRepository 주입
+    private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -136,8 +136,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             
             if (clustersForReviewCount > 0) {
                  Timber.tag(WORK_NAME).d("Analysis complete. Notifying user about $clustersForReviewCount new clusters.")
-                 NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, clustersForReviewCount)
-                 // 동기화 작업 스케줄링 로직 추가
+                 // Pass both cluster count and total photo count
+                 NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, clustersForReviewCount, imagesToAnalyze.size)
                  schedulePostAnalysisSync()
             } else {
                 Timber.tag(WORK_NAME).d("Analysis complete, but no new clusters need review.")
@@ -178,7 +178,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             .setInputData(inputData)
             .build()
         
-        // Use a unique name to prevent multiple syncs from queuing up if analysis runs frequently
         workManager.enqueue(syncWorkRequest)
 
         Timber.d("Enqueued post-analysis sync with option: ${settings.syncOption}, Delay: $delayInMillis ms, Wi-Fi only: ${settings.uploadOnWifiOnly}")
