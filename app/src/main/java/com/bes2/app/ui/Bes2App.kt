@@ -12,10 +12,13 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -42,11 +45,11 @@ import androidx.navigation.compose.rememberNavController
 import com.bes2.app.R
 import com.bes2.app.ui.home.HomeViewModel
 import com.bes2.app.ui.review.ReviewScreen
+import com.bes2.app.ui.screenshot.ScreenshotScreen
 import com.bes2.app.ui.settings.SettingsScreen
 
 /**
  * Main entry point for the app's UI.
- * Handles permission checks and navigation.
  */
 @Composable
 fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
@@ -116,7 +119,8 @@ private fun AppNavigation(
             HomeScreen(
                 viewModel = hiltViewModel(),
                 onStartAnalysisAndExit = onStartAnalysisAndExit,
-                onNavigateToSettings = { navController.navigate("settings") }
+                onNavigateToSettings = { navController.navigate("settings") },
+                onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") }
             )
         }
         composable("settings") {
@@ -128,6 +132,12 @@ private fun AppNavigation(
         composable("review") {
             ReviewScreen(viewModel = hiltViewModel())
         }
+        composable("screenshot_clean") {
+            ScreenshotScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
     }
 }
 
@@ -135,10 +145,12 @@ private fun AppNavigation(
 private fun HomeScreen(
     viewModel: HomeViewModel,
     onStartAnalysisAndExit: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToScreenshotClean: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var isStandbyMode by remember { mutableStateOf(false) }
     
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -154,12 +166,12 @@ private fun HomeScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Settings Button (Top Right)
+        // Settings Button (Top Right) - Adjusted padding
         IconButton(
             onClick = onNavigateToSettings,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(16.dp)
+                .padding(top = 48.dp, end = 16.dp) // Increased top padding
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
@@ -245,7 +257,7 @@ private fun HomeScreen(
                 }
             }
             
-            // --- DAILY REPORT CARD (COMPACT) ---
+            // --- DAILY REPORT CARD ---
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -259,7 +271,6 @@ private fun HomeScreen(
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Restore Title
                     Text(
                         text = "오늘의 정리 리포트",
                         style = MaterialTheme.typography.titleMedium,
@@ -296,16 +307,70 @@ private fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Main Action Button
-            Button(
-                onClick = onStartAnalysisAndExit,
+            // --- SCREENSHOT CLEANER CARD ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .clickable { onNavigateToScreenshotClean() },
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("분석 시작 (백그라운드 실행)", fontSize = 18.sp)
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clean Screenshots",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "스크린샷 청소하기",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            // UPDATED: Dynamic count
+                            Text(
+                                text = if (uiState.screenshotCount > 0) "${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 스크린샷이 없습니다",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Go"
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Main Action Button (Standby)
+            Button(
+                onClick = {
+                    isStandbyMode = true
+                    onStartAnalysisAndExit()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = if (isStandbyMode) ButtonDefaults.buttonColors(containerColor = Color.Gray) else ButtonDefaults.buttonColors()
+            ) {
+                Text(
+                    text = if (isStandbyMode) "스탠바이 중..." else "촬영 감지 스탠바이 (백그라운드)",
+                    fontSize = 18.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

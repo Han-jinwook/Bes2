@@ -20,13 +20,14 @@ data class HomeUiState(
     val dailyTotal: Int = 0,
     val dailyKept: Int = 0,
     val dailyDeleted: Int = 0,
-    val galleryTotalCount: Int = 0 // Added field for total gallery count
+    val galleryTotalCount: Int = 0,
+    val screenshotCount: Int = 0
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val imageItemDao: ImageItemDao,
-    private val galleryRepository: GalleryRepository // Injected
+    private val galleryRepository: GalleryRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -34,13 +35,34 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadDailyStats()
-        loadGalleryTotalCount()
+        loadGalleryCounts()
     }
 
-    private fun loadGalleryTotalCount() {
+    private fun loadGalleryCounts() {
         viewModelScope.launch(Dispatchers.IO) {
             val totalCount = galleryRepository.getTotalImageCount()
-            _uiState.update { it.copy(galleryTotalCount = totalCount) }
+            
+            // Get all screenshots from MediaStore
+            val allScreenshots = galleryRepository.getScreenshots()
+            
+            // Filter out processed ones (KEPT or DELETED) to get the count of 'Cleaning Targets'
+            // We need to check status for each uri.
+            // Optimization: Fetch all processed URIs? Or check one by one?
+            // Checking one by one might be slow if there are many screenshots.
+            // But let's stick to consistency for now.
+            
+            var unprocessedCount = 0
+            for (item in allScreenshots) {
+                val status = imageItemDao.getImageStatusByUri(item.uri.toString())
+                if (status != "KEPT" && status != "DELETED") {
+                    unprocessedCount++
+                }
+            }
+
+            _uiState.update { it.copy(
+                galleryTotalCount = totalCount,
+                screenshotCount = unprocessedCount
+            ) }
         }
     }
 
@@ -56,7 +78,6 @@ class HomeViewModel @Inject constructor(
                 var kept = 0
                 var deleted = 0
 
-                // Only count photos that have been processed or analyzed.
                 val processedStatuses = setOf("ANALYZED", "KEPT", "DELETED", "STATUS_REJECTED")
 
                 statsList.forEach { statusCount ->
@@ -80,8 +101,7 @@ class HomeViewModel @Inject constructor(
         }
     }
     
-    // Method to refresh gallery count (can be called onResume)
     fun refreshGalleryCount() {
-        loadGalleryTotalCount()
+        loadGalleryCounts()
     }
 }

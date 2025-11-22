@@ -1475,6 +1475,39 @@ public final class ImageItemDao_Impl implements ImageItemDao {
   }
 
   @Override
+  public Object getImageStatusByUri(final String uri,
+      final Continuation<? super String> $completion) {
+    final String _sql = "SELECT status FROM image_items WHERE uri = ? LIMIT 1";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
+    int _argIndex = 1;
+    _statement.bindString(_argIndex, uri);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<String>() {
+      @Override
+      @Nullable
+      public String call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final String _result;
+          if (_cursor.moveToFirst()) {
+            if (_cursor.isNull(0)) {
+              _result = null;
+            } else {
+              _result = _cursor.getString(0);
+            }
+          } else {
+            _result = null;
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
   public Object updateImageClusterInfo(final String clusterId, final List<Long> imageIds,
       final Continuation<? super Integer> $completion) {
     return CoroutinesRoom.execute(__db, true, new Callable<Integer>() {
@@ -1705,6 +1738,41 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           _stmt.executeUpdateDelete();
           __db.setTransactionSuccessful();
           return Unit.INSTANCE;
+        } finally {
+          __db.endTransaction();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object updateImageStatusesByUris(final List<String> uris, final String newStatus,
+      final Continuation<? super Integer> $completion) {
+    return CoroutinesRoom.execute(__db, true, new Callable<Integer>() {
+      @Override
+      @NonNull
+      public Integer call() throws Exception {
+        final StringBuilder _stringBuilder = StringUtil.newStringBuilder();
+        _stringBuilder.append("UPDATE image_items SET status = ");
+        _stringBuilder.append("?");
+        _stringBuilder.append(" WHERE uri IN (");
+        final int _inputSize = uris.size();
+        StringUtil.appendPlaceholders(_stringBuilder, _inputSize);
+        _stringBuilder.append(")");
+        final String _sql = _stringBuilder.toString();
+        final SupportSQLiteStatement _stmt = __db.compileStatement(_sql);
+        int _argIndex = 1;
+        _stmt.bindString(_argIndex, newStatus);
+        _argIndex = 2;
+        for (String _item : uris) {
+          _stmt.bindString(_argIndex, _item);
+          _argIndex++;
+        }
+        __db.beginTransaction();
+        try {
+          final Integer _result = _stmt.executeUpdateDelete();
+          __db.setTransactionSuccessful();
+          return _result;
         } finally {
           __db.endTransaction();
         }

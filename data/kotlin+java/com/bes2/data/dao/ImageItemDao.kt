@@ -89,4 +89,12 @@ interface ImageItemDao {
     // New query for daily statistics
     @Query("SELECT status, COUNT(*) as count FROM image_items WHERE timestamp >= :startTime GROUP BY status")
     fun getDailyStatsFlow(startTime: Long): Flow<List<StatusCount>>
+
+    // New query to get status by URI
+    @Query("SELECT status FROM image_items WHERE uri = :uri LIMIT 1")
+    suspend fun getImageStatusByUri(uri: String): String?
+
+    // New query to update status by URI list
+    @Query("UPDATE image_items SET status = :newStatus WHERE uri IN (:uris)")
+    suspend fun updateImageStatusesByUris(uris: List<String>, newStatus: String): Int
 }
