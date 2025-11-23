@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,7 +21,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -62,7 +63,10 @@ import timber.log.Timber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReviewScreen(viewModel: ReviewViewModel) {
+fun ReviewScreen(
+    viewModel: ReviewViewModel,
+    onNavigateBack: () -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
@@ -86,13 +90,6 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
         })
     }
 
-    fun navigateToHome() {
-        val homeIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        context.startActivity(homeIntent)
-    }
-
     fun showInterstitialAndNavigate() {
         val ad = interstitialAd
         if (ad != null) {
@@ -100,13 +97,13 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                 override fun onAdDismissedFullScreenContent() {
                     Timber.d("Ad dismissed fullscreen content.")
                     interstitialAd = null
-                    navigateToHome()
+                    onNavigateBack()
                 }
 
                 override fun onAdFailedToShowFullScreenContent(adError: AdError) {
                     Timber.e("Ad failed to show fullscreen content.")
                     interstitialAd = null
-                    navigateToHome()
+                    onNavigateBack()
                 }
 
                 override fun onAdShowedFullScreenContent() {
@@ -117,11 +114,11 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                 ad.show(context)
             } else {
                 Timber.w("Context is not Activity, cannot show Interstitial")
-                navigateToHome()
+                onNavigateBack()
             }
         } else {
             Timber.d("Interstitial ad not ready, navigating immediately")
-            navigateToHome()
+            onNavigateBack()
         }
     }
 
@@ -139,7 +136,7 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                     } else {
                         // If not, just navigate after a short delay for toast
                         delay(2000) 
-                        navigateToHome()
+                        onNavigateBack()
                     }
                 }
                 else -> {}
@@ -179,15 +176,26 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
 
             Scaffold(
                 topBar = {
+                    // Compact TopAppBar
                     TopAppBar(
-                        title = { Text("사진 정리") },
-                        navigationIcon = {
-                            IconButton(onClick = { 
-                                navigateToHome()
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        }
+                        title = { 
+                            Text(
+                                "Bes2 AI 사진비서", // Changed Title
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            ) 
+                        },
+                        actions = { // Minimap moved to Actions
+                            ClusterMinimap(
+                                totalCount = state.totalClusterCount,
+                                currentIndex = state.currentClusterIndex,
+                                modifier = Modifier.padding(end = 16.dp)
+                            )
+                        },
+                        // Removed navigationIcon (Back Button)
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                        modifier = Modifier.height(48.dp)
                     )
                 },
                 bottomBar = {
@@ -317,13 +325,16 @@ fun ReviewReadyState(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp) // Keep horizontal padding
     ) {
-        Text("베스트 2장", style = MaterialTheme.typography.titleMedium, color = bestColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+        // ClusterMinimap removed from here (moved to TopBar)
+        Spacer(modifier = Modifier.height(8.dp)) // Small spacer
+
+        Text("베스트 2장", style = MaterialTheme.typography.titleMedium, color = bestColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp),
+                .height(190.dp), // Reduced height (approx 5%)
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             bestImages.getOrNull(0)?.let { image ->
@@ -358,10 +369,10 @@ fun ReviewReadyState(
             } ?: Box(modifier = Modifier.weight(1f).fillMaxSize())
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp)) // Reduced spacing
 
         // Other Images Title with Count
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
             Text("나머지 사진", style = MaterialTheme.typography.titleMedium, color = otherColor, fontWeight = FontWeight.Bold)
             Text(" (${state.otherImages.size}장)", style = MaterialTheme.typography.titleMedium, color = Color.Black, fontWeight = FontWeight.Bold)
         }
@@ -387,12 +398,12 @@ fun ReviewReadyState(
         }
 
         if (state.rejectedImages.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp)) // Reduced spacing
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp)) // Reduced spacing
 
             // Rejected Images Title with Count
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                 Text("실패한 사진", style = MaterialTheme.typography.titleMedium, color = rejectedColor, fontWeight = FontWeight.Bold)
                 Text(" (${state.rejectedImages.size}장)", style = MaterialTheme.typography.titleMedium, color = Color.Black, fontWeight = FontWeight.Bold)
             }
@@ -404,7 +415,7 @@ fun ReviewReadyState(
                     ImageWithInfo(
                         image = image,
                         modifier = Modifier
-                            .height(80.dp)
+                            .height(100.dp) // Increased height from 80.dp
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(8.dp))
                             .pointerInput(image, onImageLongPress) { // Added onImageLongPress as key
@@ -416,6 +427,53 @@ fun ReviewReadyState(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ClusterMinimap(
+    totalCount: Int,
+    currentIndex: Int,
+    modifier: Modifier = Modifier
+) {
+    if (totalCount <= 0) return
+
+    // Removed fillMaxWidth to fit in Actions
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val primaryColor = MaterialTheme.colorScheme.primary
+        val inactiveColor = Color.LightGray
+
+        if (totalCount <= 15) {
+            // Simple Dots - Compact size
+            for (i in 1..totalCount) {
+                val color = if (i < currentIndex) inactiveColor // Completed
+                            else if (i == currentIndex) primaryColor // Current
+                            else inactiveColor.copy(alpha = 0.5f) // Future (lighter)
+                
+                // Smaller size for TopBar
+                val size = if (i == currentIndex) 8.dp else 6.dp 
+                
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .size(size)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+            }
+        } else {
+            // Too many items, show text
+            Text(
+                text = "$currentIndex / $totalCount",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.Gray,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

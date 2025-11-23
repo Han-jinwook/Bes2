@@ -96,6 +96,7 @@ class ReviewViewModel @Inject constructor(
                         }
                     } else {
                         val currentCluster = clusters.first()
+                        val remainingCount = clusters.size
                         Timber.d("Processing cluster ID: ${currentCluster.id}")
                         
                         imageItemDao.getImageItemsByClusterId(currentCluster.id)
@@ -103,7 +104,7 @@ class ReviewViewModel @Inject constructor(
                             .map { images ->
                                 val validStatus = setOf("ANALYZED", "READY_TO_CLEAN", "STATUS_REJECTED")
                                 val candidates = images.filter { it.status in validStatus }
-                                calculateReadyState(currentCluster, candidates)
+                                calculateReadyState(currentCluster, candidates, remainingCount)
                             }
                     }
                 }
@@ -168,7 +169,9 @@ class ReviewViewModel @Inject constructor(
 
             // Update state
             manualSelectionIds = newSelection.map { it.id }
-            _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages)
+            // Recalculate with existing counts
+            val remaining = currentState.totalClusterCount - currentState.currentClusterIndex + 1
+            _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages, remaining)
         }
     }
     
@@ -198,7 +201,7 @@ class ReviewViewModel @Inject constructor(
         return nimaScore + smileBonus
     }
 
-    private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>): ReviewUiState.Ready {
+    private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>, remainingCount: Int): ReviewUiState.Ready {
         val (analyzedImages, rejectedImages) = allImages.partition { 
             it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" 
         }
@@ -218,6 +221,10 @@ class ReviewViewModel @Inject constructor(
             .filterNot { it.uri in selectedUris }
             .sortedByDescending { calculateFinalScore(it) }
 
+        // Logic for minimap counts
+        val totalCount = sessionClusterCount + remainingCount
+        val currentIndex = sessionClusterCount + 1
+
         return ReviewUiState.Ready(
             cluster = cluster,
             allImages = allImages,
@@ -225,7 +232,9 @@ class ReviewViewModel @Inject constructor(
             rejectedImages = rejectedImages,
             selectedBestImage = finalBest,
             selectedSecondBestImage = finalSecond,
-            pendingDeleteRequest = null
+            pendingDeleteRequest = null,
+            totalClusterCount = totalCount,
+            currentClusterIndex = currentIndex
         )
     }
 
@@ -267,13 +276,6 @@ class ReviewViewModel @Inject constructor(
             if (currentState is ReviewUiState.Ready) {
                 updateSessionStats(currentState)
                 
-                // Calculate total processed count for this cluster (kept + deleted)
-                // Kept: Best 1/2
-                // Deleted: Others + Rejected
-                // Actually, total processed = allImages.size (assuming all are dealt with)
-                // Or strictly what is acted upon.
-                // 'deleteOtherImages' deletes 'other' and 'rejected'. 'Best' are kept.
-                // So effectively all images in the cluster are processed.
                 currentClusterProcessedCount = currentState.allImages.size
 
                 val imagesToDelete = currentState.otherImages + currentState.rejectedImages
@@ -359,11 +361,13 @@ sealed interface ReviewUiState {
         val rejectedImages: List<ImageItemEntity>,
         val selectedBestImage: ImageItemEntity?,
         val selectedSecondBestImage: ImageItemEntity?,
-        val pendingDeleteRequest: List<Uri>? = null
+        val pendingDeleteRequest: List<Uri>? = null,
+        val totalClusterCount: Int = 0, // Added
+        val currentClusterIndex: Int = 0 // Added
     ) : ReviewUiState
 }
 
 sealed interface NavigationEvent {
-    data class NavigateToHome(val clusterCount: Int, val savedCount: Int, val showAd: Boolean) : NavigationEvent // Added showAd
+    data class NavigateToHome(val clusterCount: Int, val savedCount: Int, val showAd: Boolean) : NavigationEvent
     object NavigateToSettings : NavigationEvent
 }
