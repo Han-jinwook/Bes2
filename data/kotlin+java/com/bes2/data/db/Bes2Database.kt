@@ -9,9 +9,9 @@ import com.bes2.data.model.ImageItemEntity
 
 @Database(
     entities = [ImageItemEntity::class, ImageClusterEntity::class],
-    version = 4, // 버전 4 유지
-    exportSchema = true, // 스키마 내보내기는 유지하여 다음 마이그레이션을 준비
-    autoMigrations = [] // 자동 마이그레이션 설정 제거
+    version = 5, // 버전 5로 증가 (Schema Change: ImageClusterEntity.id Long -> String)
+    exportSchema = true,
+    autoMigrations = []
 )
 abstract class Bes2Database : RoomDatabase() {
     abstract fun imageItemDao(): ImageItemDao

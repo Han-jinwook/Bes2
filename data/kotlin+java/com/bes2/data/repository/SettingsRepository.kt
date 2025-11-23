@@ -48,8 +48,13 @@ class SettingsRepository @Inject constructor(
             val hour = preferences[PreferencesKeys.SYNC_HOUR] ?: 2 // Default to 2 AM
             val minute = preferences[PreferencesKeys.SYNC_MINUTE] ?: 0
             val provider = preferences[PreferencesKeys.CLOUD_PROVIDER] ?: "google_photos"
-            val uploadOnWifiOnly = preferences[PreferencesKeys.UPLOAD_ON_WIFI_ONLY] ?: false
-            val syncOption = preferences[PreferencesKeys.SYNC_OPTION] ?: "DAILY"
+            
+            // Changed default to true
+            val uploadOnWifiOnly = preferences[PreferencesKeys.UPLOAD_ON_WIFI_ONLY] ?: true
+            
+            // Changed default to "IMMEDIATE" (분석 직후 바로바로 동기화)
+            val syncOption = preferences[PreferencesKeys.SYNC_OPTION] ?: "IMMEDIATE"
+            
             val syncDelayHours = preferences[PreferencesKeys.SYNC_DELAY_HOURS] ?: 0
             val syncDelayMinutes = preferences[PreferencesKeys.SYNC_DELAY_MINUTES] ?: 5
             

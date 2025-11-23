@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -21,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.FileNotFoundException
+import java.util.UUID
 
 @HiltWorker
 class ClusteringWorker @AssistedInject constructor(
@@ -34,10 +36,12 @@ class ClusteringWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "ClusteringWorker"
         const val HAMMING_DISTANCE_THRESHOLD = 15 // Increased threshold as per user feedback
+        const val KEY_IS_BACKGROUND_DIET = "is_background_diet"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Timber.tag(WORK_NAME).d("Worker started. Following PLAN.md: Clustering -> Analysis.")
+        val isBackgroundDiet = inputData.getBoolean(KEY_IS_BACKGROUND_DIET, false)
+        Timber.tag(WORK_NAME).d("Worker started. Following PLAN.md: Clustering -> Analysis. (isBackgroundDiet=$isBackgroundDiet)")
         try {
             // 1. Get NEW images
             val allNewImages = imageDao.getImageItemsListByStatus("NEW")
@@ -93,19 +97,50 @@ class ClusteringWorker @AssistedInject constructor(
 
             // 4. Save clusters and prepare for next step (Analysis)
             for (cluster in clusters) {
-                val newClusterEntity = ImageClusterEntity(creationTime = System.currentTimeMillis())
-                val newClusterId = imageClusterDao.insertImageCluster(newClusterEntity)
+                val newClusterId = UUID.randomUUID().toString()
+                // For Background Diet, we mark the cluster as PENDING_REVIEW immediately, 
+                // but the items inside will be READY_TO_CLEAN after PhotoAnalysisWorker.
+                // Wait, PhotoAnalysisWorker looks for PENDING_ANALYSIS items.
+                // So cluster status doesn't matter for analysis, but matters for ReviewScreen.
+                // If isBackgroundDiet, we might want to keep cluster hidden?
+                // Let's stick to standard flow: PENDING_REVIEW is set by ClusteringWorker? No, usually creationTime.
+                // Actually, ClusteringWorker sets items to PENDING_ANALYSIS. Cluster status is default (PENDING_REVIEW).
+                // But items are not ANALYZED yet.
+                
+                val newClusterEntity = ImageClusterEntity(
+                    id = newClusterId,
+                    creationTime = System.currentTimeMillis(),
+                    reviewStatus = if (isBackgroundDiet) "BACKGROUND_PREPARING" else "PENDING_REVIEW" // New status to hide from immediate review?
+                    // Actually, if items are READY_TO_CLEAN, ReviewViewModel will find them regardless of cluster status 
+                    // if we query by item status. 
+                    // But ReviewViewModel queries clusters by "PENDING_REVIEW".
+                    // So if we set "PENDING_REVIEW", user sees notification? 
+                    // Notification is sent by PhotoAnalysisWorker.
+                )
+                // Let's keep default status but rely on PhotoAnalysisWorker to suppress notification.
+                // And we can update cluster status to "READY_TO_CLEAN" if we want to be explicit.
+                // For now, let's stick to default and handle notification suppression.
+                
+                imageClusterDao.insertImageCluster(newClusterEntity)
                 val imageUrisInCluster = cluster.images.map { it.uri }
                 
                 // Use existing functions to update clusterId and then status
-                imageDao.updateClusterIdByUris(imageUrisInCluster, newClusterId.toString())
+                imageDao.updateClusterIdByUris(imageUrisInCluster, newClusterId)
                 val imageIdsInCluster = cluster.images.map { it.id }
                 imageDao.updateImageStatusesByIds(imageIdsInCluster, "PENDING_ANALYSIS")
             }
 
             // 5. Trigger the next worker in the pipeline
             Timber.tag(WORK_NAME).d("Clustering complete. Enqueuing PhotoAnalysisWorker.")
-            val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+            
+            val inputData = Data.Builder()
+                .putBoolean(PhotoAnalysisWorker.KEY_IS_BACKGROUND_DIET, isBackgroundDiet)
+                .build()
+                
+            val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>()
+                .setInputData(inputData)
+                .build()
+                
             workManager.enqueueUniqueWork(
                 PhotoAnalysisWorker.WORK_NAME,
                 ExistingWorkPolicy.REPLACE,

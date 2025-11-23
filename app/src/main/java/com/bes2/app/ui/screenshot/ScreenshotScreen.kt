@@ -79,23 +79,28 @@ fun ScreenshotScreen(
 
     Scaffold(
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("스크린샷 청소") },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        val isAllSelected = uiState.screenshots.isNotEmpty() && uiState.screenshots.all { it.isSelected }
-                        TextButton(onClick = { viewModel.toggleAllSelection(!isAllSelected) }) {
-                            Text(if (isAllSelected) "선택 해제" else "전체 선택")
-                        }
+            TopAppBar(
+                title = { Text("스크린샷 청소") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                )
-                
-                // Action Buttons Bar (Compact)
+                },
+                actions = {
+                    val isAllSelected = uiState.screenshots.isNotEmpty() && uiState.screenshots.all { it.isSelected }
+                    TextButton(onClick = { viewModel.toggleAllSelection(!isAllSelected) }) {
+                        Text(if (isAllSelected) "선택 해제" else "전체 선택")
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                // Action Buttons Bar (Moved to Bottom)
                 val selectedCount = uiState.screenshots.count { it.isSelected }
                 Row(
                     modifier = Modifier
@@ -105,51 +110,50 @@ fun ScreenshotScreen(
                 ) {
                     Button(
                         onClick = { viewModel.keepSelected() },
-                        modifier = Modifier.weight(1f).height(40.dp), // Reduced height
+                        modifier = Modifier.weight(1f).height(56.dp), // Increased height for better touch target
                         enabled = selectedCount > 0,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                         ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(0.dp) // Remove internal padding to fit text
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("보관하기")
+                        Text("보관하기", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                     
                     Button(
                         onClick = { viewModel.deleteSelected() },
-                        modifier = Modifier.weight(1f).height(40.dp), // Reduced height
+                        modifier = Modifier.weight(1f).height(56.dp), // Increased height for better touch target
                         enabled = selectedCount > 0,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = Color.White
                         ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(0.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(if (selectedCount > 0) "${selectedCount}장 삭제" else "삭제하기")
+                        Text(
+                            text = if (selectedCount > 0) "${selectedCount}장 삭제" else "삭제하기",
+                            fontSize = 16.sp, 
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
-                // Removed HorizontalDivider
-            }
-        },
-        bottomBar = {
-            // AdMob Placeholder
-            // Added navigationBarsPadding to prevent overlap with system navigation bar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding() 
-                    .height(60.dp) 
-                    .background(Color.LightGray.copy(alpha = 0.3f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "광고 영역 (AdMob Banner)",
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
+
+                // AdMob Placeholder
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding() 
+                        .height(60.dp) 
+                        .background(Color.LightGray.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "광고 영역 (AdMob Banner)",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     ) { padding ->

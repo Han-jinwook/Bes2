@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,16 +55,13 @@ import kotlinx.coroutines.flow.collectLatest
 fun ReviewScreen(viewModel: ReviewViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val activity = LocalContext.current as? Activity
 
     fun navigateToHome() {
-        // Explicitly start MainActivity to ensure we don't exit the app
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val homeIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        context.startActivity(intent)
-        // Finish current activity to remove it from back stack
-        activity?.finish()
+        homeIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        context.startActivity(homeIntent)
     }
 
     LaunchedEffect(key1 = viewModel.navigationEvent) {
@@ -71,6 +70,7 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                 is NavigationEvent.NavigateToHome -> {
                     val message = "${event.clusterCount}개 묶음 중 베스트 ${event.savedCount}장을 정리했습니다."
                     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    delay(4000) 
                     navigateToHome()
                 }
                 else -> {}
@@ -78,7 +78,10 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
         }
     }
 
-    var zoomedImageInfo by remember { mutableStateOf<Pair<List<ImageItemEntity>, Int>?>(null) }
+    // State to hold data for Zoomed Dialog: (BestList, OtherList, RejectedList, InitialSectionIndex, InitialImageIndex)
+    // Section Index: 0=Best, 1=Other, 2=Rejected
+    var zoomedImageState by remember { mutableStateOf<ZoomedImageState?>(null) }
+    
     val prefs = remember { context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE) }
     var showCoachMark by remember {
         val shouldShow = !prefs.getBoolean("coach_mark_shown_long_press", false)
@@ -96,8 +99,10 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
             LoadingState()
         }
         is ReviewUiState.NoClustersToReview -> {
-            // Added navigation callback to force exit if stuck
-            NoClustersState(onNavigateHome = { navigateToHome() })
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            LaunchedEffect(Unit) {
+                navigateToHome()
+            }
         }
         is ReviewUiState.Ready -> {
             state.pendingDeleteRequest?.let { urisToDelete ->
@@ -109,56 +114,56 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
 
             Scaffold(
                 topBar = {
-                    Column {
-                        TopAppBar(
-                            title = { Text("사진 정리") },
-                            navigationIcon = {
-                                IconButton(onClick = { 
-                                    navigateToHome()
-                                }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                }
+                    TopAppBar(
+                        title = { Text("사진 정리") },
+                        navigationIcon = {
+                            IconButton(onClick = { 
+                                navigateToHome()
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
-                        )
+                        }
+                    )
+                },
+                bottomBar = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        val hasTrash = state.otherImages.isNotEmpty() || state.rejectedImages.isNotEmpty()
+                        val buttonText = if (hasTrash) "나머지/실패 사진 삭제하고 완료" else "선택한 사진 보관하고 완료"
+                        val buttonColor = if (hasTrash) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         
-                        // Action Button (Moved to Top)
-                        Row(
+                        Button(
+                            onClick = { viewModel.deleteOtherImages() },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = buttonColor,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Button(
-                                onClick = { viewModel.deleteOtherImages() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(0.dp)
-                            ) {
-                                Text("나머지/실패 사진 삭제하기")
-                            }
+                            Text(text = buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
-                    }
-                },
-                bottomBar = {
-                    // AdMob Placeholder
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding() 
-                            .height(60.dp) 
-                            .background(Color.LightGray.copy(alpha = 0.3f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "광고 영역 (AdMob Banner)",
-                            color = Color.Gray,
-                            fontSize = 12.sp
-                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding() 
+                                .height(60.dp) 
+                                .background(Color.LightGray.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "광고 영역 (AdMob Banner)",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             ) { padding ->
@@ -166,21 +171,24 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
                     ReviewReadyState(
                         state = state,
                         onImageClick = { image -> viewModel.selectImage(image) },
-                        onImageLongPress = { list, image ->
-                            val index = list.indexOf(image)
-                            if (index != -1) {
-                                zoomedImageInfo = list to index
-                            }
+                        onImageLongPress = { sectionIndex, index ->
+                            val best = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
+                            zoomedImageState = ZoomedImageState(
+                                bestList = best,
+                                otherList = state.otherImages,
+                                rejectedList = state.rejectedImages,
+                                initialSection = sectionIndex,
+                                initialIndex = index
+                            )
                         }
                     )
                 }
             }
 
-            if (zoomedImageInfo != null) {
-                ZoomedImageDialog(
-                    images = zoomedImageInfo!!.first,
-                    initialIndex = zoomedImageInfo!!.second,
-                    onDismiss = { zoomedImageInfo = null }
+            zoomedImageState?.let {
+                ZoomedImageDialogV2(
+                    state = it,
+                    onDismiss = { zoomedImageState = null }
                 )
             }
 
@@ -197,6 +205,14 @@ fun ReviewScreen(viewModel: ReviewViewModel) {
     }
 }
 
+data class ZoomedImageState(
+    val bestList: List<ImageItemEntity>,
+    val otherList: List<ImageItemEntity>,
+    val rejectedList: List<ImageItemEntity>,
+    val initialSection: Int, // 0, 1, 2
+    val initialIndex: Int
+)
+
 @Composable
 fun LoadingState() {
     Column(
@@ -211,36 +227,28 @@ fun LoadingState() {
 }
 
 @Composable
-fun NoClustersState(onNavigateHome: () -> Unit) {
-    // Force navigation after a short delay
-    LaunchedEffect(Unit) {
-        delay(500) // 0.5 second delay
-        onNavigateHome()
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = "모든 사진 검토가 끝났습니다.")
-    }
+fun NoClustersState() {
 }
 
 @Composable
 fun ReviewReadyState(
     state: ReviewUiState.Ready,
     onImageClick: (ImageItemEntity) -> Unit,
-    onImageLongPress: (List<ImageItemEntity>, ImageItemEntity) -> Unit
+    onImageLongPress: (Int, Int) -> Unit // sectionIndex, imageIndex
 ) {
     val bestImages = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
+
+    // Colors
+    val bestColor = Color(0xFF4CAF50) // Green
+    val otherColor = Color(0xFFFFC107) // Amber
+    val rejectedColor = Color(0xFFF44336) // Red
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text("베스트 2장", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+        Text("베스트 2장", style = MaterialTheme.typography.titleMedium, color = bestColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -257,7 +265,7 @@ fun ReviewReadyState(
                         .pointerInput(bestImages) {
                             detectTapGestures(
                                 onTap = { _ -> onImageClick(image) },
-                                onLongPress = { _ -> onImageLongPress(bestImages, image) }
+                                onLongPress = { _ -> onImageLongPress(0, 0) }
                             )
                         }
                 )
@@ -272,7 +280,7 @@ fun ReviewReadyState(
                         .pointerInput(bestImages) {
                             detectTapGestures(
                                 onTap = { _ -> onImageClick(image) },
-                                onLongPress = { _ -> onImageLongPress(bestImages, image) }
+                                onLongPress = { _ -> onImageLongPress(0, 1) }
                             )
                         }
                 )
@@ -281,11 +289,11 @@ fun ReviewReadyState(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text("나머지 사진 (${state.otherImages.size}장)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+        Text("나머지 사진 (${state.otherImages.size}장)", style = MaterialTheme.typography.titleMedium, color = otherColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(state.otherImages) { _, image ->
+            itemsIndexed(state.otherImages) { index, image ->
                 ImageWithInfo(
                     image = image,
                     modifier = Modifier
@@ -295,7 +303,7 @@ fun ReviewReadyState(
                         .pointerInput(state.otherImages) {
                             detectTapGestures(
                                 onTap = { _ -> onImageClick(image) },
-                                onLongPress = { _ -> onImageLongPress(state.otherImages, image) }
+                                onLongPress = { _ -> onImageLongPress(1, index) }
                             )
                         }
                 )
@@ -307,11 +315,11 @@ fun ReviewReadyState(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text("실패한 사진 (${state.rejectedImages.size}장)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+            Text("실패한 사진 (${state.rejectedImages.size}장)", style = MaterialTheme.typography.titleMedium, color = rejectedColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(state.rejectedImages) { _, image ->
+                itemsIndexed(state.rejectedImages) { index, image ->
                     ImageWithInfo(
                         image = image,
                         modifier = Modifier
@@ -320,7 +328,7 @@ fun ReviewReadyState(
                             .clip(RoundedCornerShape(8.dp))
                             .pointerInput(state.rejectedImages) {
                                 detectTapGestures(
-                                    onLongPress = { _ -> onImageLongPress(state.rejectedImages, image) }
+                                    onLongPress = { _ -> onImageLongPress(2, index) }
                                 )
                             }
                     )
@@ -376,14 +384,36 @@ fun ImageWithInfo(
 }
 
 @Composable
-fun ZoomedImageDialog(
-    images: List<ImageItemEntity>,
-    initialIndex: Int,
+fun ZoomedImageDialogV2(
+    state: ZoomedImageState,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
-        var currentIndex by remember { mutableStateOf(initialIndex) }
-        val currentImage = images[currentIndex]
+        var currentSection by remember { mutableStateOf(state.initialSection) }
+        var currentIndex by remember { mutableStateOf(state.initialIndex) }
+
+        val currentList = when (currentSection) {
+            0 -> state.bestList
+            1 -> state.otherList
+            2 -> state.rejectedList
+            else -> emptyList()
+        }
+        
+        // Safety check: if list is empty, dismiss or handle
+        if (currentList.isEmpty()) {
+            LaunchedEffect(Unit) { onDismiss() }
+            return@Dialog
+        }
+        
+        val currentImage = currentList.getOrNull(currentIndex) ?: currentList[0]
+
+        // Colors & Labels based on section
+        val (sectionColor, sectionTitle) = when (currentSection) {
+            0 -> Color(0xFF4CAF50) to "베스트"
+            1 -> Color(0xFFFFC107) to "나머지"
+            2 -> Color(0xFFF44336) to "실패"
+            else -> Color.White to ""
+        }
 
         Box(
             modifier = Modifier
@@ -396,36 +426,38 @@ fun ZoomedImageDialog(
         ) {
             var scale by remember { mutableStateOf(1f) }
             var offset by remember { mutableStateOf(Offset.Zero) }
-            val state = rememberTransformableState { zoomChange, offsetChange, _ ->
+            val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
                 scale = (scale * zoomChange).coerceIn(1f, 5f)
                 offset += offsetChange
             }
 
-            LaunchedEffect(currentIndex) {
+            LaunchedEffect(currentImage) {
                 scale = 1f
                 offset = Offset.Zero
             }
 
+            // Image Container with colored border
             Box(contentAlignment = Alignment.Center) {
                 AsyncImage(
                     model = currentImage.uri,
                     contentDescription = "Zoomed Image",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .fillMaxWidth(0.75f)
+                        .fillMaxWidth(0.85f)
                         .fillMaxHeight(0.75f)
                         .shadow(12.dp, RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
-                        .border(2.dp, Color.White, RoundedCornerShape(16.dp))
+                        .border(4.dp, sectionColor, RoundedCornerShape(16.dp)) // Colored Border
                         .graphicsLayer(
                             scaleX = scale,
                             scaleY = scale,
                             translationX = offset.x,
                             translationY = offset.y
                         )
-                        .transformable(state = state)
+                        .transformable(state = transformState)
                 )
 
+                // Info Label
                 val infoText = if (currentImage.status == "STATUS_REJECTED") {
                     when {
                         currentImage.areEyesClosed == true -> "눈 감김"
@@ -443,51 +475,118 @@ fun ZoomedImageDialog(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 16.dp) 
-                        .background(Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(bottom = 20.dp) 
+                        .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = infoText,
-                        color = Color.White,
+                        color = sectionColor, // Match text color with section color
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                // Top Label (Section Name)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 20.dp) 
+                        .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = sectionTitle,
+                        color = sectionColor,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-
-            if (images.size > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.Center),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // Navigation Buttons
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Left/Right
+                val isAtStart = currentIndex == 0
+                val isAtEnd = currentIndex == currentList.size - 1
+                
+                // Left
+                IconButton(
+                    onClick = { 
+                        if (!isAtStart) currentIndex--
+                    },
+                    enabled = !isAtStart,
+                    modifier = Modifier.align(Alignment.CenterStart).padding(8.dp)
                 ) {
-                    val isAtStart = currentIndex == 0
-                    val isAtEnd = currentIndex == images.size - 1
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
+                        contentDescription = "Prev",
+                        tint = if (!isAtStart) Color.White else Color.White.copy(alpha=0.2f),
+                        modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp)
+                    )
+                }
+                
+                // Right
+                IconButton(
+                    onClick = { 
+                        if (!isAtEnd) currentIndex++
+                    },
+                    enabled = !isAtEnd,
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = "Next",
+                        tint = if (!isAtEnd) Color.White else Color.White.copy(alpha=0.2f),
+                        modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp)
+                    )
+                }
+                
+                // Up/Down (Section Jump)
+                // Only show if prev/next section exists and has items
+                val hasPrevSection = currentSection > 0 && when(currentSection-1) {
+                    0 -> state.bestList.isNotEmpty()
+                    1 -> state.otherList.isNotEmpty()
+                    else -> false
+                }
+                val hasNextSection = currentSection < 2 && when(currentSection+1) {
+                    1 -> state.otherList.isNotEmpty()
+                    2 -> state.rejectedList.isNotEmpty()
+                    else -> false
+                }
 
+                // Up (Previous Section)
+                if (hasPrevSection) {
                     IconButton(
-                        onClick = { if (!isAtStart) currentIndex-- },
-                        enabled = !isAtStart
+                        onClick = { 
+                            currentSection--
+                            currentIndex = 0 
+                        },
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
-                            contentDescription = "Previous Image",
-                            tint = if (!isAtStart) Color.White else Color.Black.copy(alpha=0.5f),
-                            modifier = Modifier.size(48.dp).background(Color.White.copy(alpha=0.7f), CircleShape).padding(8.dp)
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Prev Section",
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(4.dp)
                         )
                     }
+                }
+
+                // Down (Next Section)
+                if (hasNextSection) {
                     IconButton(
-                        onClick = { if (!isAtEnd) currentIndex++ },
-                        enabled = !isAtEnd
+                        onClick = { 
+                            currentSection++
+                            currentIndex = 0
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = "Next Image",
-                            tint = if (!isAtEnd) Color.White else Color.Black.copy(alpha=0.5f),
-                            modifier = Modifier.size(48.dp).background(Color.White.copy(alpha=0.7f), CircleShape).padding(8.dp)
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Next Section",
+                            tint = Color.White,
+                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(4.dp)
                         )
                     }
                 }

@@ -51,6 +51,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "PhotoAnalysisWorker"
         const val BLUR_THRESHOLD = 30.0f
+        const val KEY_IS_BACKGROUND_DIET = "is_background_diet"
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
@@ -65,13 +66,16 @@ class PhotoAnalysisWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker TRIGGERED by WorkManager ---")
-        Timber.tag(WORK_NAME).d("Worker started. Analyzing images with PENDING_ANALYSIS status.")
+        val isBackgroundDiet = inputData.getBoolean(KEY_IS_BACKGROUND_DIET, false)
+        Timber.tag(WORK_NAME).d("Worker started. Analyzing images with PENDING_ANALYSIS status. (isBackgroundDiet=$isBackgroundDiet)")
 
         try {
             val imagesToAnalyze = imageDao.getImageItemsListByStatus("PENDING_ANALYSIS")
             if (imagesToAnalyze.isEmpty()) {
                 Timber.tag(WORK_NAME).d("No images pending analysis.")
-                NotificationHelper.dismissAllAppNotifications(appContext)
+                if (!isBackgroundDiet) {
+                    NotificationHelper.dismissAllAppNotifications(appContext)
+                }
                 return@withContext Result.success()
             }
             Timber.tag(WORK_NAME).d("Found ${imagesToAnalyze.size} images to analyze.")
@@ -105,9 +109,11 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap)
                         val smilingProbability = smileDetector.getSmilingProbability(bitmap)
                         val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()
+                        
+                        val targetStatus = if (isBackgroundDiet) "READY_TO_CLEAN" else "ANALYZED"
 
                         val updatedItem = imageItem.copy(
-                            status = "ANALYZED",
+                            status = targetStatus,
                             nimaScore = nimaMeanScore,
                             blurScore = blurScore,
                             areEyesClosed = areEyesClosed,
@@ -135,13 +141,21 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             }
             
             if (clustersForReviewCount > 0) {
-                 Timber.tag(WORK_NAME).d("Analysis complete. Notifying user about $clustersForReviewCount new clusters.")
-                 // Pass both cluster count and total photo count
-                 NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, clustersForReviewCount, imagesToAnalyze.size)
-                 schedulePostAnalysisSync()
+                 Timber.tag(WORK_NAME).d("Analysis complete.")
+                 
+                 if (!isBackgroundDiet) {
+                     // Normal flow: Notify user
+                     NotificationHelper.showReviewNotification(appContext, resourceProvider.notificationIcon, clustersForReviewCount, imagesToAnalyze.size)
+                     schedulePostAnalysisSync()
+                 } else {
+                     // Background Diet flow: Silent, no notification, no sync yet
+                     Timber.d("Background diet analysis complete. ${imagesToAnalyze.size} images are now READY_TO_CLEAN.")
+                 }
             } else {
                 Timber.tag(WORK_NAME).d("Analysis complete, but no new clusters need review.")
-                NotificationHelper.dismissAllAppNotifications(appContext)
+                if (!isBackgroundDiet) {
+                    NotificationHelper.dismissAllAppNotifications(appContext)
+                }
             }
 
             return@withContext Result.success()

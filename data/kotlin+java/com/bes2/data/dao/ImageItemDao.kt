@@ -97,4 +97,7 @@ interface ImageItemDao {
     // New query to update status by URI list
     @Query("UPDATE image_items SET status = :newStatus WHERE uri IN (:uris)")
     suspend fun updateImageStatusesByUris(uris: List<String>, newStatus: String): Int
+
+    @Query("SELECT COUNT(*) FROM image_items WHERE status = :status")
+    suspend fun countImagesByStatus(status: String): Int
 }

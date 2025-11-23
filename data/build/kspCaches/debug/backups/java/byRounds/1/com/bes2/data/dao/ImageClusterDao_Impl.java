@@ -51,13 +51,13 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
       @Override
       @NonNull
       protected String createQuery() {
-        return "INSERT OR REPLACE INTO `image_clusters` (`id`,`best_image_uri`,`second_best_image_uri`,`creation_time`,`review_status`) VALUES (nullif(?, 0),?,?,?,?)";
+        return "INSERT OR REPLACE INTO `image_clusters` (`id`,`best_image_uri`,`second_best_image_uri`,`creation_time`,`review_status`) VALUES (?,?,?,?,?)";
       }
 
       @Override
       protected void bind(@NonNull final SupportSQLiteStatement statement,
           @NonNull final ImageClusterEntity entity) {
-        statement.bindLong(1, entity.getId());
+        statement.bindString(1, entity.getId());
         if (entity.getBestImageUri() == null) {
           statement.bindNull(2);
         } else {
@@ -82,7 +82,7 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
       @Override
       protected void bind(@NonNull final SupportSQLiteStatement statement,
           @NonNull final ImageClusterEntity entity) {
-        statement.bindLong(1, entity.getId());
+        statement.bindString(1, entity.getId());
       }
     };
     this.__updateAdapterOfImageClusterEntity = new EntityDeletionOrUpdateAdapter<ImageClusterEntity>(__db) {
@@ -95,7 +95,7 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
       @Override
       protected void bind(@NonNull final SupportSQLiteStatement statement,
           @NonNull final ImageClusterEntity entity) {
-        statement.bindLong(1, entity.getId());
+        statement.bindString(1, entity.getId());
         if (entity.getBestImageUri() == null) {
           statement.bindNull(2);
         } else {
@@ -108,7 +108,7 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
         }
         statement.bindLong(4, entity.getCreationTime());
         statement.bindString(5, entity.getReviewStatus());
-        statement.bindLong(6, entity.getId());
+        statement.bindString(6, entity.getId());
       }
     };
     this.__preparedStmtOfUpdateImageClusterReviewStatus = new SharedSQLiteStatement(__db) {
@@ -187,7 +187,7 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
   }
 
   @Override
-  public Object updateImageClusterReviewStatus(final long id, final String newStatus,
+  public Object updateImageClusterReviewStatus(final String id, final String newStatus,
       final Continuation<? super Integer> $completion) {
     return CoroutinesRoom.execute(__db, true, new Callable<Integer>() {
       @Override
@@ -197,7 +197,7 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
         int _argIndex = 1;
         _stmt.bindString(_argIndex, newStatus);
         _argIndex = 2;
-        _stmt.bindLong(_argIndex, id);
+        _stmt.bindString(_argIndex, id);
         try {
           __db.beginTransaction();
           try {
@@ -238,11 +238,11 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
   }
 
   @Override
-  public Flow<ImageClusterEntity> getImageClusterById(final long id) {
+  public Flow<ImageClusterEntity> getImageClusterById(final String id) {
     final String _sql = "SELECT * FROM image_clusters WHERE id = ?";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
-    _statement.bindLong(_argIndex, id);
+    _statement.bindString(_argIndex, id);
     return CoroutinesRoom.createFlow(__db, false, new String[] {"image_clusters"}, new Callable<ImageClusterEntity>() {
       @Override
       @Nullable
@@ -256,8 +256,8 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
           final int _cursorIndexOfReviewStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "review_status");
           final ImageClusterEntity _result;
           if (_cursor.moveToFirst()) {
-            final long _tmpId;
-            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final String _tmpId;
+            _tmpId = _cursor.getString(_cursorIndexOfId);
             final String _tmpBestImageUri;
             if (_cursor.isNull(_cursorIndexOfBestImageUri)) {
               _tmpBestImageUri = null;
@@ -309,8 +309,8 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
           final List<ImageClusterEntity> _result = new ArrayList<ImageClusterEntity>(_cursor.getCount());
           while (_cursor.moveToNext()) {
             final ImageClusterEntity _item;
-            final long _tmpId;
-            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final String _tmpId;
+            _tmpId = _cursor.getString(_cursorIndexOfId);
             final String _tmpBestImageUri;
             if (_cursor.isNull(_cursorIndexOfBestImageUri)) {
               _tmpBestImageUri = null;
@@ -363,8 +363,8 @@ public final class ImageClusterDao_Impl implements ImageClusterDao {
           final List<ImageClusterEntity> _result = new ArrayList<ImageClusterEntity>(_cursor.getCount());
           while (_cursor.moveToNext()) {
             final ImageClusterEntity _item;
-            final long _tmpId;
-            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final String _tmpId;
+            _tmpId = _cursor.getString(_cursorIndexOfId);
             final String _tmpBestImageUri;
             if (_cursor.isNull(_cursorIndexOfBestImageUri)) {
               _tmpBestImageUri = null;

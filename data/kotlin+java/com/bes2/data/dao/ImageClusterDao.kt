@@ -22,7 +22,7 @@ interface ImageClusterDao {
     suspend fun deleteImageCluster(imageCluster: ImageClusterEntity)
 
     @Query("SELECT * FROM image_clusters WHERE id = :id")
-    fun getImageClusterById(id: Long): Flow<ImageClusterEntity?>
+    fun getImageClusterById(id: String): Flow<ImageClusterEntity?>
 
     @Query("SELECT * FROM image_clusters ORDER BY creation_time DESC")
     fun getAllImageClusters(): Flow<List<ImageClusterEntity>>
@@ -31,7 +31,7 @@ interface ImageClusterDao {
     fun getImageClustersByReviewStatus(reviewStatus: String): Flow<List<ImageClusterEntity>>
 
     @Query("UPDATE image_clusters SET review_status = :newStatus WHERE id = :id")
-    suspend fun updateImageClusterReviewStatus(id: Long, newStatus: String): Int
+    suspend fun updateImageClusterReviewStatus(id: String, newStatus: String): Int
 
     @Query("DELETE FROM image_clusters")
     suspend fun clearAllImageClusters()
