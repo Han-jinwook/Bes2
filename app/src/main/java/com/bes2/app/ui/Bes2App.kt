@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,7 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -60,10 +64,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.bes2.app.R
+import com.bes2.app.ui.home.HomeUiState
 import com.bes2.app.ui.home.HomeViewModel
+import com.bes2.app.ui.home.ReportStats
 import com.bes2.app.ui.review.ReviewScreen
 import com.bes2.app.ui.screenshot.ScreenshotScreen
 import com.bes2.app.ui.settings.SettingsScreen
+import java.time.LocalDate
 
 /**
  * Main entry point for the app's UI.
@@ -171,6 +178,7 @@ private fun HomeScreen(
     val context = LocalContext.current
     var showGuideDialog by remember { mutableStateOf(false) }
     var showTipsDialog by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
     
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -300,7 +308,7 @@ private fun HomeScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // --- DAILY REPORT CARD (Compact) ---
+            // --- DAILY REPORT CARD (Redesigned) ---
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -308,39 +316,67 @@ private fun HomeScreen(
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .padding(16.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxWidth()
                 ) {
-                    // Left Title
-                    Text(
-                        text = "오늘의\n정리 리포트",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
-                    
-                    // Divider
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(40.dp)
-                            .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-                    )
-                    
-                    // Right Stats
+                    // Header Row
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "오늘의 정리 리포트",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        // Report Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showReportDialog = true }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "📊 상세 리포트",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White // Changed to White for readability on dark bg
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Show Report",
+                                modifier = Modifier.size(14.dp),
+                                tint = Color.White // Changed to White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Stats Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(text = "${uiState.dailyTotal}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                             Text(text = "촬영", style = MaterialTheme.typography.labelSmall)
                         }
+                        
+                        // Vertical Divider
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(32.dp)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                                .align(Alignment.CenterVertically)
+                        )
+
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${uiState.dailyKept}", 
@@ -350,6 +386,16 @@ private fun HomeScreen(
                             )
                             Text(text = "저장", style = MaterialTheme.typography.labelSmall)
                         }
+
+                        // Vertical Divider
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(32.dp)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                                .align(Alignment.CenterVertically)
+                        )
+
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "${uiState.dailyDeleted}", 
@@ -590,42 +636,59 @@ private fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp)) // Reduced spacing from 32.dp
 
             // --- BES2 TIPS SECTION ---
-            Column(
-                horizontalAlignment = Alignment.End, // Align everything to the right
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Bes2 꿀Tip",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                // 1. Guide
-                OutlinedButton(
-                    onClick = { showGuideDialog = true },
-                    modifier = Modifier.fillMaxWidth(0.7f),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                // Left Title (Centered in available space)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(IntrinsicSize.Max),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Bes2 100% 활용법", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = "꿀\nTip",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 32.sp
+                    )
                 }
-                
-                Spacer(modifier = Modifier.height(4.dp))
 
-                // 2. Cloud/PC Tip (Consolidated)
-                OutlinedButton(
-                    onClick = { showTipsDialog = true },
-                    modifier = Modifier.fillMaxWidth(0.7f),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                // Right Buttons (Aligned to right)
+                Column(
+                    modifier = Modifier.width(IntrinsicSize.Max),
+                    horizontalAlignment = Alignment.End
                 ) {
-                    Icon(Icons.Default.TipsAndUpdates, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("꿀 클라우드/PC 정리 꿀팁", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.weight(1f))
+                    // 1. Guide
+                    OutlinedButton(
+                        onClick = { showGuideDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Bes2 100% 활용법", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 2. Cloud/PC Tip
+                    OutlinedButton(
+                        onClick = { showTipsDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.TipsAndUpdates, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("꿀 클라우드/PC 정리 꿀팁", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
                 }
             }
             
@@ -653,6 +716,13 @@ private fun HomeScreen(
                     val promptText = "나는 지금 휴대폰 사진을 PC로 옮겨서 정리하려고 해. 수천 장의 사진을 효율적으로 분류하고, 중복되거나 흔들린 사진을 빠르게 골라내는 기준과 팁을 알려줘. 그리고 날짜별/주제별 폴더 구조 추천해줘."
                     launchAIWithPrompt(promptText)
                 }
+            )
+        }
+
+        if (showReportDialog) {
+            ReportDialog(
+                uiState = uiState,
+                onDismiss = { showReportDialog = false }
             )
         }
     }
@@ -739,5 +809,216 @@ fun TipsSelectionDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun ReportDialog(
+    uiState: HomeUiState,
+    onDismiss: () -> Unit
+) {
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Monthly, 1: Yearly
+    val currentStats = if (selectedTab == 0) uiState.monthlyReport else uiState.yearlyReport
+    val currentDate = LocalDate.now()
+    val periodText = if (selectedTab == 0) "${currentDate.year}년 ${currentDate.monthValue}월" else "${currentDate.year}년"
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "나의 정리 성과",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Tabs
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TabButton(
+                        text = "월간",
+                        isSelected = selectedTab == 0,
+                        onClick = { selectedTab = 0 }
+                    )
+                    TabButton(
+                        text = "연간",
+                        isSelected = selectedTab == 1,
+                        onClick = { selectedTab = 1 }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Period
+                Text(
+                    text = periodText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Stats Chart (Simple Pie Chart)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(160.dp) // Increased size
+                ) {
+                    if (currentStats.total > 0) {
+                        Canvas(modifier = Modifier.size(140.dp)) {
+                            val total = currentStats.total.toFloat()
+                            val keptAngle = (currentStats.kept / total) * 360f
+                            val deletedAngle = (currentStats.deleted / total) * 360f
+                            
+                            drawArc(
+                                color = Color(0xFFFF7043), // Kept Color
+                                startAngle = -90f,
+                                sweepAngle = keptAngle,
+                                useCenter = false,
+                                style = Stroke(width = 36f)
+                            )
+                            drawArc(
+                                color = Color.Gray.copy(alpha = 0.3f), // Deleted Color (Lighter)
+                                startAngle = -90f + keptAngle,
+                                sweepAngle = deletedAngle,
+                                useCenter = false,
+                                style = Stroke(width = 36f)
+                            )
+                        }
+                    } else {
+                        Canvas(modifier = Modifier.size(140.dp)) {
+                            drawArc(
+                                color = Color.LightGray.copy(alpha = 0.2f),
+                                startAngle = 0f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = 36f)
+                            )
+                        }
+                    }
+                    
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "${currentStats.total}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(text = "Total", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Details Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                     DetailItem(label = "남긴 사진", value = "${currentStats.kept}장", color = Color(0xFFFF7043))
+                     DetailItem(label = "정리한 사진", value = "${currentStats.deleted}장", color = Color.DarkGray)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Efficiency Message Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "AI 비서의 기여도",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Text(
+                            text = "${currentStats.efficiency}% 더 효율적!",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Text(
+                            text = "AI가 ${currentStats.deleted}장의 B컷 정리를 도왔어요",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("닫기")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RowScope.TabButton(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .padding(4.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        )
+    }
+}
+
+@Composable
+fun DetailItem(label: String, value: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
     }
 }

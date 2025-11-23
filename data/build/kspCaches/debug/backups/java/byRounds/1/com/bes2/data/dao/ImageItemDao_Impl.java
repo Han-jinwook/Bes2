@@ -1475,6 +1475,43 @@ public final class ImageItemDao_Impl implements ImageItemDao {
   }
 
   @Override
+  public Object getStatsByDateRange(final long startTime, final long endTime,
+      final Continuation<? super List<StatusCount>> $completion) {
+    final String _sql = "SELECT status, COUNT(*) as count FROM image_items WHERE timestamp >= ? AND timestamp <= ? GROUP BY status";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 2);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, startTime);
+    _argIndex = 2;
+    _statement.bindLong(_argIndex, endTime);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<List<StatusCount>>() {
+      @Override
+      @NonNull
+      public List<StatusCount> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfStatus = 0;
+          final int _cursorIndexOfCount = 1;
+          final List<StatusCount> _result = new ArrayList<StatusCount>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final StatusCount _item;
+            final String _tmpStatus;
+            _tmpStatus = _cursor.getString(_cursorIndexOfStatus);
+            final int _tmpCount;
+            _tmpCount = _cursor.getInt(_cursorIndexOfCount);
+            _item = new StatusCount(_tmpStatus,_tmpCount);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
   public Object getImageStatusByUri(final String uri,
       final Continuation<? super String> $completion) {
     final String _sql = "SELECT status FROM image_items WHERE uri = ? LIMIT 1";
