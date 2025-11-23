@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.bes2.background.notification.NotificationHelper
+import com.google.android.gms.ads.MobileAds
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 import javax.inject.Inject
@@ -20,6 +21,9 @@ class Bes2Application : Application(), Configuration.Provider {
         Timber.d("!!! TIMBER IS INITIALIZED !!!")
         
         NotificationHelper.createNotificationChannels(this)
+
+        // Initialize AdMob
+        MobileAds.initialize(this) {}
     }
 
     override val workManagerConfiguration: Configuration

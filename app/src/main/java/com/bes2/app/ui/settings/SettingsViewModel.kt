@@ -32,7 +32,7 @@ data class SettingsUiState(
     val syncTime: LocalTime = LocalTime.of(2, 0),
     val uploadOnWifiOnly: Boolean = false,
     val isSyncing: Boolean = false,
-    val syncOption: String = "DAILY", // DAILY, IMMEDIATE, DELAYED, NONE
+    val syncOption: String = "IMMEDIATE", // Changed default to IMMEDIATE
     val syncDelayHours: Int = 0,
     val syncDelayMinutes: Int = 5
 )

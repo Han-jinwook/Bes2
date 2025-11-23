@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import com.bes2.background.worker.PastPhotoAnalysisWorker
 import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
+import com.bes2.data.repository.DateGroup
 import com.bes2.data.repository.GalleryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -27,10 +28,11 @@ data class HomeUiState(
     val dailyTotal: Int = 0,
     val dailyKept: Int = 0,
     val dailyDeleted: Int = 0,
-    val galleryTotalCount: Int = 0, // Represents unprocessed images count now
+    val galleryTotalCount: Int = 0,
     val screenshotCount: Int = 0,
     val hasPendingReview: Boolean = false,
-    val readyToCleanCount: Int = 0
+    val readyToCleanCount: Int = 0,
+    val memoryEvent: DateGroup? = null // New field for Memory Event
 )
 
 @HiltViewModel
@@ -47,9 +49,22 @@ class HomeViewModel @Inject constructor(
     init {
         loadDailyStats()
         loadGalleryCounts()
+        loadMemoryEvent() // New loader
         checkPendingReviews()
         monitorReadyToClean()
         startBackgroundAnalysis()
+    }
+
+    private fun loadMemoryEvent() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Find events with at least 20 photos
+            val events = galleryRepository.findLargePhotoGroups(20)
+            if (events.isNotEmpty()) {
+                // Pick the most recent one (or randomize)
+                // For now, let's pick the first one (most recent)
+                _uiState.update { it.copy(memoryEvent = events.first()) }
+            }
+        }
     }
 
     private fun startBackgroundAnalysis() {
@@ -85,22 +100,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val totalCount = galleryRepository.getTotalImageCount()
             
-            // Calculate how many are already processed (KEPT or DELETED)
-            // This is an approximation. A better way is to query DB for count of KEPT/DELETED.
-            // However, syncing total MediaStore count with DB status for each item is expensive.
-            // Let's use a simple approach: totalCount - processedCount (from DB stats).
-            
             val processedCount = imageItemDao.countImagesByStatus("KEPT") + 
                                  imageItemDao.countImagesByStatus("DELETED") +
                                  imageItemDao.countImagesByStatus("STATUS_REJECTED")
             
-            // Unprocessed count
             val unprocessedTotal = (totalCount - processedCount).coerceAtLeast(0)
 
-            // Get all screenshots from MediaStore
             val allScreenshots = galleryRepository.getScreenshots()
             
-            // Filter out processed screenshots
             var unprocessedScreenshots = 0
             for (item in allScreenshots) {
                 val status = imageItemDao.getImageStatusByUri(item.uri.toString())

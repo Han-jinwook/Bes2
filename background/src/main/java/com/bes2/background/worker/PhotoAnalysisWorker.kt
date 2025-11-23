@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.os.Build
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
@@ -198,8 +200,50 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     }
 
     private fun loadBitmap(uri: String): Bitmap {
-        return appContext.contentResolver.openInputStream(uri.toUri())?.use {
-            BitmapFactory.decodeStream(it)
-        } ?: throw FileNotFoundException("ContentResolver returned null stream for $uri")
+        val contentResolver = appContext.contentResolver
+        val uriObject = uri.toUri()
+
+        // 1. First, decode the bitmap (may be rotated incorrectly)
+        var inputStream = contentResolver.openInputStream(uriObject)
+            ?: throw FileNotFoundException("ContentResolver returned null stream for $uri")
+        val originalBitmap = BitmapFactory.decodeStream(inputStream)
+        inputStream.close()
+
+        if (originalBitmap == null) {
+            throw FileNotFoundException("Failed to decode bitmap from $uri")
+        }
+
+        // 2. Read EXIF Orientation
+        inputStream = contentResolver.openInputStream(uriObject)
+            ?: throw FileNotFoundException("ContentResolver returned null stream for $uri")
+        val exifInterface = ExifInterface(inputStream)
+        val orientation = exifInterface.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+        inputStream.close()
+
+        // 3. Rotate if necessary
+        return rotateBitmap(originalBitmap, orientation)
+    }
+
+    private fun rotateBitmap(bitmap: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            else -> return bitmap
+        }
+        return try {
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (rotated != bitmap) {
+                bitmap.recycle()
+            }
+            rotated
+        } catch (e: OutOfMemoryError) {
+            Timber.e(e, "OOM while rotating bitmap")
+            bitmap
+        }
     }
 }

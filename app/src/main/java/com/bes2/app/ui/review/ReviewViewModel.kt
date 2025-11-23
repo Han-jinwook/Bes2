@@ -57,20 +57,28 @@ class ReviewViewModel @Inject constructor(
     // Session statistics
     private var sessionClusterCount = 0
     private var sessionSavedImageCount = 0
+    
+    // User's manual selection state. If null, auto-selection is active.
+    private var manualSelectionIds: List<Long>? = null
+
+    // SharedPreference Key and Threshold
+    private val PREF_KEY_REVIEW_COUNT = "pref_review_accumulated_count"
+    // TEST VALUE: 20 (Release: 100)
+    private val AD_THRESHOLD = 20
+
+    // Track current cluster processed count to add to accumulated count later
+    private var currentClusterProcessedCount = 0
 
     init {
         Timber.d("ReviewViewModel init")
-        // Observe both PENDING_REVIEW clusters and READY_TO_CLEAN images
-        // But primarily we want to show clusters.
-        // If a cluster is ready (from regular flow), show it.
-        // If no clusters but READY_TO_CLEAN images exist (from background diet),
-        // we need to "promote" them to PENDING_REVIEW status.
-        
         viewModelScope.launch {
             imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW")
                 .flatMapLatest { clusters ->
                     Timber.d("PENDING_REVIEW clusters found: ${clusters.size}")
                     if (clusters.isEmpty()) {
+                        // Reset manual selection for new session/empty state
+                        manualSelectionIds = null
+                        
                         // Check for background prepared clusters
                         val prepared = promoteBackgroundClusters()
                         if (prepared) {
@@ -81,28 +89,21 @@ class ReviewViewModel @Inject constructor(
                             Timber.w("No clusters and no ready-to-clean images. Finishing.")
                             schedulePostReviewSync()
                             
-                            _navigationEvent.emit(NavigationEvent.NavigateToHome(sessionClusterCount, sessionSavedImageCount))
+                            val showAd = checkAdCondition()
+                            _navigationEvent.emit(NavigationEvent.NavigateToHome(sessionClusterCount, sessionSavedImageCount, showAd))
                             
                             flowOf(ReviewUiState.NoClustersToReview)
                         }
                     } else {
                         val currentCluster = clusters.first()
                         Timber.d("Processing cluster ID: ${currentCluster.id}")
-                        // We need to find images for this cluster.
-                        // Note: Background Diet items are READY_TO_CLEAN, regular items are ANALYZED.
-                        // We should support both.
+                        
                         imageItemDao.getImageItemsByClusterId(currentCluster.id)
                             .filter { it.isNotEmpty() }
                             .map { images ->
-                                // Filter for valid status (ANALYZED or READY_TO_CLEAN)
-                                val validStatus = setOf("ANALYZED", "READY_TO_CLEAN")
+                                val validStatus = setOf("ANALYZED", "READY_TO_CLEAN", "STATUS_REJECTED")
                                 val candidates = images.filter { it.status in validStatus }
-                                val sortedCandidates = candidates.sortedByDescending { calculateFinalScore(it) }
-
-                                val initialBest = sortedCandidates.getOrNull(0)
-                                val initialSecond = sortedCandidates.getOrNull(1)
-
-                                calculateReadyState(currentCluster, images, initialBest, initialSecond)
+                                calculateReadyState(currentCluster, candidates)
                             }
                     }
                 }
@@ -111,33 +112,21 @@ class ReviewViewModel @Inject constructor(
     }
 
     private suspend fun promoteBackgroundClusters(): Boolean {
-        // Find items that are READY_TO_CLEAN but their cluster is not PENDING_REVIEW
-        // Actually, we just need to find ANY cluster that contains READY_TO_CLEAN items 
-        // and set its status to PENDING_REVIEW.
-        
-        // 1. Get a list of cluster IDs from READY_TO_CLEAN items
         val readyItems = imageItemDao.getImageItemsListByStatus("READY_TO_CLEAN")
         if (readyItems.isEmpty()) return false
         
-        // Group by cluster ID
         val clusterIds = readyItems.mapNotNull { it.clusterId }.distinct()
         
         if (clusterIds.isNotEmpty()) {
-            // Take the first one (or all?) -> Let's take one to start the chain
             val targetClusterId = clusterIds.first()
-            
-            // Verify if this cluster exists in DB
             val clusterFlow = imageClusterDao.getImageClusterById(targetClusterId)
             val cluster = clusterFlow.first()
             
             if (cluster != null) {
-                // Update cluster status to PENDING_REVIEW
-                // This will trigger the main flow
                 imageClusterDao.updateImageClusterReviewStatus(targetClusterId, "PENDING_REVIEW")
                 Timber.d("Promoted cluster $targetClusterId to PENDING_REVIEW")
                 return true
             } else {
-                // Orphaned items? Should not happen with ClusteringWorker logic
                 Timber.w("Found READY_TO_CLEAN items but cluster $targetClusterId not found in DB.")
                 return false
             }
@@ -145,32 +134,54 @@ class ReviewViewModel @Inject constructor(
         return false
     }
 
-    // Removed createDietSessionIfNeeded() as it was breaking clustering logic
-
     fun selectImage(imageToSelect: ImageItemEntity) {
         val currentState = _uiState.value
         if (currentState is ReviewUiState.Ready) {
+            if (imageToSelect.status == "STATUS_REJECTED") {
+                restoreRejectedImage(imageToSelect)
+                return
+            }
+            
             if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "READY_TO_CLEAN") return
 
-            val allSelected = listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage)
-            val alreadySelected = allSelected.any { it.id == imageToSelect.id }
+            // Determine current selection
+            val currentSelection = if (manualSelectionIds == null) {
+                // Initialize from current Auto Selection
+                listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage)
+            } else {
+                val allImgs = currentState.allImages
+                manualSelectionIds!!.mapNotNull { id -> allImgs.find { it.id == id } }
+            }
+
+            val alreadySelected = currentSelection.any { it.id == imageToSelect.id }
 
             val newSelection = if (alreadySelected) {
-                allSelected.filterNot { it.id == imageToSelect.id }
+                currentSelection.filterNot { it.id == imageToSelect.id }
             } else {
-                if (allSelected.size < 2) {
-                    allSelected + imageToSelect
+                if (currentSelection.size < 2) {
+                    currentSelection + imageToSelect
                 } else {
-                    val sortedSelection = allSelected.sortedBy { calculateFinalScore(it) }
+                    val sortedSelection = currentSelection.sortedBy { calculateFinalScore(it) }
                     listOf(sortedSelection.last(), imageToSelect)
                 }
             }
 
-            val selectionSortedByScore = newSelection.sortedByDescending { calculateFinalScore(it) }
-            val newBest = selectionSortedByScore.getOrNull(0)
-            val newSecond = selectionSortedByScore.getOrNull(1)
+            // Update state
+            manualSelectionIds = newSelection.map { it.id }
+            _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages)
+        }
+    }
+    
+    private fun restoreRejectedImage(image: ImageItemEntity) {
+        viewModelScope.launch {
+            val currentState = _uiState.value
+            if (currentState is ReviewUiState.Ready && manualSelectionIds == null) {
+                manualSelectionIds = listOfNotNull(currentState.selectedBestImage?.id, currentState.selectedSecondBestImage?.id)
+            }
 
-            _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages, newBest, newSecond)
+            val restoredImage = image.copy(status = "ANALYZED")
+            imageItemDao.updateImageItem(restoredImage)
+            Timber.d("Restored rejected image: ${image.id}")
         }
     }
     
@@ -187,15 +198,19 @@ class ReviewViewModel @Inject constructor(
         return nimaScore + smileBonus
     }
 
-    private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>, newFirst: ImageItemEntity?, newSecond: ImageItemEntity?): ReviewUiState.Ready {
-        val validStatus = setOf("ANALYZED", "READY_TO_CLEAN")
-        val (analyzedImages, rejectedImages) = allImages.partition { it.status in validStatus }
+    private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>): ReviewUiState.Ready {
+        val (analyzedImages, rejectedImages) = allImages.partition { 
+            it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" 
+        }
 
-        val selection = listOfNotNull(newFirst, newSecond)
-            .sortedByDescending { calculateFinalScore(it) }
-      
-        val finalBest = selection.getOrNull(0)
-        val finalSecond = selection.getOrNull(1)
+        val (finalBest, finalSecond) = if (manualSelectionIds == null) {
+            val sortedCandidates = analyzedImages.sortedByDescending { calculateFinalScore(it) }
+            Pair(sortedCandidates.getOrNull(0), sortedCandidates.getOrNull(1))
+        } else {
+            val selectedObjs = manualSelectionIds!!.mapNotNull { id -> analyzedImages.find { it.id == id } }
+            val sortedSelected = selectedObjs.sortedByDescending { calculateFinalScore(it) }
+            Pair(sortedSelected.getOrNull(0), sortedSelected.getOrNull(1))
+        }
         
         val selectedUris = setOfNotNull(finalBest?.uri, finalSecond?.uri)
         
@@ -209,7 +224,8 @@ class ReviewViewModel @Inject constructor(
             otherImages = otherImages,
             rejectedImages = rejectedImages,
             selectedBestImage = finalBest,
-            selectedSecondBestImage = finalSecond
+            selectedSecondBestImage = finalSecond,
+            pendingDeleteRequest = null
         )
     }
 
@@ -250,6 +266,15 @@ class ReviewViewModel @Inject constructor(
             val currentState = _uiState.value
             if (currentState is ReviewUiState.Ready) {
                 updateSessionStats(currentState)
+                
+                // Calculate total processed count for this cluster (kept + deleted)
+                // Kept: Best 1/2
+                // Deleted: Others + Rejected
+                // Actually, total processed = allImages.size (assuming all are dealt with)
+                // Or strictly what is acted upon.
+                // 'deleteOtherImages' deletes 'other' and 'rejected'. 'Best' are kept.
+                // So effectively all images in the cluster are processed.
+                currentClusterProcessedCount = currentState.allImages.size
 
                 val imagesToDelete = currentState.otherImages + currentState.rejectedImages
                 if (imagesToDelete.isNotEmpty()) {
@@ -283,6 +308,12 @@ class ReviewViewModel @Inject constructor(
     }
     
     private suspend fun completeReviewAndTryNext(state: ReviewUiState.Ready) {
+        // Update Accumulated Count
+        updateAccumulatedCount(currentClusterProcessedCount)
+        
+        // Reset manual selection for next cluster
+        manualSelectionIds = null
+        
         val keptImageIds = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage).map { it.id }
         if (keptImageIds.isNotEmpty()) {
             val updatedCount = imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
@@ -291,16 +322,30 @@ class ReviewViewModel @Inject constructor(
 
         imageClusterDao.updateImageClusterReviewStatus(state.cluster.id, "REVIEW_COMPLETED")
         Timber.d("Updated cluster ${state.cluster.id} to REVIEW_COMPLETED")
-        
-        // The loop continues automatically because flatMapLatest will re-run 
-        // when the list of PENDING_REVIEW clusters changes (becomes empty).
-        // promoteBackgroundClusters() will be called again.
     }
     
     private fun updateSessionStats(state: ReviewUiState.Ready) {
         sessionClusterCount++
         val keptCount = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage).size
         sessionSavedImageCount += keptCount
+    }
+    
+    private fun updateAccumulatedCount(count: Int) {
+        val prefs = context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE)
+        val current = prefs.getInt(PREF_KEY_REVIEW_COUNT, 0)
+        prefs.edit().putInt(PREF_KEY_REVIEW_COUNT, current + count).apply()
+    }
+    
+    private fun checkAdCondition(): Boolean {
+        val prefs = context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE)
+        val current = prefs.getInt(PREF_KEY_REVIEW_COUNT, 0)
+        
+        return if (current >= AD_THRESHOLD) {
+            prefs.edit().putInt(PREF_KEY_REVIEW_COUNT, current - AD_THRESHOLD).apply()
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -319,6 +364,6 @@ sealed interface ReviewUiState {
 }
 
 sealed interface NavigationEvent {
-    data class NavigateToHome(val clusterCount: Int, val savedCount: Int) : NavigationEvent
+    data class NavigateToHome(val clusterCount: Int, val savedCount: Int, val showAd: Boolean) : NavigationEvent // Added showAd
     object NavigateToSettings : NavigationEvent
 }

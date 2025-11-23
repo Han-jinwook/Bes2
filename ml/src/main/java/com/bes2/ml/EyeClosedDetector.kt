@@ -38,11 +38,9 @@ class EyeClosedDetector @Inject constructor(
                 
                 Timber.i("[EyeCheck] Face #$index: LeftOpen=$leftProb, RightOpen=$rightProb")
 
-                // Threshold increased to 0.85 (Extremely strict)
-                // If open probability is less than 0.85, we assume eyes are not fully open (closed/blink/sleepy)
-                // This is to ensure we catch even 'sleepy' eyes as rejected.
-                val isLeftEyeClosed = leftProb?.let { it < 0.85 } ?: false
-                val isRightEyeClosed = rightProb?.let { it < 0.85 } ?: false
+                // Threshold set to 0.5 as requested
+                val isLeftEyeClosed = leftProb?.let { it < 0.5 } ?: false
+                val isRightEyeClosed = rightProb?.let { it < 0.5 } ?: false
 
                 if (isLeftEyeClosed || isRightEyeClosed) {
                     Timber.w("[EyeCheck] Eye closed DETECTED! Face #$index. LeftClosed=$isLeftEyeClosed ($leftProb), RightClosed=$isRightEyeClosed ($rightProb)")

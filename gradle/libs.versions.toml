@@ -19,6 +19,7 @@ material = "1.12.0"
 material3 = "1.2.1"
 # [FINAL FIX] Downgrade Google Play Services to a version compatible with Kotlin 1.9.23
 play-services-auth = "21.0.0"
+play-services-ads = "23.1.0"
 timber = "5.0.1"
 work = "2.9.0"
 coil = "2.6.0"
@@ -81,6 +82,7 @@ google-api-client = { group = "com.google.api-client", name = "google-api-client
 google-http-client-gson = { group = "com.google.http-client", name = "google-http-client-gson", version.ref = "google-http-client-gson" }
 google-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "play-services-auth" }
 google-fido = { group = "com.google.android.gms", name = "play-services-fido", version.ref = "play-services-auth" }
+play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "play-services-ads" }
 
 # Coroutines
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

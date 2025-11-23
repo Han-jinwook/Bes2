@@ -9,6 +9,16 @@ import com.bes2.model.ImageItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+data class DateGroup(
+    val date: String, // YYYY-MM-DD
+    val timestamp: Long,
+    val count: Int,
+    val representativeUri: String
+)
 
 @Singleton
 class GalleryRepository @Inject constructor(
@@ -18,71 +28,35 @@ class GalleryRepository @Inject constructor(
     fun getTotalImageCount(): Int {
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Images.Media._ID)
-        
-        // Filter out screenshots based on path or bucket name
         val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ? AND ${MediaStore.Images.Media.DATA} NOT LIKE ?"
         val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
         
         return try {
-            context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
-                cursor.count
-            } ?: 0
-        } catch (e: Exception) {
-            0
-        }
+            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { it.count } ?: 0
+        } catch (e: Exception) { 0 }
     }
 
     fun getScreenshotCount(): Int {
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Images.Media._ID)
-        
-        // Expanded selection for screenshots
         val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ? OR ${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ? OR ${MediaStore.Images.Media.DATA} LIKE ?"
         val selectionArgs = arrayOf("%Screenshot%", "%Capture%", "%Screenshot%")
         
         return try {
-            context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
-                cursor.count
-            } ?: 0
-        } catch (e: Exception) {
-            0
-        }
+            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { it.count } ?: 0
+        } catch (e: Exception) { 0 }
     }
 
     fun getScreenshots(): List<ScreenshotItem> {
         val screenshotList = mutableListOf<ScreenshotItem>()
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DATE_TAKEN,
-            MediaStore.Images.Media.SIZE
-        )
-        
-        // Expanded selection for screenshots
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.SIZE)
         val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ? OR ${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ? OR ${MediaStore.Images.Media.DATA} LIKE ?"
         val selectionArgs = arrayOf("%Screenshot%", "%Capture%", "%Screenshot%")
         val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
 
         try {
-            context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                selectionArgs,
-                sortOrder
-            )?.use { cursor ->
+            context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
@@ -92,45 +66,21 @@ class GalleryRepository @Inject constructor(
                     val dateTaken = cursor.getLong(dateColumn)
                     val size = cursor.getLong(sizeColumn)
                     val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-
                     screenshotList.add(ScreenshotItem(id, contentUri, dateTaken, size))
                 }
             }
-        } catch (e: Exception) {
-            // Handle exception or log error
-        }
+        } catch (e: Exception) {}
         return screenshotList
     }
 
     fun getRecentImages(limit: Int, offset: Int): List<ImageItem> {
         val imageList = mutableListOf<ImageItem>()
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DATA,
-            MediaStore.Images.Media.DATE_TAKEN
-        )
-
-        // Filter out screenshots based on path or bucket name
-        // Fixed selection arguments to match the placeholders
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
         val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ? AND ${MediaStore.Images.Media.DATA} NOT LIKE ?"
         val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
         
-        // Correct sort order query
-        // Used only in fallback path now
-        // val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
-
         try {
-            // We need to apply LIMIT and OFFSET manually or via Bundle if API level allows, 
-            // but for compatibility, standard query with sort order is safer, then manual limit.
-            // However, since we want efficiency, let's stick to the sortOrder string hack 
-            // which works on many devices but isn't standard Android API.
-            // Actually, the previous code injected LIMIT into sortOrder which is valid in SQLite but
-            // ContentResolver might sanitize it.
-            // Let's try a safer approach for pagination if possible, or stick to the hack if it works.
-            // Given the user reported it's stuck, maybe the query failed silently.
-            
-            // Let's try to construct the query strictly.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val bundle = android.os.Bundle().apply {
                     putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
@@ -144,60 +94,84 @@ class GalleryRepository @Inject constructor(
                     val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                     val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
                     val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-
                     while (cursor.moveToNext()) {
                         val id = cursor.getLong(idColumn)
                         val filePath = cursor.getString(dataColumn)
                         val dateTaken = cursor.getLong(dateColumn)
                         val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-
-                        imageList.add(
-                            ImageItem(
-                                id = id,
-                                uri = contentUri.toString(),
-                                filePath = filePath,
-                                timestamp = dateTaken,
-                                status = "NEW"
-                            )
-                        )
+                        imageList.add(ImageItem(id = id, uri = contentUri.toString(), filePath = filePath, timestamp = dateTaken, status = "NEW"))
                     }
                 }
             } else {
-                // Fallback for older versions (using the hack)
                 val sortOrderWithLimit = "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT $limit OFFSET $offset"
-                context.contentResolver.query(
-                    uri,
-                    projection,
-                    selection,
-                    selectionArgs,
-                    sortOrderWithLimit
-                )?.use { cursor ->
+                context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrderWithLimit)?.use { cursor ->
                     val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                     val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
                     val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-
                     while (cursor.moveToNext()) {
                         val id = cursor.getLong(idColumn)
                         val filePath = cursor.getString(dataColumn)
                         val dateTaken = cursor.getLong(dateColumn)
                         val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                        imageList.add(ImageItem(id = id, uri = contentUri.toString(), filePath = filePath, timestamp = dateTaken, status = "NEW"))
+                    }
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        return imageList
+    }
 
-                        imageList.add(
-                            ImageItem(
-                                id = id,
-                                uri = contentUri.toString(),
-                                filePath = filePath,
-                                timestamp = dateTaken,
-                                status = "NEW"
-                            )
-                        )
+    // New function to find "Memories" (large clusters of photos by date)
+    fun findLargePhotoGroups(minCount: Int = 20): List<DateGroup> {
+        val groups = mutableListOf<DateGroup>()
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_TAKEN)
+        val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ? AND ${MediaStore.Images.Media.DATA} NOT LIKE ?"
+        val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
+        val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
+
+        // Note: Grouping in ContentResolver is not straightforward without raw SQL.
+        // We will fetch all (or last N) and group in memory for simplicity and compatibility.
+        // Fetching ID and DATE is very cheap.
+        
+        try {
+            context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                
+                val tempMap = mutableMapOf<String, MutableList<Long>>() // DateString -> List<Timestamp>
+                val idMap = mutableMapOf<String, Long>() // DateString -> Representative ID
+
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+                // Limit scanning to recent 5000 photos to avoid OOM or slow performance
+                var scanCount = 0
+                while (cursor.moveToNext() && scanCount < 5000) {
+                    val id = cursor.getLong(idColumn)
+                    val timestamp = cursor.getLong(dateColumn)
+                    val dateString = dateFormat.format(Date(timestamp))
+                    
+                    tempMap.getOrPut(dateString) { mutableListOf() }.add(timestamp)
+                    if (!idMap.containsKey(dateString)) {
+                        idMap[dateString] = id // Keep the first (most recent) ID as representative
+                    }
+                    scanCount++
+                }
+
+                // Filter and convert
+                tempMap.forEach { (date, timestamps) ->
+                    if (timestamps.size >= minCount) {
+                        val repId = idMap[date] ?: 0L
+                        val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, repId)
+                        groups.add(DateGroup(date, timestamps.maxOrNull() ?: 0L, timestamps.size, contentUri.toString()))
                     }
                 }
             }
         } catch (e: Exception) {
-             // Log the error to understand why it fails
-             e.printStackTrace()
+            e.printStackTrace()
         }
-        return imageList
+        
+        // Sort by date descending
+        return groups.sortedByDescending { it.timestamp }
     }
 }

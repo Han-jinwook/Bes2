@@ -1,5 +1,6 @@
 package com.bes2.app.ui.screenshot
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,7 @@ import com.bes2.data.model.ImageItemEntity
 import com.bes2.data.model.ScreenshotItem
 import com.bes2.data.repository.GalleryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +22,15 @@ data class ScreenshotUiState(
     val screenshots: List<ScreenshotItem> = emptyList(),
     val isLoading: Boolean = true,
     val pendingDeleteUris: List<Uri>? = null,
-    val resultMessage: String? = null // Added for reliable message display
+    val resultMessage: String? = null,
+    val showAd: Boolean = false // Added for ad trigger
 )
 
 @HiltViewModel
 class ScreenshotViewModel @Inject constructor(
     private val galleryRepository: GalleryRepository,
-    private val imageItemDao: ImageItemDao
+    private val imageItemDao: ImageItemDao,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScreenshotUiState())
@@ -34,6 +38,11 @@ class ScreenshotViewModel @Inject constructor(
 
     // Track selection for message
     private var lastSelectedCount = 0
+
+    // SharedPreference Keys and Thresholds
+    private val PREF_KEY_SCREENSHOT_COUNT = "pref_screenshot_accumulated_count"
+    // TEST VALUE: 40 (Release: 200)
+    private val AD_THRESHOLD = 40 
 
     init {
         loadScreenshots()
@@ -96,7 +105,12 @@ class ScreenshotViewModel @Inject constructor(
                 val uris = selectedItems.map { it.uri.toString() }
                 imageItemDao.updateImageStatusesByUris(uris, "KEPT")
 
-                _uiState.update { it.copy(resultMessage = "스크린샷 ${count}장을 보관했습니다.") }
+                updateAccumulatedCount(count) // Keep logic also counts as work done? Or only delete?
+                // Let's count kept items too as it's part of organizing
+                
+                val showAd = checkAdCondition()
+                
+                _uiState.update { it.copy(resultMessage = "스크린샷 ${count}장을 보관했습니다.", showAd = showAd) }
                 loadScreenshots()
             }
         }
@@ -105,12 +119,33 @@ class ScreenshotViewModel @Inject constructor(
     fun onDeleteCompleted(success: Boolean) {
         _uiState.update { it.copy(pendingDeleteUris = null) }
         if (success) {
-            _uiState.update { it.copy(resultMessage = "스크린샷 ${lastSelectedCount}장을 삭제했습니다.") }
+            updateAccumulatedCount(lastSelectedCount)
+            val showAd = checkAdCondition()
+            
+            _uiState.update { it.copy(resultMessage = "스크린샷 ${lastSelectedCount}장을 삭제했습니다.", showAd = showAd) }
             loadScreenshots()
         }
     }
     
     fun messageShown() {
         _uiState.update { it.copy(resultMessage = null) }
+    }
+    
+    private fun updateAccumulatedCount(count: Int) {
+        val prefs = context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE)
+        val current = prefs.getInt(PREF_KEY_SCREENSHOT_COUNT, 0)
+        prefs.edit().putInt(PREF_KEY_SCREENSHOT_COUNT, current + count).apply()
+    }
+    
+    private fun checkAdCondition(): Boolean {
+        val prefs = context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE)
+        val current = prefs.getInt(PREF_KEY_SCREENSHOT_COUNT, 0)
+        
+        return if (current >= AD_THRESHOLD) {
+            prefs.edit().putInt(PREF_KEY_SCREENSHOT_COUNT, current - AD_THRESHOLD).apply()
+            true
+        } else {
+            false
+        }
     }
 }
