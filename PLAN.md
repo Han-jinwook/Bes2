@@ -1,4 +1,4 @@
-Best2 앱 개발 계획 (PLAN.md) - v5.0 (2025-11-23)
+Best2 앱 개발 계획 (PLAN.md) - v5.5 (2025-11-24 19:55)
 
 1. 앱의 핵심 목표
 
@@ -60,7 +60,14 @@ Google Photos 로그인/로그아웃 및 자동 백업.
 
 3. 핵심 규칙 및 정책 (The Guardrails)
 
-사진 처리 파이프라인 (Data Flow Pipeline) - v4.4 고도화
+사진 처리 파이프라인 (Data Flow Pipeline) - v5.5 고도화 (스마트 분류)
+0. 0단계: 콘텐츠 분류 (ImageContentClassifier) - v5.5 신규:
+
+ML Kit을 사용하여 사진을 **'추억(MEMORY)'**과 **'문서(DOCUMENT)'**로 1차 분류한다.
+
+추억(MEMORY): 인물, 음식, 풍경 등 -> 1단계(클러스터링)로 진입하여 정밀 분석.
+
+문서(DOCUMENT): 영수증, 문서, 화이트보드 등 -> 정밀 분석을 건너뛰고 '문서 정리' 대상으로 분류(별도 관리).
 
 1단계: 클러스터링 (ClusteringWorker):
 
@@ -75,6 +82,8 @@ ClusteringWorker는 pHash(임계값 15)를 직접 계산하여 비슷한 사진�
 2단계: 분석 및 상태 부여 (PhotoAnalysisWorker):
 
 PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러스터 단위로 분석을 시작한다.
+
+(v5.5 추가) 자동 충전 로직: 홈 화면 진입 시(ON_RESUME) 부족한 분석 물량을 체크하고 자동으로 채워 넣는다. (목표: 30장 유지)
 
 (v4.4 추가) 백그라운드 모드: isBackgroundDiet 플래그가 true일 경우, 알림 없이 조용히 READY_TO_CLEAN 상태로 저장한다.
 
@@ -104,7 +113,7 @@ PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러�
 
 다음 작업: AS에이전트가 '설정' UI에 해당 지연 시간(예: 1분, 30분, 1시간)을 사용자가 선택할 수 있는 옵션 추가 예정.
 
-품질 게이트 규칙 (실패 사진 기준) - v4.4 강화
+품질 게이트 규칙 (실패 사진 기준) - v5.1 업데이트
 
 출처: PhotoAnalysisWorker.kt (및 EyeClosedDetector.kt)
 
@@ -112,11 +121,15 @@ PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러�
 
 ML Kit이 분석한 "눈을 떴을 확률 (open probability)" 값을 기준으로 합니다.
 
-임계값 (v4.4 상향): 양쪽 눈 중 어느 한쪽이라도 "눈을 떴을 확률"이 0.85 미만(기존 0.5에서 상향)일 경우, '눈 감은 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다. (게슴츠레한 눈까지 확실히 필터링)
+임계값 (v5.1 수정): 양쪽 눈 중 어느 한쪽이라도 "눈을 떴을 확률"이 0.5 미만일 경우, '눈 감은 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다. (EyeClosedDetector.kt의 areEyesClosed 함수 로직, 0.85에서 0.5로 복귀)
 
 흐림 (Blur) 기준:
 
-(현재 임계값 미정의, AS에이전트의 확인 후 plan.md에 추가 필요)
+변수명: BLUR_THRESHOLD
+
+임계값 (v5.1 확정): 30.0f (OpenCV Laplacian 변환 기준)
+
+판정: 계산된 선명도 점수가 30.0 미만인 경우, '흐린 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다.
 
 자동 동기화 규칙 (안정적인 주기적 실행 보장) - v4.7 최적화
 
@@ -210,11 +223,11 @@ UI 최적화: 스크린샷 화면(액션바/배너/투명뷰) 및 홈 화면(로
 
 Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
 
-홈 화면 UI/UX 대개편: 상태 기반 카드 디자인, 버튼 재배치(핵심 액션), Pulse 애니메이션, 꿀Tip 섹션(우측 정렬).
+홈 화면 UI/UX 대개편: 상태 기반 카드 디자인(회색/활성), 버튼 재배치(핵심 액션), Pulse 애니메이션, 꿀Tip 섹션(우측 하단 정렬).
 
-리뷰 사용성 강화: '실패 사진 살리기'(터치 복구), 코치마크, 버튼 하단 이동 및 동적 텍스트.
+리뷰 사용성 강화: '실패 사진 살리기'(터치 시 즉시 복구), 코치마크 강화, 버튼 하단 이동 및 동적 텍스트.
 
-데이터 로직 보완: '남은 정리 대상' 기준 카운트, 기본값 최적화('바로바로'), 이벤트 감지 연동.
+데이터 로직 보완: '남은 정리 대상' 기준 갤러리 카운트, 기본 설정값 최적화('바로바로' 동기화), 이벤트 감지 로직 연동.
 
 백그라운드/클러스터링 고도화: 파이프라인 통합, 정교한 pHash, 눈 감음 필터 강화.
 
@@ -222,9 +235,23 @@ Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
 
 광고 로직 안정화: 전면 광고 후 홈 복귀 버그 수정, 노출 빈도 조절(Frequency Capping) 구현.
 
-6. 다음 목표 (Next Mission) - POST MVP (v4.8)
+리포트 고도화 (v4.7+ 추가): '주월간 상세 리포트 팝업' 구현 (파이 차트, AI 효율성 지표).
 
-(완료된 '갤러리 다이어트', '스크린샷 클리너', '홈 UI', '실패 살리기', '이벤트 감지', '광고 로직' 관련 기능은 Milestone 8, 9로 이동됨)
+홈 UI 디테일 완성: 리포트 카드 세로형 레이아웃, 꿀Tip 섹션 레이아웃 개선.
+
+Milestone 10: Smart Classification & Event Recall (v5.5 신규)
+
+스마트 분류 (ML Kit): 사진을 '추억'과 '문서'로 자동 분류하여 정밀 분석 대상 최적화.
+
+UI 고도화: '문서/스크린샷 정리'로 기능 확장. 갤러리/리뷰에서 문서 자동 제외.
+
+추억 소환 완성: 날짜별 즉석 클러스터링 및 리뷰 연결 (문서 자동 필터링).
+
+UX 디테일: 미니맵 UI 개선(텍스트형 '1/5'), 자동 충전 로직(OnResume) 구현.
+
+6. 다음 목표 (Next Mission) - POST MVP (v5.5)
+
+(완료된 '갤러리 다이어트', '스크린샷/문서 클리너', '홈 UI', '실패 살리기', '추억 소환', '광고 로직' 등 대부분의 핵심 기능 완료됨)
 
 1. 분석 로직 정교화 (AI/ML) - [Priority: High]
 
@@ -232,13 +259,7 @@ Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
 
 사용자 취향 학습 (ML): 승격된 사진 데이터를 기반으로 사용자 맞춤형 판정 기준 보정 (추후 구현).
 
-2. UX 고도화 (Polish)
-
-'클러스터 미니맵' UI 추가: 검토 화면 상단에 전체 클러스터 대비 현재 위치를 시각적(예: ●●●○○)으로 표시.
-
-'주간 리포트 보기': 홈 화면 리포트 카드 하단에 팝업 형태로 지난주 성과를 보여주는 버튼 추가.
-
-3. 수익화 및 커뮤니티 (Monetization) - [Priority: Medium] (v4.9 최신화)
+2. 수익화 및 성장 전략 (Monetization & Growth) - [Priority: Medium]
 
 AdMob 연동 (최적화 중):
 
@@ -252,7 +273,21 @@ AdMob 연동 (최적화 중):
 
 구현: SharedPreference로 누적 카운트 관리, ViewModel에서 조건 체크 후 NavigationEvent(showAd = true)로 트리거.
 
-자사 커뮤니티 홍보 (Rolling Banner): 설정 화면 최하단 롤링 배너 및 Firebase Remote Config 연동.
+자사 커뮤니티 및 신작 홍보 (Cross-Promotion) (v5.1 신규):
+
+롤링 배너 (Passive): 설정 화면 하단에 Firebase Remote Config를 연동하여 자사 앱 광고 및 꿀팁 로테이션 노출.
+
+푸시 알림 (Active): Firebase Cloud Messaging (FCM) 연동. 별도 서버 없이 콘솔에서 '전체 공지'나 '신작 홍보' 알림 발송 기능 구현.
+
+인앱 공지 팝업 (Event): Remote Config를 활용하여 앱 실행 시 중요 공지나 신작 출시 알림을 팝업(Dialog)으로 띄울 수 있는 기능 구현.
+
+구독 모델 (Subscription) - [Hidden Card] (v5.1 신규):
+
+계획: 정식 런칭(v1.1) 이후 도입 검토.
+
+내용: 월 ~1,000원 / 연 ~9,900원. 광고 제거 및 고급 필터 제공.
+
+기술: Google Play Billing Library 연동 (온디바이스 상태 관리).
 
 7. 협업 원칙 (v3.7 - 신규 절차)
 

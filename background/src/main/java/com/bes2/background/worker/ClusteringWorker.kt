@@ -15,6 +15,8 @@ import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
+import com.bes2.ml.ImageCategory
+import com.bes2.ml.ImageContentClassifier
 import com.bes2.ml.ImagePhashGenerator
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -30,7 +32,8 @@ class ClusteringWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val imageDao: ImageItemDao,
     private val imageClusterDao: ImageClusterDao,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    private val imageContentClassifier: ImageContentClassifier
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -41,7 +44,7 @@ class ClusteringWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val isBackgroundDiet = inputData.getBoolean(KEY_IS_BACKGROUND_DIET, false)
-        Timber.tag(WORK_NAME).d("Worker started. Following PLAN.md: Clustering -> Analysis. (isBackgroundDiet=$isBackgroundDiet)")
+        Timber.tag(WORK_NAME).d("Worker started. Following PLAN.md: Classification -> Clustering -> Analysis. (isBackgroundDiet=$isBackgroundDiet)")
         try {
             // 1. Get NEW images
             val allNewImages = imageDao.getImageItemsListByStatus("NEW")
@@ -50,84 +53,103 @@ class ClusteringWorker @AssistedInject constructor(
                 return@withContext Result.success()
             }
             
-            // Filter out screenshots based on path
-            val (validImages, invalidImages) = allNewImages.partition { image ->
+            // Filter out screenshots based on path (Legacy check, but good for optimization)
+            val (pathValidImages, pathInvalidImages) = allNewImages.partition { image ->
                 !image.filePath.contains("Screenshot", ignoreCase = true) &&
                 !image.filePath.contains("Capture", ignoreCase = true)
             }
             
-            // Mark screenshots as IGNORED
-            if (invalidImages.isNotEmpty()) {
-                Timber.tag(WORK_NAME).d("Filtering out ${invalidImages.size} screenshots/captures.")
-                val invalidIds = invalidImages.map { it.id }
+            // Mark path-detected screenshots as IGNORED (Legacy)
+            if (pathInvalidImages.isNotEmpty()) {
+                Timber.tag(WORK_NAME).d("Filtering out ${pathInvalidImages.size} screenshots/captures by path.")
+                val invalidIds = pathInvalidImages.map { it.id }
                 imageDao.updateImageStatusesByIds(invalidIds, "IGNORED")
             }
 
-            if (validImages.isEmpty()) {
-                Timber.tag(WORK_NAME).d("No valid images to process after filtering.")
+            if (pathValidImages.isEmpty()) {
+                Timber.tag(WORK_NAME).d("No valid images to process after path filtering.")
                 return@withContext Result.success()
             }
 
-            Timber.tag(WORK_NAME).d("Found ${validImages.size} valid new images.")
-
-            // 2. Calculate pHash for each new image
-            val imagesWithPhash = validImages.mapNotNull { image ->
+            // 1.5 Smart Classification (MEMORY vs DOCUMENT)
+            val imagesToCluster = mutableListOf<ImageItemEntity>()
+            
+            pathValidImages.forEach { image ->
                 try {
                     val bitmap = loadBitmap(image.uri)
-                    // Call the object method directly
-                    val pHash = ImagePhashGenerator.generatePhash(bitmap)
+                    val category = imageContentClassifier.classify(bitmap)
+                    
+                    if (category == ImageCategory.DOCUMENT) {
+                         // Save as DOCUMENT and skip clustering
+                         Timber.tag(WORK_NAME).d("Image ${image.id} classified as DOCUMENT. Skipping clustering.")
+                         imageDao.updateImageItem(image.copy(
+                             category = "DOCUMENT",
+                             status = "DETECTED_DOCUMENT", // Distinct status
+                             pHash = null // No need for pHash
+                         ))
+                         // Recycle handled inside loadBitmap? No, loadBitmap creates it.
+                         // classify uses it. We should recycle it here.
+                    } else {
+                        // MEMORY: Proceed to pHash calculation
+                        Timber.tag(WORK_NAME).d("Image ${image.id} classified as MEMORY.")
+                        // We need pHash for clustering
+                        val pHash = ImagePhashGenerator.generatePhash(bitmap)
+                        
+                        // Add to list for clustering
+                        imagesToCluster.add(image.copy(
+                            category = "MEMORY",
+                            status = "PRE_CLUSTERING",
+                            pHash = pHash
+                        ))
+                    }
                     bitmap.recycle()
-                    image.copy(pHash = pHash, status = "PRE_CLUSTERING")
                 } catch (e: Exception) {
-                    Timber.tag(WORK_NAME).e(e, "Failed to calculate pHash for ${image.uri}. Marking as error.")
+                    Timber.tag(WORK_NAME).e(e, "Failed to classify/process image ${image.uri}.")
                     imageDao.updateImageItem(image.copy(status = "ERROR_ANALYSIS"))
-                    null
                 }
             }
-            // Use a loop with the existing 'updateImageItem' function
-            imagesWithPhash.forEach { image ->
+
+            // Save MEMORY images with pHash to DB
+            imagesToCluster.forEach { image ->
                 imageDao.updateImageItem(image)
             }
-            Timber.tag(WORK_NAME).d("Calculated pHash for ${imagesWithPhash.size} images.")
 
-            // 3. Cluster images that now have a pHash
-            val imagesToCluster = imageDao.getImageItemsListByStatus("PRE_CLUSTERING")
-            val clusters = clusterImages(imagesToCluster)
-            Timber.tag(WORK_NAME).d("Clustered into ${clusters.size} groups.")
+            if (imagesToCluster.isEmpty()) {
+                 Timber.tag(WORK_NAME).d("No MEMORY images found to cluster.")
+                 // Even if no clusters, we might have processed DOCUMENTS, so we are done.
+                 // But if there are NO clusters, PhotoAnalysisWorker might have nothing to do?
+                 // PhotoAnalysisWorker works on PENDING_ANALYSIS. If we added none, it finishes early.
+                 // So we should still trigger it in case there were previous pending items?
+                 // Or just return success. Let's follow standard flow.
+            }
 
-            // 4. Save clusters and prepare for next step (Analysis)
-            for (cluster in clusters) {
-                val newClusterId = UUID.randomUUID().toString()
-                // For Background Diet, we mark the cluster as PENDING_REVIEW immediately, 
-                // but the items inside will be READY_TO_CLEAN after PhotoAnalysisWorker.
-                // Wait, PhotoAnalysisWorker looks for PENDING_ANALYSIS items.
-                // So cluster status doesn't matter for analysis, but matters for ReviewScreen.
-                // If isBackgroundDiet, we might want to keep cluster hidden?
-                // Let's stick to standard flow: PENDING_REVIEW is set by ClusteringWorker? No, usually creationTime.
-                // Actually, ClusteringWorker sets items to PENDING_ANALYSIS. Cluster status is default (PENDING_REVIEW).
-                // But items are not ANALYZED yet.
-                
-                val newClusterEntity = ImageClusterEntity(
-                    id = newClusterId,
-                    creationTime = System.currentTimeMillis(),
-                    reviewStatus = if (isBackgroundDiet) "BACKGROUND_PREPARING" else "PENDING_REVIEW" // New status to hide from immediate review?
-                    // Actually, if items are READY_TO_CLEAN, ReviewViewModel will find them regardless of cluster status 
-                    // if we query by item status. 
-                    // But ReviewViewModel queries clusters by "PENDING_REVIEW".
-                    // So if we set "PENDING_REVIEW", user sees notification? 
-                    // Notification is sent by PhotoAnalysisWorker.
-                )
-                // Let's keep default status but rely on PhotoAnalysisWorker to suppress notification.
-                // And we can update cluster status to "READY_TO_CLEAN" if we want to be explicit.
-                // For now, let's stick to default and handle notification suppression.
-                
-                imageClusterDao.insertImageCluster(newClusterEntity)
-                val imageUrisInCluster = cluster.images.map { it.uri }
-                
-                // Use existing functions to update clusterId and then status
-                imageDao.updateClusterIdByUris(imageUrisInCluster, newClusterId)
-                val imageIdsInCluster = cluster.images.map { it.id }
-                imageDao.updateImageStatusesByIds(imageIdsInCluster, "PENDING_ANALYSIS")
+            Timber.tag(WORK_NAME).d("Proceeding to cluster ${imagesToCluster.size} MEMORY images.")
+
+            // 3. Cluster images that are marked PRE_CLUSTERING (Just processed ones + potentially older failed ones if we re-query?)
+            // Ideally we only cluster what we just processed or query DB again.
+            // To be safe and robust, let's query DB for PRE_CLUSTERING status.
+            val clusteringCandidates = imageDao.getImageItemsListByStatus("PRE_CLUSTERING")
+            
+            if (clusteringCandidates.isNotEmpty()) {
+                val clusters = clusterImages(clusteringCandidates)
+                Timber.tag(WORK_NAME).d("Clustered into ${clusters.size} groups.")
+
+                // 4. Save clusters and prepare for next step (Analysis)
+                for (cluster in clusters) {
+                    val newClusterId = UUID.randomUUID().toString()
+                    val newClusterEntity = ImageClusterEntity(
+                        id = newClusterId,
+                        creationTime = System.currentTimeMillis(),
+                        reviewStatus = if (isBackgroundDiet) "BACKGROUND_PREPARING" else "PENDING_REVIEW"
+                    )
+                    imageClusterDao.insertImageCluster(newClusterEntity)
+                    
+                    val imageUrisInCluster = cluster.images.map { it.uri }
+                    imageDao.updateClusterIdByUris(imageUrisInCluster, newClusterId)
+                    
+                    val imageIdsInCluster = cluster.images.map { it.id }
+                    imageDao.updateImageStatusesByIds(imageIdsInCluster, "PENDING_ANALYSIS")
+                }
             }
 
             // 5. Trigger the next worker in the pipeline
