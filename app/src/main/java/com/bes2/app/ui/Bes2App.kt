@@ -59,9 +59,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.bes2.app.R
 import com.bes2.app.ui.home.HomeUiState
@@ -145,7 +147,13 @@ private fun AppNavigation(
                 onStartAnalysisAndExit = onStartAnalysisAndExit,
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") },
-                onNavigateToReview = { navController.navigate("review") }
+                onNavigateToReview = { date ->
+                    if (date != null) {
+                        navController.navigate("review?date=$date")
+                    } else {
+                        navController.navigate("review")
+                    }
+                }
             )
         }
         composable("settings") {
@@ -154,8 +162,17 @@ private fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable("review") {
-            ReviewScreen(viewModel = hiltViewModel())
+        composable(
+            route = "review?date={date}",
+            arguments = listOf(navArgument("date") { 
+                type = NavType.StringType
+                nullable = true 
+            })
+        ) {
+            ReviewScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable("screenshot_clean") {
             ScreenshotScreen(
@@ -172,7 +189,7 @@ private fun HomeScreen(
     onStartAnalysisAndExit: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToScreenshotClean: () -> Unit,
-    onNavigateToReview: () -> Unit
+    onNavigateToReview: (String?) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -426,9 +443,10 @@ private fun HomeScreen(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .scale(if (isMemoryActive) pulseScale else 1f) // Pulse if active
                     .clickable(enabled = isMemoryActive) {
                         if (memoryEvent != null) {
-                            Toast.makeText(context, "추억 소환 기능은 준비 중입니다!", Toast.LENGTH_SHORT).show()
+                            onNavigateToReview(memoryEvent.date)
                         }
                     },
                 shape = RoundedCornerShape(12.dp)
@@ -501,7 +519,7 @@ private fun HomeScreen(
                     .scale(if (isReadyToClean) pulseScale else 1f) // Pulse if ready
                     .clickable(enabled = isReadyToClean) {
                         if (isReadyToClean) {
-                            onNavigateToReview()
+                            onNavigateToReview(null)
                         }
                     },
                 shape = RoundedCornerShape(12.dp)
@@ -528,7 +546,7 @@ private fun HomeScreen(
                             )
                             if (isReadyToClean) {
                                 Text(
-                                    text = "${uiState.readyToCleanCount}장 준비됨 (시작하기)",
+                                    text = "전체 ${uiState.galleryTotalCount}장 중 ${uiState.readyToCleanCount}장 준비됨",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = dietFontWeight
                                 )
@@ -585,12 +603,12 @@ private fun HomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "스크린샷 청소하기",
+                                text = "문서/스크린샷 정리",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = screenshotFontWeight
                             )
                             Text(
-                                text = if (hasScreenshots) "${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 스크린샷 0장", // Cleaned text
+                                text = if (hasScreenshots) "정리할 사진 ${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 사진 0장", 
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -613,7 +631,7 @@ private fun HomeScreen(
             OutlinedButton(
                 onClick = {
                     if (hasPending) {
-                        onNavigateToReview()
+                        onNavigateToReview(null)
                     } else {
                         onStartAnalysisAndExit()
                     }

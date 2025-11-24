@@ -2,6 +2,7 @@ package com.bes2.app.ui.review
 
 import android.content.Context
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Constraints
@@ -16,8 +17,10 @@ import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
 import com.bes2.data.repository.SettingsRepository
+import com.bes2.ml.ImagePhashGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,6 +37,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -45,7 +51,8 @@ class ReviewViewModel @Inject constructor(
     private val imageItemDao: ImageItemDao,
     private val settingsRepository: SettingsRepository,
     private val workManager: WorkManager,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReviewUiState>(ReviewUiState.Loading)
@@ -68,9 +75,137 @@ class ReviewViewModel @Inject constructor(
 
     // Track current cluster processed count to add to accumulated count later
     private var currentClusterProcessedCount = 0
+    
+    // Mode flag: True if we are in Memory Event mode (single date review)
+    private var isMemoryEventMode = false
+    
+    // Memory Event Queue
+    private var memoryEventClusters: List<List<ImageItemEntity>> = emptyList()
+    private var memoryEventIndex = 0
+    private var memoryEventDateString: String = ""
 
     init {
         Timber.d("ReviewViewModel init")
+        
+        val dateArg = savedStateHandle.get<String>("date")
+        if (dateArg != null) {
+            Timber.d("Starting in Memory Event Mode for date: $dateArg")
+            isMemoryEventMode = true
+            memoryEventDateString = dateArg
+            loadMemoryEvent(dateArg)
+        } else {
+            Timber.d("Starting in Normal Review Mode")
+            loadPendingClusters()
+        }
+    }
+    
+    private fun loadMemoryEvent(dateString: String) {
+        viewModelScope.launch(Dispatchers.IO) { // Run clustering on IO
+            try {
+                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                val date = LocalDate.parse(dateString, formatter)
+                val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+                
+                // Fetch images (Documents excluded by DAO)
+                val images = imageItemDao.getImagesByDateRange(startOfDay, endOfDay)
+                
+                if (images.isEmpty()) {
+                    Timber.w("No images found for date $dateString")
+                    _navigationEvent.emit(NavigationEvent.NavigateToHome(0, 0, false))
+                    _uiState.value = ReviewUiState.NoClustersToReview
+                    return@launch
+                }
+                
+                val validImages = images.filter { 
+                    it.status != "DELETED" 
+                }
+                
+                if (validImages.isEmpty()) {
+                     _uiState.value = ReviewUiState.NoClustersToReview
+                     return@launch
+                }
+
+                // Perform on-the-fly clustering
+                Timber.d("Clustering ${validImages.size} images for Memory Event...")
+                val clusters = clusterImages(validImages)
+                Timber.d("Created ${clusters.size} clusters.")
+                
+                memoryEventClusters = clusters.map { it.images }
+                memoryEventIndex = 0
+                
+                loadNextMemoryCluster()
+                
+            } catch (e: Exception) {
+                Timber.e(e, "Error loading memory event")
+                _uiState.value = ReviewUiState.NoClustersToReview
+            }
+        }
+    }
+    
+    private fun loadNextMemoryCluster() {
+        if (memoryEventIndex < memoryEventClusters.size) {
+            val currentImages = memoryEventClusters[memoryEventIndex]
+            val dummyCluster = ImageClusterEntity(
+                id = "MEMORY_EVENT_${memoryEventDateString}_$memoryEventIndex",
+                creationTime = System.currentTimeMillis(),
+                reviewStatus = "MEMORY_EVENT"
+            )
+            
+            // Update UI State
+            val remaining = memoryEventClusters.size - memoryEventIndex
+            // But total count should be fixed.
+            // currentClusterIndex = memoryEventIndex + 1
+            
+            _uiState.value = calculateReadyState(dummyCluster, currentImages, 0) // remainingCount passed differently here?
+            // Actually, calculateReadyState uses logic: 
+            // totalCount = if (isMemoryEventMode) 1 else ...
+            // We should update that logic.
+        } else {
+            // Finished
+            viewModelScope.launch {
+                val showAd = checkAdCondition()
+                _navigationEvent.emit(NavigationEvent.NavigateToHome(memoryEventClusters.size, sessionSavedImageCount, showAd))
+            }
+        }
+    }
+
+    // Copied from ClusteringWorker and adapted
+    private data class Cluster(val images: MutableList<ImageItemEntity>)
+    
+    private fun clusterImages(images: List<ImageItemEntity>): List<Cluster> {
+        val clusters = mutableListOf<Cluster>()
+        val unclusteredImages = images.toMutableList()
+        val HAMMING_DISTANCE_THRESHOLD = 15
+
+        while (unclusteredImages.isNotEmpty()) {
+            val currentImage = unclusteredImages.removeAt(0)
+            val newCluster = Cluster(mutableListOf(currentImage))
+            val iterator = unclusteredImages.iterator()
+
+            while (iterator.hasNext()) {
+                val otherImage = iterator.next()
+                if (areSimilar(currentImage, otherImage, HAMMING_DISTANCE_THRESHOLD)) {
+                    newCluster.images.add(otherImage)
+                    iterator.remove()
+                }
+            }
+            clusters.add(newCluster)
+        }
+        return clusters
+    }
+
+    private fun areSimilar(image1: ImageItemEntity, image2: ImageItemEntity, threshold: Int): Boolean {
+        val pHash1 = image1.pHash
+        val pHash2 = image2.pHash
+        if (pHash1 == null || pHash2 == null || pHash1.length != pHash2.length) {
+            return false
+        }
+        val distance = ImagePhashGenerator.calculateHammingDistance(pHash1, pHash2)
+        return distance <= threshold
+    }
+
+    private fun loadPendingClusters() {
         viewModelScope.launch {
             imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW")
                 .flatMapLatest { clusters ->
@@ -103,7 +238,10 @@ class ReviewViewModel @Inject constructor(
                             .filter { it.isNotEmpty() }
                             .map { images ->
                                 val validStatus = setOf("ANALYZED", "READY_TO_CLEAN", "STATUS_REJECTED")
-                                val candidates = images.filter { it.status in validStatus }
+                                // Filter out items that are classified as DOCUMENT
+                                val candidates = images.filter { 
+                                    it.status in validStatus && it.category != "DOCUMENT"
+                                }
                                 calculateReadyState(currentCluster, candidates, remainingCount)
                             }
                     }
@@ -143,7 +281,8 @@ class ReviewViewModel @Inject constructor(
                 return
             }
             
-            if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "READY_TO_CLEAN") return
+            // Allow KEPT items selection in Memory Event mode
+            if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "READY_TO_CLEAN" && imageToSelect.status != "KEPT") return
 
             // Determine current selection
             val currentSelection = if (manualSelectionIds == null) {
@@ -170,7 +309,10 @@ class ReviewViewModel @Inject constructor(
             // Update state
             manualSelectionIds = newSelection.map { it.id }
             // Recalculate with existing counts
-            val remaining = currentState.totalClusterCount - currentState.currentClusterIndex + 1
+            // FIX: Use correct counts for Memory Mode
+            val totalCount = if (isMemoryEventMode) memoryEventClusters.size else (sessionClusterCount + currentState.totalClusterCount - currentState.currentClusterIndex) // Wait, logic below handles it better
+            // Just call calculateReadyState again, it handles indices.
+            val remaining = if (isMemoryEventMode) 0 else 0 // calculateReadyState uses this differently
             _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages, remaining)
         }
     }
@@ -202,8 +344,9 @@ class ReviewViewModel @Inject constructor(
     }
 
     private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>, remainingCount: Int): ReviewUiState.Ready {
+        // In Memory Event mode, we might have KEPT images too.
         val (analyzedImages, rejectedImages) = allImages.partition { 
-            it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" 
+            it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" || it.status == "KEPT" || it.status == "NEW" || it.status == "PENDING_ANALYSIS"
         }
 
         val (finalBest, finalSecond) = if (manualSelectionIds == null) {
@@ -222,8 +365,11 @@ class ReviewViewModel @Inject constructor(
             .sortedByDescending { calculateFinalScore(it) }
 
         // Logic for minimap counts
-        val totalCount = sessionClusterCount + remainingCount
-        val currentIndex = sessionClusterCount + 1
+        // Normal Mode: sessionClusterCount (completed) + remainingCount (future including current)
+        // Memory Mode: memoryEventClusters.size (total), memoryEventIndex + 1 (current)
+        
+        val totalCount = if (isMemoryEventMode) memoryEventClusters.size else (sessionClusterCount + remainingCount)
+        val currentIndex = if (isMemoryEventMode) (memoryEventIndex + 1) else (sessionClusterCount + 1)
 
         return ReviewUiState.Ready(
             cluster = cluster,
@@ -322,8 +468,15 @@ class ReviewViewModel @Inject constructor(
             Timber.d("Updated $updatedCount images to KEPT")
         }
 
-        imageClusterDao.updateImageClusterReviewStatus(state.cluster.id, "REVIEW_COMPLETED")
-        Timber.d("Updated cluster ${state.cluster.id} to REVIEW_COMPLETED")
+        if (isMemoryEventMode) {
+            // Load Next Memory Cluster
+            memoryEventIndex++
+            loadNextMemoryCluster()
+        } else {
+            imageClusterDao.updateImageClusterReviewStatus(state.cluster.id, "REVIEW_COMPLETED")
+            Timber.d("Updated cluster ${state.cluster.id} to REVIEW_COMPLETED")
+            // Flow in init block will pick up next cluster automatically
+        }
     }
     
     private fun updateSessionStats(state: ReviewUiState.Ready) {

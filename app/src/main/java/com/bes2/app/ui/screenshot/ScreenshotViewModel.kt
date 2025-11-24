@@ -1,7 +1,9 @@
 package com.bes2.app.ui.screenshot
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bes2.data.dao.ImageItemDao
@@ -51,14 +53,34 @@ class ScreenshotViewModel @Inject constructor(
     fun loadScreenshots() {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isLoading = true) }
-            val allScreenshots = galleryRepository.getScreenshots()
             
-            val filteredList = allScreenshots.filterNot { item ->
-                val status = imageItemDao.getImageStatusByUri(item.uri.toString())
-                status == "KEPT" || status == "DELETED"
+            // 1. Get System Screenshots
+            val systemScreenshots = galleryRepository.getScreenshots()
+            
+            // 2. Get Analyzed Documents from DB
+            val documentImages = imageItemDao.getImageItemsByCategory("DOCUMENT")
+            
+            // 3. Convert Documents to ScreenshotItems
+            val convertedDocuments = documentImages.map { entity ->
+                ScreenshotItem(
+                    id = entity.id,
+                    uri = Uri.parse(entity.uri),
+                    dateTaken = entity.timestamp,
+                    size = 0 // Size not available in Entity, not critical for UI
+                )
             }
             
-            _uiState.update { it.copy(screenshots = filteredList, isLoading = false) }
+            // 4. Merge and Dedup (by URI)
+            val combinedList = (systemScreenshots + convertedDocuments)
+                .distinctBy { it.uri.toString() }
+            
+            // 5. Filter out already processed items (KEPT or DELETED)
+            val finalFilteredList = combinedList.filterNot { item ->
+                val status = imageItemDao.getImageStatusByUri(item.uri.toString())
+                status == "KEPT" || status == "DELETED"
+            }.sortedByDescending { it.dateTaken }
+            
+            _uiState.update { it.copy(screenshots = finalFilteredList, isLoading = false) }
         }
     }
 
@@ -91,6 +113,15 @@ class ScreenshotViewModel @Inject constructor(
             val selectedItems = _uiState.value.screenshots.filter { it.isSelected }
             val count = selectedItems.size
             if (count > 0) {
+                // Insert or Update logic
+                val uris = selectedItems.map { it.uri.toString() }
+                
+                // For items already in DB (Documents), just update status
+                imageItemDao.updateImageStatusesByUris(uris, "KEPT")
+                
+                // For items NOT in DB (System screenshots that weren't analyzed yet), insert them
+                // Check existence effectively? 
+                // Or just try insert with IGNORE strategy (Dao handles it)
                 val entities = selectedItems.map { item ->
                     ImageItemEntity(
                         uri = item.uri.toString(),
@@ -101,16 +132,13 @@ class ScreenshotViewModel @Inject constructor(
                         areEyesClosed = null, smilingProbability = null, clusterId = null
                     )
                 }
-                imageItemDao.insertImageItems(entities)
-                val uris = selectedItems.map { it.uri.toString() }
-                imageItemDao.updateImageStatusesByUris(uris, "KEPT")
+                imageItemDao.insertImageItems(entities) // Will ignore duplicates due to URI index
 
-                updateAccumulatedCount(count) // Keep logic also counts as work done? Or only delete?
-                // Let's count kept items too as it's part of organizing
+                updateAccumulatedCount(count) 
                 
                 val showAd = checkAdCondition()
                 
-                _uiState.update { it.copy(resultMessage = "스크린샷 ${count}장을 보관했습니다.", showAd = showAd) }
+                _uiState.update { it.copy(resultMessage = "사진 ${count}장을 보관했습니다.", showAd = showAd) }
                 loadScreenshots()
             }
         }
@@ -122,7 +150,7 @@ class ScreenshotViewModel @Inject constructor(
             updateAccumulatedCount(lastSelectedCount)
             val showAd = checkAdCondition()
             
-            _uiState.update { it.copy(resultMessage = "스크린샷 ${lastSelectedCount}장을 삭제했습니다.", showAd = showAd) }
+            _uiState.update { it.copy(resultMessage = "사진 ${lastSelectedCount}장을 삭제했습니다.", showAd = showAd) }
             loadScreenshots()
         }
     }

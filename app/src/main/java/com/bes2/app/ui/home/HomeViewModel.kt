@@ -121,19 +121,26 @@ class HomeViewModel @Inject constructor(
             
             val unprocessedTotal = (totalCount - processedCount).coerceAtLeast(0)
 
+            // --- Update for Document/Screenshot Cleaning Count ---
             val allScreenshots = galleryRepository.getScreenshots()
-            
-            var unprocessedScreenshots = 0
+            var uniqueSystemScreenshots = 0
             for (item in allScreenshots) {
                 val status = imageItemDao.getImageStatusByUri(item.uri.toString())
-                if (status != "KEPT" && status != "DELETED" && status != "STATUS_REJECTED") {
-                    unprocessedScreenshots++
+                // If status is null, it means it's not in our DB yet -> Count it!
+                // If it IS in DB, it's either processed (KEPT/DELETED) or analyzed as DOCUMENT/MEMORY.
+                // If it's DOCUMENT, it will be counted by countUnprocessedImagesByCategory.
+                // If it's MEMORY, we don't want to count it here.
+                if (status == null) {
+                    uniqueSystemScreenshots++
                 }
             }
+            
+            val docCount = imageItemDao.countUnprocessedImagesByCategory("DOCUMENT")
+            val totalCleaningCount = uniqueSystemScreenshots + docCount
 
             _uiState.update { it.copy(
                 galleryTotalCount = unprocessedTotal,
-                screenshotCount = unprocessedScreenshots
+                screenshotCount = totalCleaningCount
             ) }
         }
     }
@@ -211,5 +218,6 @@ class HomeViewModel @Inject constructor(
 
     fun refreshGalleryCount() {
         loadGalleryCounts()
+        startBackgroundAnalysis() // Trigger background analysis to refill the pipeline
     }
 }

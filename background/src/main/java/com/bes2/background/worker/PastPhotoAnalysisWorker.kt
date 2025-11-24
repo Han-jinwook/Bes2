@@ -33,7 +33,12 @@ class PastPhotoAnalysisWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "PastPhotoAnalysisWorker"
         const val STATUS_READY_TO_CLEAN = "READY_TO_CLEAN"
-        private const val TARGET_PREPARED_COUNT = 100
+        
+        // [TEST MODE] Threshold 20 + Buffer 10 = 30
+        // [RELEASE MODE] Threshold 100 + Buffer 20 = 120
+        // Change this back to 120 for Beta/Production
+        private const val TARGET_PREPARED_COUNT = 30 
+        
         private const val BATCH_SIZE = 50
         private const val MAX_SCAN_LIMIT = 5000
     }

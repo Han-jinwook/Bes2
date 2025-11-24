@@ -1,7 +1,7 @@
 [versions]
 activity = "1.9.0"
-android-gradle-plugin = "8.4.1"
-android-library = "8.4.1"
+android-gradle-plugin = "8.13.1"
+android-library = "8.13.1"
 appcompat = "1.7.0"
 compose-bom = "2024.05.00"
 compose-compiler = "1.5.11"
@@ -32,6 +32,7 @@ retrofit = "2.11.0"
 okhttp = "4.12.0"
 google-api-client = "2.4.0"
 google-http-client-gson = "1.43.3"
+mlkit-image-labeling = "17.0.9"
 
 [libraries]
 # Core & System
@@ -83,6 +84,7 @@ google-http-client-gson = { group = "com.google.http-client", name = "google-htt
 google-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "play-services-auth" }
 google-fido = { group = "com.google.android.gms", name = "play-services-fido", version.ref = "play-services-auth" }
 play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "play-services-ads" }
+mlkit-image-labeling = { group = "com.google.mlkit", name = "image-labeling", version.ref = "mlkit-image-labeling" }
 
 # Coroutines
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

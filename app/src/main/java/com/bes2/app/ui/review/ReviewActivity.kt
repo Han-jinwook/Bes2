@@ -16,7 +16,10 @@ class ReviewActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             Bes2Theme {
-                ReviewScreen(viewModel = viewModel)
+                ReviewScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { finish() }
+                )
             }
         }
     }

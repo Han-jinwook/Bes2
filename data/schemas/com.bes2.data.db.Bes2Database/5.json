@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 5,
-    "identityHash": "f542de1ff830fac9e67a15a52ef10e9d",
+    "identityHash": "fcb25ec037139a9f492941fb1de7efad",
     "entities": [
       {
         "tableName": "image_items",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `filePath` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `status` TEXT NOT NULL, `pHash` TEXT, `nimaScore` REAL, `blurScore` REAL, `exposureScore` REAL, `areEyesClosed` INTEGER, `smilingProbability` REAL, `faceEmbedding` BLOB, `cluster_id` TEXT, `isSelectedByUser` INTEGER NOT NULL, `isUploaded` INTEGER NOT NULL, `isBestInCluster` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `filePath` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `status` TEXT NOT NULL, `pHash` TEXT, `nimaScore` REAL, `blurScore` REAL, `exposureScore` REAL, `areEyesClosed` INTEGER, `smilingProbability` REAL, `faceEmbedding` BLOB, `cluster_id` TEXT, `isSelectedByUser` INTEGER NOT NULL, `isUploaded` INTEGER NOT NULL, `isBestInCluster` INTEGER NOT NULL, `category` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -103,6 +103,12 @@
             "columnName": "isBestInCluster",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": false
           }
         ],
         "primaryKey": {
@@ -172,7 +178,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f542de1ff830fac9e67a15a52ef10e9d')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fcb25ec037139a9f492941fb1de7efad')"
     ]
   }
 }

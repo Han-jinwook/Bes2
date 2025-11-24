@@ -104,4 +104,16 @@ interface ImageItemDao {
 
     @Query("SELECT COUNT(*) FROM image_items WHERE status = :status")
     suspend fun countImagesByStatus(status: String): Int
+    
+    // [New] Get images by category (e.g., DOCUMENT)
+    @Query("SELECT * FROM image_items WHERE category = :category ORDER BY timestamp DESC")
+    suspend fun getImageItemsByCategory(category: String): List<ImageItemEntity>
+
+    // [New] Count images by category, excluding processed ones
+    @Query("SELECT COUNT(*) FROM image_items WHERE category = :category AND status != 'KEPT' AND status != 'DELETED'")
+    suspend fun countUnprocessedImagesByCategory(category: String): Int
+
+    // [New] Get images by date range (for Memory Event) - Excluding documents
+    @Query("SELECT * FROM image_items WHERE timestamp >= :startTime AND timestamp <= :endTime AND (category != 'DOCUMENT' OR category IS NULL) ORDER BY timestamp DESC")
+    suspend fun getImagesByDateRange(startTime: Long, endTime: Long): List<ImageItemEntity>
 }

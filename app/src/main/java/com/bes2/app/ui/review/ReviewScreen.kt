@@ -186,14 +186,7 @@ fun ReviewScreen(
                                 color = MaterialTheme.colorScheme.primary
                             ) 
                         },
-                        actions = { // Minimap moved to Actions
-                            ClusterMinimap(
-                                totalCount = state.totalClusterCount,
-                                currentIndex = state.currentClusterIndex,
-                                modifier = Modifier.padding(end = 16.dp)
-                            )
-                        },
-                        // Removed navigationIcon (Back Button)
+                        // Removed Actions (Minimap moved to body)
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         modifier = Modifier.height(48.dp)
                     )
@@ -327,8 +320,13 @@ fun ReviewReadyState(
             .fillMaxSize()
             .padding(horizontal = 16.dp) // Keep horizontal padding
     ) {
-        // ClusterMinimap removed from here (moved to TopBar)
-        Spacer(modifier = Modifier.height(8.dp)) // Small spacer
+        // Minimap moved here
+        ClusterMinimap(
+            totalCount = state.totalClusterCount,
+            currentIndex = state.currentClusterIndex
+        )
+        
+        Spacer(modifier = Modifier.height(4.dp)) // Small spacer
 
         Text("베스트 2장", style = MaterialTheme.typography.titleMedium, color = bestColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
         Row(
@@ -437,44 +435,22 @@ fun ClusterMinimap(
     currentIndex: Int,
     modifier: Modifier = Modifier
 ) {
-    if (totalCount <= 0) return
+    // Always show, even if totalCount is 1
+    val count = if (totalCount <= 0) 1 else totalCount
+    val current = if (currentIndex <= 0) 1 else currentIndex
 
-    // Removed fillMaxWidth to fit in Actions
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        val primaryColor = MaterialTheme.colorScheme.primary
-        val inactiveColor = Color.LightGray
-
-        if (totalCount <= 15) {
-            // Simple Dots - Compact size
-            for (i in 1..totalCount) {
-                val color = if (i < currentIndex) inactiveColor // Completed
-                            else if (i == currentIndex) primaryColor // Current
-                            else inactiveColor.copy(alpha = 0.5f) // Future (lighter)
-                
-                // Smaller size for TopBar
-                val size = if (i == currentIndex) 8.dp else 6.dp 
-                
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .size(size)
-                        .clip(CircleShape)
-                        .background(color)
-                )
-            }
-        } else {
-            // Too many items, show text
-            Text(
-                text = "$currentIndex / $totalCount",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.Gray,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        Text(
+            text = "$current / $count",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

@@ -41,11 +41,11 @@ public final class Bes2Database_Impl extends Bes2Database {
     final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(5) {
       @Override
       public void createAllTables(@NonNull final SupportSQLiteDatabase db) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS `image_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `filePath` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `status` TEXT NOT NULL, `pHash` TEXT, `nimaScore` REAL, `blurScore` REAL, `exposureScore` REAL, `areEyesClosed` INTEGER, `smilingProbability` REAL, `faceEmbedding` BLOB, `cluster_id` TEXT, `isSelectedByUser` INTEGER NOT NULL, `isUploaded` INTEGER NOT NULL, `isBestInCluster` INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS `image_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `filePath` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `status` TEXT NOT NULL, `pHash` TEXT, `nimaScore` REAL, `blurScore` REAL, `exposureScore` REAL, `areEyesClosed` INTEGER, `smilingProbability` REAL, `faceEmbedding` BLOB, `cluster_id` TEXT, `isSelectedByUser` INTEGER NOT NULL, `isUploaded` INTEGER NOT NULL, `isBestInCluster` INTEGER NOT NULL, `category` TEXT)");
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_image_items_uri` ON `image_items` (`uri`)");
         db.execSQL("CREATE TABLE IF NOT EXISTS `image_clusters` (`id` TEXT NOT NULL, `best_image_uri` TEXT, `second_best_image_uri` TEXT, `creation_time` INTEGER NOT NULL, `review_status` TEXT NOT NULL, PRIMARY KEY(`id`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)");
-        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f542de1ff830fac9e67a15a52ef10e9d')");
+        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fcb25ec037139a9f492941fb1de7efad')");
       }
 
       @Override
@@ -95,7 +95,7 @@ public final class Bes2Database_Impl extends Bes2Database {
       @NonNull
       public RoomOpenHelper.ValidationResult onValidateSchema(
           @NonNull final SupportSQLiteDatabase db) {
-        final HashMap<String, TableInfo.Column> _columnsImageItems = new HashMap<String, TableInfo.Column>(16);
+        final HashMap<String, TableInfo.Column> _columnsImageItems = new HashMap<String, TableInfo.Column>(17);
         _columnsImageItems.put("id", new TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("uri", new TableInfo.Column("uri", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("filePath", new TableInfo.Column("filePath", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
@@ -112,6 +112,7 @@ public final class Bes2Database_Impl extends Bes2Database {
         _columnsImageItems.put("isSelectedByUser", new TableInfo.Column("isSelectedByUser", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("isUploaded", new TableInfo.Column("isUploaded", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("isBestInCluster", new TableInfo.Column("isBestInCluster", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsImageItems.put("category", new TableInfo.Column("category", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         final HashSet<TableInfo.ForeignKey> _foreignKeysImageItems = new HashSet<TableInfo.ForeignKey>(0);
         final HashSet<TableInfo.Index> _indicesImageItems = new HashSet<TableInfo.Index>(1);
         _indicesImageItems.add(new TableInfo.Index("index_image_items_uri", true, Arrays.asList("uri"), Arrays.asList("ASC")));
@@ -139,7 +140,7 @@ public final class Bes2Database_Impl extends Bes2Database {
         }
         return new RoomOpenHelper.ValidationResult(true, null);
       }
-    }, "f542de1ff830fac9e67a15a52ef10e9d", "03bcb2396603747cb340e8fa13344839");
+    }, "fcb25ec037139a9f492941fb1de7efad", "0279ade17da2ecc0df0fab38557f4c11");
     final SupportSQLiteOpenHelper.Configuration _sqliteConfig = SupportSQLiteOpenHelper.Configuration.builder(config.context).name(config.name).callback(_openCallback).build();
     final SupportSQLiteOpenHelper _helper = config.sqliteOpenHelperFactory.create(_sqliteConfig);
     return _helper;

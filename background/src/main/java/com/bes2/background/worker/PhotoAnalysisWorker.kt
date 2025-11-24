@@ -23,6 +23,8 @@ import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.repository.SettingsRepository
 import com.bes2.ml.EyeClosedDetector
 import com.bes2.ml.FaceEmbedder
+import com.bes2.ml.ImageCategory
+import com.bes2.ml.ImageContentClassifier
 import com.bes2.ml.ImageQualityAssessor
 import com.bes2.ml.NimaQualityAnalyzer
 import com.bes2.ml.SmileDetector
@@ -46,6 +48,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val eyeClosedDetector: EyeClosedDetector,
     private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
+    private val imageClassifier: ImageContentClassifier,
     private val resourceProvider: ResourceProvider,
     private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
@@ -94,12 +97,41 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     try {
                         bitmap = loadBitmap(imageItem.uri)
 
+                        // 1. Classify Content (Memory vs Document)
+                        val categoryEnum = imageClassifier.classify(bitmap)
+                        val categoryString = categoryEnum.name
+                        
+                        // If it's a DOCUMENT/OBJECT, skip deep analysis (NIMA, Smile, Eye)
+                        if (categoryEnum == ImageCategory.DOCUMENT) {
+                            Timber.d("Image #${imageItem.id} classified as DOCUMENT. Skipping deep analysis.")
+                            val targetStatus = if (isBackgroundDiet) "READY_TO_CLEAN" else "ANALYZED"
+                            val updatedItem = imageItem.copy(
+                                status = targetStatus,
+                                category = categoryString,
+                                // Nullify scores as they are irrelevant for documents
+                                nimaScore = null,
+                                blurScore = null,
+                                areEyesClosed = null,
+                                smilingProbability = null
+                            )
+                            imageDao.updateImageItem(updatedItem)
+                            // We do NOT count this as "analyzed" for the review notification count 
+                            // because it won't appear in the Review Screen.
+                            // But we set hasAnalyzedImages = true to mark cluster processing?
+                            // Actually, if a cluster only has documents, it shouldn't trigger a review notification.
+                            // But we set hasAnalyzedImages = true so that we don't think it failed.
+                            hasAnalyzedImages = true 
+                            continue
+                        }
+
+                        // 2. MEMORY Flow (Deep Analysis)
                         val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                         val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
 
                         if (areEyesClosed || blurScore < BLUR_THRESHOLD) {
                             val rejectedItem = imageItem.copy(
                                 status = "STATUS_REJECTED",
+                                category = categoryString,
                                 blurScore = blurScore,
                                 areEyesClosed = areEyesClosed
                             )
@@ -116,6 +148,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
 
                         val updatedItem = imageItem.copy(
                             status = targetStatus,
+                            category = categoryString,
                             nimaScore = nimaMeanScore,
                             blurScore = blurScore,
                             areEyesClosed = areEyesClosed,

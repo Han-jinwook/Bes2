@@ -29,7 +29,9 @@ data class ImageItemEntity(
     val isSelectedByUser: Boolean = false,
     val isUploaded: Boolean = false,
     // DEFINITIVE FIX: Add the missing property to resolve the build error
-    val isBestInCluster: Boolean = false
+    val isBestInCluster: Boolean = false,
+    // [New] Category for content classification (MEMORY vs DOCUMENT)
+    @ColumnInfo(name = "category") val category: String? = null
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -56,6 +58,7 @@ data class ImageItemEntity(
         if (isSelectedByUser != other.isSelectedByUser) return false
         if (isUploaded != other.isUploaded) return false
         if (isBestInCluster != other.isBestInCluster) return false
+        if (category != other.category) return false
 
         return true
     }
@@ -77,6 +80,7 @@ data class ImageItemEntity(
         result = 31 * result + isSelectedByUser.hashCode()
         result = 31 * result + isUploaded.hashCode()
         result = 31 * result + isBestInCluster.hashCode()
+        result = 31 * result + (category?.hashCode() ?: 0)
         return result
     }
 }
