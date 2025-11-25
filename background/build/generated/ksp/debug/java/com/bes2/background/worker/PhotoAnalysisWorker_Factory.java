@@ -6,6 +6,7 @@ import androidx.work.WorkerParameters;
 import com.bes2.core_common.provider.ResourceProvider;
 import com.bes2.data.dao.ImageItemDao;
 import com.bes2.data.repository.SettingsRepository;
+import com.bes2.ml.BacklightingDetector;
 import com.bes2.ml.EyeClosedDetector;
 import com.bes2.ml.FaceEmbedder;
 import com.bes2.ml.ImageContentClassifier;
@@ -40,6 +41,8 @@ public final class PhotoAnalysisWorker_Factory {
 
   private final Provider<EyeClosedDetector> eyeClosedDetectorProvider;
 
+  private final Provider<BacklightingDetector> backlightingDetectorProvider;
+
   private final Provider<FaceEmbedder> faceEmbedderProvider;
 
   private final Provider<SmileDetector> smileDetectorProvider;
@@ -53,6 +56,7 @@ public final class PhotoAnalysisWorker_Factory {
   public PhotoAnalysisWorker_Factory(Provider<ImageItemDao> imageDaoProvider,
       Provider<WorkManager> workManagerProvider, Provider<NimaQualityAnalyzer> nimaAnalyzerProvider,
       Provider<EyeClosedDetector> eyeClosedDetectorProvider,
+      Provider<BacklightingDetector> backlightingDetectorProvider,
       Provider<FaceEmbedder> faceEmbedderProvider, Provider<SmileDetector> smileDetectorProvider,
       Provider<ImageContentClassifier> imageClassifierProvider,
       Provider<ResourceProvider> resourceProvider,
@@ -61,6 +65,7 @@ public final class PhotoAnalysisWorker_Factory {
     this.workManagerProvider = workManagerProvider;
     this.nimaAnalyzerProvider = nimaAnalyzerProvider;
     this.eyeClosedDetectorProvider = eyeClosedDetectorProvider;
+    this.backlightingDetectorProvider = backlightingDetectorProvider;
     this.faceEmbedderProvider = faceEmbedderProvider;
     this.smileDetectorProvider = smileDetectorProvider;
     this.imageClassifierProvider = imageClassifierProvider;
@@ -69,24 +74,26 @@ public final class PhotoAnalysisWorker_Factory {
   }
 
   public PhotoAnalysisWorker get(Context appContext, WorkerParameters workerParams) {
-    return newInstance(appContext, workerParams, imageDaoProvider.get(), workManagerProvider.get(), nimaAnalyzerProvider.get(), eyeClosedDetectorProvider.get(), faceEmbedderProvider.get(), smileDetectorProvider.get(), imageClassifierProvider.get(), resourceProvider.get(), settingsRepositoryProvider.get());
+    return newInstance(appContext, workerParams, imageDaoProvider.get(), workManagerProvider.get(), nimaAnalyzerProvider.get(), eyeClosedDetectorProvider.get(), backlightingDetectorProvider.get(), faceEmbedderProvider.get(), smileDetectorProvider.get(), imageClassifierProvider.get(), resourceProvider.get(), settingsRepositoryProvider.get());
   }
 
   public static PhotoAnalysisWorker_Factory create(Provider<ImageItemDao> imageDaoProvider,
       Provider<WorkManager> workManagerProvider, Provider<NimaQualityAnalyzer> nimaAnalyzerProvider,
       Provider<EyeClosedDetector> eyeClosedDetectorProvider,
+      Provider<BacklightingDetector> backlightingDetectorProvider,
       Provider<FaceEmbedder> faceEmbedderProvider, Provider<SmileDetector> smileDetectorProvider,
       Provider<ImageContentClassifier> imageClassifierProvider,
       Provider<ResourceProvider> resourceProvider,
       Provider<SettingsRepository> settingsRepositoryProvider) {
-    return new PhotoAnalysisWorker_Factory(imageDaoProvider, workManagerProvider, nimaAnalyzerProvider, eyeClosedDetectorProvider, faceEmbedderProvider, smileDetectorProvider, imageClassifierProvider, resourceProvider, settingsRepositoryProvider);
+    return new PhotoAnalysisWorker_Factory(imageDaoProvider, workManagerProvider, nimaAnalyzerProvider, eyeClosedDetectorProvider, backlightingDetectorProvider, faceEmbedderProvider, smileDetectorProvider, imageClassifierProvider, resourceProvider, settingsRepositoryProvider);
   }
 
   public static PhotoAnalysisWorker newInstance(Context appContext, WorkerParameters workerParams,
       ImageItemDao imageDao, WorkManager workManager, NimaQualityAnalyzer nimaAnalyzer,
-      EyeClosedDetector eyeClosedDetector, FaceEmbedder faceEmbedder, SmileDetector smileDetector,
+      EyeClosedDetector eyeClosedDetector, BacklightingDetector backlightingDetector,
+      FaceEmbedder faceEmbedder, SmileDetector smileDetector,
       ImageContentClassifier imageClassifier, ResourceProvider resourceProvider,
       SettingsRepository settingsRepository) {
-    return new PhotoAnalysisWorker(appContext, workerParams, imageDao, workManager, nimaAnalyzer, eyeClosedDetector, faceEmbedder, smileDetector, imageClassifier, resourceProvider, settingsRepository);
+    return new PhotoAnalysisWorker(appContext, workerParams, imageDao, workManager, nimaAnalyzer, eyeClosedDetector, backlightingDetector, faceEmbedder, smileDetector, imageClassifier, resourceProvider, settingsRepository);
   }
 }

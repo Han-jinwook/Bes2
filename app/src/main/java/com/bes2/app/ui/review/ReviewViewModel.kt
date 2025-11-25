@@ -18,6 +18,7 @@ import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
 import com.bes2.data.repository.SettingsRepository
 import com.bes2.ml.ImagePhashGenerator
+import com.bes2.ml.ImageRestorationProcessor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +53,8 @@ class ReviewViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val workManager: WorkManager,
     @ApplicationContext private val context: Context,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val imageRestorationProcessor: ImageRestorationProcessor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReviewUiState>(ReviewUiState.Loading)
@@ -500,6 +502,63 @@ class ReviewViewModel @Inject constructor(
             true
         } else {
             false
+        }
+    }
+
+    // --- Restoration Logic ---
+    
+    fun restoreImage(image: ImageItemEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Load Bitmap
+                val originalBitmap = loadBitmap(image.uri) ?: return@launch
+                
+                // 2. Run Restoration
+                val restoredBitmap = imageRestorationProcessor.restore(originalBitmap)
+                
+                // 3. Save Restored Bitmap (Overwrite original)
+                val uri = Uri.parse(image.uri)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    restoredBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, out)
+                }
+                
+                // 4. Update DB (Promote to ANALYZED and reset bad scores)
+                val updatedImage = image.copy(
+                    status = "ANALYZED", 
+                    blurScore = 100.0f, // Fake score to indicate it's sharp now
+                    exposureScore = 0.0f // Reset exposure score if it was backlit
+                )
+                imageItemDao.updateImageItem(updatedImage)
+                
+                // 5. Refresh UI
+                val currentState = _uiState.value
+                if (currentState is ReviewUiState.Ready) {
+                    val newRejected = currentState.rejectedImages.filterNot { it.id == image.id }
+                    val newOther = currentState.otherImages + updatedImage
+                    
+                    // Sort Other Images again? Not strictly necessary for UX, just append.
+                    
+                    _uiState.value = currentState.copy(
+                        rejectedImages = newRejected,
+                        otherImages = newOther
+                    )
+                }
+                Timber.d("Image restored and promoted: ${image.id}")
+                
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to restore image")
+            }
+        }
+    }
+
+    private fun loadBitmap(uriString: String): android.graphics.Bitmap? {
+        return try {
+            val uri = Uri.parse(uriString)
+            context.contentResolver.openInputStream(uri)?.use { 
+                android.graphics.BitmapFactory.decodeStream(it)
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 }

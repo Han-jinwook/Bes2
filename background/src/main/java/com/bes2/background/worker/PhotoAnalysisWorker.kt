@@ -21,6 +21,7 @@ import com.bes2.background.notification.NotificationHelper
 import com.bes2.core_common.provider.ResourceProvider
 import com.bes2.data.dao.ImageItemDao
 import com.bes2.data.repository.SettingsRepository
+import com.bes2.ml.BacklightingDetector
 import com.bes2.ml.EyeClosedDetector
 import com.bes2.ml.FaceEmbedder
 import com.bes2.ml.ImageCategory
@@ -46,6 +47,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val workManager: WorkManager,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val eyeClosedDetector: EyeClosedDetector,
+    private val backlightingDetector: BacklightingDetector,
     private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
     private val imageClassifier: ImageContentClassifier,
@@ -115,28 +117,30 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                                 smilingProbability = null
                             )
                             imageDao.updateImageItem(updatedItem)
-                            // We do NOT count this as "analyzed" for the review notification count 
-                            // because it won't appear in the Review Screen.
-                            // But we set hasAnalyzedImages = true to mark cluster processing?
-                            // Actually, if a cluster only has documents, it shouldn't trigger a review notification.
-                            // But we set hasAnalyzedImages = true so that we don't think it failed.
                             hasAnalyzedImages = true 
                             continue
                         }
 
                         // 2. MEMORY Flow (Deep Analysis)
+                        // Quality Gate 1: Eyes Closed
                         val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
+                        
+                        // Quality Gate 2: Blur
                         val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
 
-                        if (areEyesClosed || blurScore < BLUR_THRESHOLD) {
+                        // Quality Gate 3: Backlighting (New)
+                        val isBacklit = backlightingDetector.isBacklit(bitmap)
+
+                        if (areEyesClosed || blurScore < BLUR_THRESHOLD || isBacklit) {
                             val rejectedItem = imageItem.copy(
                                 status = "STATUS_REJECTED",
                                 category = categoryString,
                                 blurScore = blurScore,
-                                areEyesClosed = areEyesClosed
+                                areEyesClosed = areEyesClosed,
+                                exposureScore = if (isBacklit) -1.0f else 0.0f // Mark -1.0f for Backlit
                             )
                             imageDao.updateImageItem(rejectedItem)
-                            Timber.tag(WORK_NAME).d("Image #${imageItem.id} REJECTED: eyesClosed=$areEyesClosed, blurScore=$blurScore")
+                            Timber.tag(WORK_NAME).d("Image #${imageItem.id} REJECTED: eyesClosed=$areEyesClosed, blurScore=$blurScore, backlit=$isBacklit")
                             continue
                         }
                         

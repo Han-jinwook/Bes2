@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
@@ -259,7 +260,11 @@ fun ReviewScreen(
             zoomedImageState?.let {
                 ZoomedImageDialogV2(
                     state = it,
-                    onDismiss = { zoomedImageState = null }
+                    onDismiss = { zoomedImageState = null },
+                    onRestoreClick = { image -> 
+                        viewModel.restoreImage(image)
+                        zoomedImageState = null // Dismiss after restore to refresh view
+                    }
                 )
             }
 
@@ -502,7 +507,8 @@ fun ImageWithInfo(
 @Composable
 fun ZoomedImageDialogV2(
     state: ZoomedImageState,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRestoreClick: ((ImageItemEntity) -> Unit)? = null // Added Callback
 ) {
     Dialog(onDismissRequest = onDismiss) {
         var currentSection by remember { mutableStateOf(state.initialSection) }
@@ -602,19 +608,68 @@ fun ZoomedImageDialogV2(
                     "${displayScore}점"
                 }
 
-                Box(
+                // Praise Text (Section 0)
+                val praiseText = if (currentSection == 0) {
+                    getPraiseText(currentImage)
+                } else null
+                
+                // Restore Button Logic (Section 2, Eyes Open)
+                val showRestoreButton = currentSection == 2 && 
+                                        (currentImage.areEyesClosed == false || currentImage.areEyesClosed == null) && 
+                                        onRestoreClick != null
+
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 20.dp) 
-                        .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .padding(bottom = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = infoText,
-                        color = sectionColor,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    // Praise Text
+                    if (praiseText != null) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFFC107).copy(alpha = 0.9f), shape = RoundedCornerShape(12.dp))
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = praiseText,
+                                color = Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    
+                    // Restore Button
+                    if (showRestoreButton) {
+                        Button(
+                            onClick = { onRestoreClick?.invoke(currentImage) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("사진 심폐소생 (흔들림 복구)")
+                        }
+                    }
+
+                    // Score/Status
+                    Box(
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = infoText,
+                            color = sectionColor,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
                 
                 Box(
@@ -701,6 +756,20 @@ fun ZoomedImageDialogV2(
                 }
             }
         }
+    }
+}
+
+fun getPraiseText(image: ImageItemEntity): String {
+    val smileProb = image.smilingProbability ?: 0f
+    val eyesOpen = image.areEyesClosed == false
+    val nimaScore = (image.nimaScore ?: 0f) * 10
+
+    return when {
+        smileProb >= 0.8f -> "보기만 해도 기분 좋아지는 미소 😊"
+        smileProb >= 0.5f && nimaScore >= 60f -> "자연스러운 표정과 멋진 분위기 ✨"
+        nimaScore >= 70f -> "전문가 뺨치는 완벽한 구도 🎨"
+        eyesOpen -> "생생하게 살아있는 눈빛 👁️"
+        else -> "균형 잡힌 베스트 컷 👍"
     }
 }
 
