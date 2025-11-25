@@ -1,4 +1,4 @@
-Best2 앱 개발 계획 (PLAN.md) - v5.5 (2025-11-24)
+Best2 앱 개발 계획 (PLAN.md) - v6.1 (2025-11-25 18:30)
 
 1. 앱의 핵심 목표
 
@@ -40,17 +40,21 @@ Best2 앱 개발 계획 (PLAN.md) - v5.5 (2025-11-24)
 
 웃음 확률 분석 (ML Kit Vision API 활용).
 
-간편 검토 인터페이스: (부분 구현)
+역광 감지 (Backlighting): 얼굴/배경 밝기 비교 분석.
+
+스마트 분류 (Content Type): 추억(Memory) vs 문서(Document) 자동 분류.
+
+간편 검토 인터페이스: (완료)
 
 분석 완료 후, 검토가 필요한 클러스터가 있으면 사용자에게 알림을 보낸다.
 
 검토 화면 구성:
 
-베스트 1, 2: 점수 기준으로 선정된 베스트 사진 2장을 표시한다.
+베스트 1, 2: 점수 기준으로 선정된 베스트 사진 2장을 표시한다. (칭찬 뱃지 포함)
 
 나머지: 베스트 사진으로 선정되지 않은 정상 사진 목록을 표시한다.
 
-실패: (중요) 분석에 실패한 사진 목록을 표시하며, 각 사진마다 실패 사유(예: 눈감음, 흐림)를 명확히 Text로 표기한다.
+실패: (중요) 분석에 실패한 사진 목록을 표시하며, 각 사진마다 실패 사유(예: 눈감음, 흐림, 역광)를 명확히 Text로 표기하고 '심폐소생(복구)' 버튼을 제공한다.
 
 클라우드 동기화: (부분 구현)
 
@@ -58,10 +62,14 @@ Google Photos 로그인/로그아웃 및 자동 백업.
 
 수동 동기화 실행 기능.
 
+수익화 (Monetization): (완료)
+
+Google AdMob 연동 (띠 배너, 전면 광고).
+
 3. 핵심 규칙 및 정책 (The Guardrails)
 
-사진 처리 파이프라인 (Data Flow Pipeline) - v5.5 고도화 (스마트 분류)
-0. 0단계: 콘텐츠 분류 (ImageContentClassifier) - v5.5 신규:
+사진 처리 파이프라인 (Data Flow Pipeline) - v5.6 고도화
+0. 0단계: 콘텐츠 분류 (ImageContentClassifier):
 
 ML Kit을 사용하여 사진을 **'추억(MEMORY)'**과 **'문서(DOCUMENT)'**로 1차 분류한다.
 
@@ -73,7 +81,7 @@ ML Kit을 사용하여 사진을 **'추억(MEMORY)'**과 **'문서(DOCUMENT)'**�
 
 새로운 사진(NEW 상태)이 감지되면, ClusteringWorker가 가장 먼저 실행된다.
 
-(v3.7 추가) 스크린샷 제외 규칙: 파일 경로에 'Screenshot', 'Capture' 등이 포함된 이미지는 클러스터링 대상에서 제외하고 즉시 IGNORED 상태로 처리한다.
+스크린샷 제외 규칙: 파일 경로에 'Screenshot', 'Capture' 등이 포함된 이미지는 클러스터링 대상에서 제외하고 즉시 IGNORED 상태로 처리한다.
 
 ClusteringWorker는 pHash(임계값 15)를 직접 계산하여 비슷한 사진들을 하나의 '클러스터(묶음)'로 정교하게 묶고(얼굴/사물 구분), 각 사진에 클러스터 ID를 부여한다.
 
@@ -83,21 +91,25 @@ ClusteringWorker는 pHash(임계값 15)를 직접 계산하여 비슷한 사진�
 
 PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러스터 단위로 분석을 시작한다.
 
-(v5.5 추가) 자동 충전 로직: 홈 화면 진입 시(ON_RESUME) 부족한 분석 물량을 체크하고 자동으로 채워 넣는다. (목표: 30장 유지)
+자동 충전 로직: 홈 화면 진입 시(ON_RESUME) 부족한 분석 물량을 체크하고 자동으로 채워 넣는다. (목표: 30장 유지)
 
-(v4.4 추가) 백그라운드 모드: isBackgroundDiet 플래그가 true일 경우, 알림 없이 조용히 READY_TO_CLEAN 상태로 저장한다.
+백그라운드 모드: isBackgroundDiet 플래그가 true일 경우, 알림 없이 조용히 READY_TO_CLEAN 상태로 저장한다.
 
-품질 게이트: 3. 핵심 규칙의 '품질 게이트 규칙'에 따라 '눈 감음'과 '흐림'을 검사하여, 기준 미달인 사진은 즉시 STATUS_REJECTED(실패) 상태로 변경하고 더 이상의 점수 계산을 진행하지 않는다.
+품질 게이트 (v5.6 강화): '눈 감음', '흐림', **'역광'**을 검사하여, 기준 미달인 사진은 즉시 STATUS_REJECTED(실패) 상태로 변경하고 더 이상의 점수 계산을 진행하지 않는다.
 
 점수 계산: 품질 게이트를 통과한 사진에 대해서만 NIMA 점수와 웃음 확률을 계산하고, 상태를 ANALYZED(성공)로 변경한다.
 
 모든 분석이 완료되면 사용자에게 검토 알림을 보낸다.
 
-3단계: 점수화 및 UI 분리 표시 (ReviewViewModel & Screen):
+3단계: 점수화 및 UI 분리 표시 (ReviewViewModel & Screen) - v5.6 고도화:
 
 (기존과 동일) 검토 화면에서는 ANALYZED 상태의 사진들만을 대상으로 최종 점수를 계산하여 '베스트'와 '나머지'를 선정한다.
 
 (기존과 동일) STATUS_REJECTED 사진은 '실패' 섹션으로 분리하여 사용자에게 보여준다.
+
+베스트 칭찬: 베스트 사진 하단에 선정 사유(예: "보기 좋은 미소 😊")를 뱃지로 표시.
+
+심폐소생: 실패 사진 확대 시 [흔들림 복구] 버튼 제공 -> 성공 시 '나머지'로 승격.
 
 (기존 '구현 노트'는 v2.5의 본문과 내용이 일치하므로 삭제)
 
@@ -113,15 +125,15 @@ PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러�
 
 다음 작업: AS에이전트가 '설정' UI에 해당 지연 시간(예: 1분, 30분, 1시간)을 사용자가 선택할 수 있는 옵션 추가 예정.
 
-품질 게이트 규칙 (실패 사진 기준) - v5.1 업데이트
+품질 게이트 규칙 (실패 사진 기준) - v5.8 수정 (복귀)
 
-출처: PhotoAnalysisWorker.kt (및 EyeClosedDetector.kt)
+출처: PhotoAnalysisWorker.kt, EyeClosedDetector.kt, BacklightingDetector.kt
 
 눈 감음 (Eyes Closed) 기준:
 
 ML Kit이 분석한 "눈을 떴을 확률 (open probability)" 값을 기준으로 합니다.
 
-임계값 (v5.1 수정): 양쪽 눈 중 어느 한쪽이라도 "눈을 떴을 확률"이 0.5 미만일 경우, '눈 감은 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다. (EyeClosedDetector.kt의 areEyesClosed 함수 로직, 0.85에서 0.5로 복귀)
+임계값 (v5.8 수정): 양쪽 눈 중 어느 한쪽이라도 "눈을 떴을 확률"이 0.5 미만(기존 0.85에서 복귀)일 경우, '눈 감은 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다. (EyeClosedDetector.kt의 areEyesClosed 함수 로직)
 
 흐림 (Blur) 기준:
 
@@ -130,6 +142,14 @@ ML Kit이 분석한 "눈을 떴을 확률 (open probability)" 값을 기준으�
 임계값 (v5.1 확정): 30.0f (OpenCV Laplacian 변환 기준)
 
 판정: 계산된 선명도 점수가 30.0 미만인 경우, '흐린 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다.
+
+역광 (Backlighting) 기준 (v5.6 완료):
+
+출처: BacklightingDetector.kt (ML Kit Face Detection 활용)
+
+로직: 얼굴 영역의 평균 밝기(FaceLuminosity)와 배경 영역의 평균 밝기(BackgroundLuminosity)를 비교.
+
+판정: 얼굴이 배경보다 현저히 어둡거나 절대 밝기가 낮을 경우 STATUS_REJECTED(실패) 처리.
 
 자동 동기화 규칙 (안정적인 주기적 실행 보장) - v4.7 최적화
 
@@ -195,17 +215,7 @@ ImageClusterEntity: 이미지 묶음 정보 (id, creationTime, reviewStatus)
 
 Milestone 1 ~ 3: (기존과 동일)
 
-Milestone 4: MVP 안정화 및 설정 고도화
-
-수동 동기화 개선, 홈 리디렉션 로직, 'Wi-Fi 연결 시에만 동기화' 옵션 구현.
-
-Milestone 5: 클라우드 스토리지 확장 (v3.7 수정)
-
-'Naver MyBox' 연동 보류 (Google Photos 단일 체제 최적화).
-
-Milestone 6: 통합 동기화 옵션 개선
-
-통합 동기화 옵션 UI/UX 및 자동 동기화 결과 알림 구현.
+Milestone 4 ~ 6: (기존과 동일)
 
 Milestone 7: Refactoring & UI/UX Overhaul (v4.2 수정)
 
@@ -223,7 +233,7 @@ UI 최적화: 스크린샷 화면(액션바/배너/투명뷰) 및 홈 화면(로
 
 Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
 
-홈 화면 UI/UX 대개편: 상태 기반 카드 디자인(회색/활성), 버튼 재배치(핵심 액션), Pulse 애니메이션, 꿀Tip 섹션(우측 하단 정렬).
+홈 화면 아키텍처 구축: 카드형 메인 액션, 꿀Tip 섹션(우측 하단 정렬) 적용.
 
 리뷰 사용성 강화: '실패 사진 살리기'(터치 시 즉시 복구), 코치마크 강화, 버튼 하단 이동 및 동적 텍스트.
 
@@ -239,55 +249,37 @@ Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
 
 홈 UI 디테일 완성: 리포트 카드 세로형 레이아웃, 꿀Tip 섹션 레이아웃 개선.
 
-Milestone 10: Smart Classification & Event Recall (v5.5 신규)
+Milestone 10: Smart Classification & Logic Upgrade (v5.9 완료)
 
 스마트 분류 (ML Kit): 사진을 '추억'과 '문서'로 자동 분류하여 정밀 분석 대상 최적화.
 
-UI 고도화: '문서/스크린샷 정리'로 기능 확장. 갤러리/리뷰에서 문서 자동 제외.
+역광 감지 (BacklightingDetector): 얼굴/배경 밝기 비교 로직 구현 및 품질 게이트 적용 완료.
 
-추억 소환 완성: 날짜별 즉석 클러스터링 및 리뷰 연결 (문서 자동 필터링).
+이미지 심폐소생 (Image Restoration): TFLite 기반 ESRGAN 모델 연동, 실패 사진 복구(승격) 기능 구현 완료.
 
-UX 디테일: 미니맵 UI 개선(텍스트형 '1/5'), 자동 충전 로직(OnResume) 구현.
+감성 품질 강화 (Explainable AI): 베스트 선정 사유 칭찬 뱃지("보기 좋은 미소 😊") 구현 완료.
 
-6. 다음 목표 (Next Mission) - POST MVP (v5.5)
+수익화 구현 (AdMob): 띠 배너 및 전면 광고(가치 기반 노출) 연동 완료.
 
-(완료된 '갤러리 다이어트', '스크린샷/문서 클리너', '홈 UI', '실패 살리기', '추억 소환', '광고 로직' 등 대부분의 핵심 기능 완료됨)
+UI 고도화: 추억 소환, 미니맵 UI 개선, 자동 충전 로직 구현, 스마트 워터폴 적용.
 
-1. 분석 로직 정교화 (AI/ML) - [Priority: High]
+6. 다음 목표 (Next Mission) - POST MVP (v6.2)
 
-'품질 게이트' 항목 추가: '역광'(Backlighting), '흔들림' 등 객관적 실패 기준을 추가 감지하여 STATUS_REJECTED로 분류하는 로직 강화.
+(핵심 기능 및 수익화(AdMob), 미니맵 UI는 Milestone 10으로 이동 완료)
 
-사용자 취향 학습 (ML): 승격된 사진 데이터를 기반으로 사용자 맞춤형 판정 기준 보정 (추후 구현).
+1. 커뮤니티 및 운영 (Growth) - [Priority: High]
 
-2. 수익화 및 성장 전략 (Monetization & Growth) - [Priority: Medium]
+자사 커뮤니티 홍보 (Rolling Banner):
 
-AdMob 연동 (최적화 중):
+상태: 미구현 (다음 작업 대상)
 
-띠 배너: 작업 화면(ReviewScreen, ScreenshotScreen) 하단에 상시 노출.
+계획: 설정 화면 최하단에 Firebase Remote Config를 연동하여 롤링 배너 구현. 베타 테스터 피드백 수집 및 자사 카페 유입 유도.
 
-전면 광고 (가치 기반 노출):
+2. 미래 기술 (Future Tech) - [Long Term]
 
-갤러리 정리(Review): 100장 (테스트: 20장) 처리 시 1회 노출.
+사용자 취향 학습 (ML): 승격된(심폐소생된) 사진 데이터를 기반으로 사용자 맞춤형 판정 기준 보정 (추후 구현).
 
-스크린샷 정리(Screenshot): 200장 (테스트: 40장) 처리 시 1회 노출.
-
-구현: SharedPreference로 누적 카운트 관리, ViewModel에서 조건 체크 후 NavigationEvent(showAd = true)로 트리거.
-
-자사 커뮤니티 및 신작 홍보 (Cross-Promotion) (v5.1 신규):
-
-롤링 배너 (Passive): 설정 화면 하단에 Firebase Remote Config를 연동하여 자사 앱 광고 및 꿀팁 로테이션 노출.
-
-푸시 알림 (Active): Firebase Cloud Messaging (FCM) 연동. 별도 서버 없이 콘솔에서 '전체 공지'나 '신작 홍보' 알림 발송 기능 구현.
-
-인앱 공지 팝업 (Event): Remote Config를 활용하여 앱 실행 시 중요 공지나 신작 출시 알림을 팝업(Dialog)으로 띄울 수 있는 기능 구현.
-
-구독 모델 (Subscription) - [Hidden Card] (v5.1 신규):
-
-계획: 정식 런칭(v1.1) 이후 도입 검토.
-
-내용: 월 ~1,000원 / 연 ~9,900원. 광고 제거 및 고급 필터 제공.
-
-기술: Google Play Billing Library 연동 (온디바이스 상태 관리).
+구독 모델 (Subscription): 정식 런칭 이후 도입 검토.
 
 7. 협업 원칙 (v3.7 - 신규 절차)
 

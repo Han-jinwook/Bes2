@@ -77,8 +77,8 @@ fun ReviewScreen(
     // Load Interstitial Ad
     LaunchedEffect(Unit) {
         val adRequest = AdRequest.Builder().build()
-        // Test ID for Interstitial
-        InterstitialAd.load(context, "ca-app-pub-3940256099942544/1033173712", adRequest, object : InterstitialAdLoadCallback() {
+        // REAL ID: Bes2_Interstitial_Complete
+        InterstitialAd.load(context, "ca-app-pub-6474204369625572/5414444948", adRequest, object : InterstitialAdLoadCallback() {
             override fun onAdFailedToLoad(adError: LoadAdError) {
                 Timber.e("Interstitial ad failed to load: ${adError.message}")
                 interstitialAd = null
@@ -229,8 +229,8 @@ fun ReviewScreen(
                                 factory = { ctx ->
                                     AdView(ctx).apply {
                                         setAdSize(AdSize.BANNER)
-                                        // Test Banner ID
-                                        adUnitId = "ca-app-pub-3940256099942544/6300978111"
+                                        // REAL ID: Bes2_Banner_Review
+                                        adUnitId = "ca-app-pub-6474204369625572/7317843117"
                                         loadAd(AdRequest.Builder().build())
                                     }
                                 }
