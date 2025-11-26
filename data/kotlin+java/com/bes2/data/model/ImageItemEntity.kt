@@ -24,6 +24,9 @@ data class ImageItemEntity(
     val smilingProbability: Float?,
     @ColumnInfo(typeAffinity = ColumnInfo.BLOB)
     val faceEmbedding: ByteArray? = null,
+    // [Phase 1: Semantic Search] Image Embedding Vector for Natural Language Search
+    @ColumnInfo(typeAffinity = ColumnInfo.BLOB)
+    val embedding: ByteArray? = null,
     // DEFINITIVE FIX: Change type to String? to match the worker's UUID logic
     @ColumnInfo(name = "cluster_id") var clusterId: String? = null,
     val isSelectedByUser: Boolean = false,
@@ -54,6 +57,12 @@ data class ImageItemEntity(
             if (other.faceEmbedding == null) return false
             if (!faceEmbedding.contentEquals(other.faceEmbedding)) return false
         } else if (other.faceEmbedding != null) return false
+        // Check semantic embedding equality
+        if (embedding != null) {
+            if (other.embedding == null) return false
+            if (!embedding.contentEquals(other.embedding)) return false
+        } else if (other.embedding != null) return false
+
         if (clusterId != other.clusterId) return false
         if (isSelectedByUser != other.isSelectedByUser) return false
         if (isUploaded != other.isUploaded) return false
@@ -76,6 +85,7 @@ data class ImageItemEntity(
         result = 31 * result + (areEyesClosed?.hashCode() ?: 0)
         result = 31 * result + (smilingProbability?.hashCode() ?: 0)
         result = 31 * result + (faceEmbedding?.contentHashCode() ?: 0)
+        result = 31 * result + (embedding?.contentHashCode() ?: 0) // Add embedding hash
         result = 31 * result + (clusterId?.hashCode() ?: 0)
         result = 31 * result + isSelectedByUser.hashCode()
         result = 31 * result + isUploaded.hashCode()

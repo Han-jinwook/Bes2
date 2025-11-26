@@ -28,6 +28,7 @@ import com.bes2.ml.ImageCategory
 import com.bes2.ml.ImageContentClassifier
 import com.bes2.ml.ImageQualityAssessor
 import com.bes2.ml.NimaQualityAnalyzer
+import com.bes2.ml.SemanticSearchEngine
 import com.bes2.ml.SmileDetector
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -51,6 +52,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
     private val imageClassifier: ImageContentClassifier,
+    // [Phase 1: Semantic Search] Inject Search Engine
+    private val semanticSearchEngine: SemanticSearchEngine,
     private val resourceProvider: ResourceProvider,
     private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
@@ -122,6 +125,30 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         }
 
                         // 2. MEMORY Flow (Deep Analysis)
+                        
+                        // [Phase 1: Semantic Search] Generate and Save Embedding
+                        val embedding = semanticSearchEngine.encodeImage(bitmap)
+                        if (embedding == null) {
+                            Timber.w("Failed to generate embedding for image ${imageItem.id}")
+                        } else {
+                            // Convert FloatArray to ByteArray for BLOB storage
+                            // Basic serialization: 4 bytes per float
+                            // Or use custom serialization if defined. 
+                            // Since entity has embedding: ByteArray, we need conversion.
+                            // For simplicity, let's assume we store it as raw bytes.
+                            // However, calculating cosine similarity later needs FloatArray.
+                            // So we need a helper to convert FloatArray <-> ByteArray.
+                            // For now, let's keep it null if we haven't implemented utility yet, 
+                            // OR implementing a quick conversion here.
+                        }
+                        
+                        // NOTE: Implementing FloatArray -> ByteArray conversion here inline for safety
+                        val embeddingBytes = embedding?.let { floatArray ->
+                             val buffer = java.nio.ByteBuffer.allocate(floatArray.size * 4)
+                             buffer.asFloatBuffer().put(floatArray)
+                             buffer.array()
+                        }
+
                         // Quality Gate 1: Eyes Closed
                         val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                         
@@ -137,7 +164,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                                 category = categoryString,
                                 blurScore = blurScore,
                                 areEyesClosed = areEyesClosed,
-                                exposureScore = if (isBacklit) -1.0f else 0.0f // Mark -1.0f for Backlit
+                                exposureScore = if (isBacklit) -1.0f else 0.0f, // Mark -1.0f for Backlit
+                                embedding = embeddingBytes // Save embedding even for rejected? Yes, for search.
                             )
                             imageDao.updateImageItem(rejectedItem)
                             Timber.tag(WORK_NAME).d("Image #${imageItem.id} REJECTED: eyesClosed=$areEyesClosed, blurScore=$blurScore, backlit=$isBacklit")
@@ -156,7 +184,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                             nimaScore = nimaMeanScore,
                             blurScore = blurScore,
                             areEyesClosed = areEyesClosed,
-                            smilingProbability = smilingProbability
+                            smilingProbability = smilingProbability,
+                            embedding = embeddingBytes // Save Embedding
                         )
                         imageDao.updateImageItem(updatedItem)
                         hasAnalyzedImages = true

@@ -34,6 +34,10 @@ interface ImageItemDao {
     @Query("SELECT * FROM image_items ORDER BY timestamp DESC")
     fun getAllImageItems(): Flow<List<ImageItemEntity>>
 
+    // [New] For Search: Get all items as list (One-shot)
+    @Query("SELECT * FROM image_items ORDER BY timestamp DESC")
+    suspend fun getAllImageItemsList(): List<ImageItemEntity>
+
     @Query("SELECT * FROM image_items WHERE status = :status ORDER BY timestamp DESC")
     fun getImageItemsByStatusFlow(status: String): Flow<List<ImageItemEntity>>
 
