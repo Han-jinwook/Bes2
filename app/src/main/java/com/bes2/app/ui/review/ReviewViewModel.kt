@@ -155,14 +155,8 @@ class ReviewViewModel @Inject constructor(
             )
             
             // Update UI State
-            val remaining = memoryEventClusters.size - memoryEventIndex
-            // But total count should be fixed.
-            // currentClusterIndex = memoryEventIndex + 1
-            
-            _uiState.value = calculateReadyState(dummyCluster, currentImages, 0) // remainingCount passed differently here?
-            // Actually, calculateReadyState uses logic: 
-            // totalCount = if (isMemoryEventMode) 1 else ...
-            // We should update that logic.
+            // The remaining calculation is not critical for Memory Event logic flow here, so passing 0
+            _uiState.value = calculateReadyState(dummyCluster, currentImages, 0)
         } else {
             // Finished
             viewModelScope.launch {
@@ -310,12 +304,11 @@ class ReviewViewModel @Inject constructor(
 
             // Update state
             manualSelectionIds = newSelection.map { it.id }
+            
             // Recalculate with existing counts
-            // FIX: Use correct counts for Memory Mode
-            val totalCount = if (isMemoryEventMode) memoryEventClusters.size else (sessionClusterCount + currentState.totalClusterCount - currentState.currentClusterIndex) // Wait, logic below handles it better
-            // Just call calculateReadyState again, it handles indices.
-            val remaining = if (isMemoryEventMode) 0 else 0 // calculateReadyState uses this differently
-            _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages, remaining)
+            // Memory Mode total count is fixed, Normal mode depends on Flow.
+            // Using 0 for remainingCount here because calculateReadyState handles total/index logic using session vars.
+            _uiState.value = calculateReadyState(currentState.cluster, currentState.allImages, 0)
         }
     }
     
@@ -332,17 +325,30 @@ class ReviewViewModel @Inject constructor(
         }
     }
     
+    // [Phase 2: MUSIQ] Upgraded Ranking Formula
     private fun calculateFinalScore(image: ImageItemEntity): Float {
+        // 1. NIMA (Technical Quality): 0~10 -> 0~100 scale
         val nimaScore = (image.nimaScore ?: 0f) * 10
-        val smileProb = image.smilingProbability ?: 0f
         
+        // 2. MUSIQ (Aesthetic Quality): 0~10 -> 0~100 scale
+        // Default to NIMA score if MUSIQ is missing (Fallback)
+        val musiqRaw = image.musiqScore ?: (nimaScore / 10f)
+        val musiqScore = musiqRaw * 10
+        
+        // 3. Smile Bonus (Emotional Quality)
+        val smileProb = image.smilingProbability ?: 0f
         val smileBonus = if (smileProb < 0.1f) {
-            -10f 
+            -10f // Penalty for frowning
         } else {
-            smileProb * 30f
+            smileProb * 30f // Bonus for smiling
         }
         
-        return nimaScore + smileBonus
+        // Final Weighted Sum
+        // Weight: NIMA(30%) + MUSIQ(50%) + Smile(Bonus)
+        // Why MUSIQ higher? We want "Good Composition" > "Sharpness"
+        val weightedScore = (nimaScore * 0.3f) + (musiqScore * 0.5f) + smileBonus
+        
+        return weightedScore
     }
 
     private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>, remainingCount: Int): ReviewUiState.Ready {
@@ -367,9 +373,6 @@ class ReviewViewModel @Inject constructor(
             .sortedByDescending { calculateFinalScore(it) }
 
         // Logic for minimap counts
-        // Normal Mode: sessionClusterCount (completed) + remainingCount (future including current)
-        // Memory Mode: memoryEventClusters.size (total), memoryEventIndex + 1 (current)
-        
         val totalCount = if (isMemoryEventMode) memoryEventClusters.size else (sessionClusterCount + remainingCount)
         val currentIndex = if (isMemoryEventMode) (memoryEventIndex + 1) else (sessionClusterCount + 1)
 

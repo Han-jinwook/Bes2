@@ -27,6 +27,7 @@ import com.bes2.ml.FaceEmbedder
 import com.bes2.ml.ImageCategory
 import com.bes2.ml.ImageContentClassifier
 import com.bes2.ml.ImageQualityAssessor
+import com.bes2.ml.MusiqQualityAnalyzer
 import com.bes2.ml.NimaQualityAnalyzer
 import com.bes2.ml.SemanticSearchEngine
 import com.bes2.ml.SmileDetector
@@ -47,6 +48,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val imageDao: ImageItemDao,
     private val workManager: WorkManager,
     private val nimaAnalyzer: NimaQualityAnalyzer,
+    // [Phase 2: MUSIQ] Inject MUSIQ Analyzer
+    private val musiqAnalyzer: MusiqQualityAnalyzer,
     private val eyeClosedDetector: EyeClosedDetector,
     private val backlightingDetector: BacklightingDetector,
     private val faceEmbedder: FaceEmbedder,
@@ -115,6 +118,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                                 category = categoryString,
                                 // Nullify scores as they are irrelevant for documents
                                 nimaScore = null,
+                                musiqScore = null, // Clear MUSIQ score
                                 blurScore = null,
                                 areEyesClosed = null,
                                 smilingProbability = null
@@ -128,19 +132,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         
                         // [Phase 1: Semantic Search] Generate and Save Embedding
                         val embedding = semanticSearchEngine.encodeImage(bitmap)
-                        if (embedding == null) {
-                            Timber.w("Failed to generate embedding for image ${imageItem.id}")
-                        } else {
-                            // Convert FloatArray to ByteArray for BLOB storage
-                            // Basic serialization: 4 bytes per float
-                            // Or use custom serialization if defined. 
-                            // Since entity has embedding: ByteArray, we need conversion.
-                            // For simplicity, let's assume we store it as raw bytes.
-                            // However, calculating cosine similarity later needs FloatArray.
-                            // So we need a helper to convert FloatArray <-> ByteArray.
-                            // For now, let's keep it null if we haven't implemented utility yet, 
-                            // OR implementing a quick conversion here.
-                        }
                         
                         // NOTE: Implementing FloatArray -> ByteArray conversion here inline for safety
                         val embeddingBytes = embedding?.let { floatArray ->
@@ -172,9 +163,16 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                             continue
                         }
                         
+                        // Aesthetic Analysis
+                        // 1. NIMA (Legacy, fast, good for technical quality)
                         val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap)
-                        val smilingProbability = smileDetector.getSmilingProbability(bitmap)
                         val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()
+                        
+                        // 2. [Phase 2: MUSIQ] (New, accurate, good for composition)
+                        // Run MUSIQ to get aesthetic score
+                        val musiqScore = musiqAnalyzer.analyze(bitmap)
+                        
+                        val smilingProbability = smileDetector.getSmilingProbability(bitmap)
                         
                         val targetStatus = if (isBackgroundDiet) "READY_TO_CLEAN" else "ANALYZED"
 
@@ -182,6 +180,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                             status = targetStatus,
                             category = categoryString,
                             nimaScore = nimaMeanScore,
+                            musiqScore = musiqScore, // Save MUSIQ Score
                             blurScore = blurScore,
                             areEyesClosed = areEyesClosed,
                             smilingProbability = smilingProbability,

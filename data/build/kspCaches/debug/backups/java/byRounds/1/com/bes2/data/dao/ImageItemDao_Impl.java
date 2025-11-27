@@ -57,7 +57,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
       @Override
       @NonNull
       protected String createQuery() {
-        return "INSERT OR IGNORE INTO `image_items` (`id`,`uri`,`filePath`,`timestamp`,`status`,`pHash`,`nimaScore`,`blurScore`,`exposureScore`,`areEyesClosed`,`smilingProbability`,`faceEmbedding`,`cluster_id`,`isSelectedByUser`,`isUploaded`,`isBestInCluster`,`category`) VALUES (nullif(?, 0),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        return "INSERT OR IGNORE INTO `image_items` (`id`,`uri`,`filePath`,`timestamp`,`status`,`pHash`,`nimaScore`,`musiqScore`,`blurScore`,`exposureScore`,`areEyesClosed`,`smilingProbability`,`faceEmbedding`,`embedding`,`cluster_id`,`isSelectedByUser`,`isUploaded`,`isBestInCluster`,`category`) VALUES (nullif(?, 0),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
       }
 
       @Override
@@ -78,47 +78,57 @@ public final class ImageItemDao_Impl implements ImageItemDao {
         } else {
           statement.bindDouble(7, entity.getNimaScore());
         }
-        if (entity.getBlurScore() == null) {
+        if (entity.getMusiqScore() == null) {
           statement.bindNull(8);
         } else {
-          statement.bindDouble(8, entity.getBlurScore());
+          statement.bindDouble(8, entity.getMusiqScore());
         }
-        if (entity.getExposureScore() == null) {
+        if (entity.getBlurScore() == null) {
           statement.bindNull(9);
         } else {
-          statement.bindDouble(9, entity.getExposureScore());
+          statement.bindDouble(9, entity.getBlurScore());
+        }
+        if (entity.getExposureScore() == null) {
+          statement.bindNull(10);
+        } else {
+          statement.bindDouble(10, entity.getExposureScore());
         }
         final Integer _tmp = entity.getAreEyesClosed() == null ? null : (entity.getAreEyesClosed() ? 1 : 0);
         if (_tmp == null) {
-          statement.bindNull(10);
-        } else {
-          statement.bindLong(10, _tmp);
-        }
-        if (entity.getSmilingProbability() == null) {
           statement.bindNull(11);
         } else {
-          statement.bindDouble(11, entity.getSmilingProbability());
+          statement.bindLong(11, _tmp);
         }
-        if (entity.getFaceEmbedding() == null) {
+        if (entity.getSmilingProbability() == null) {
           statement.bindNull(12);
         } else {
-          statement.bindBlob(12, entity.getFaceEmbedding());
+          statement.bindDouble(12, entity.getSmilingProbability());
         }
-        if (entity.getClusterId() == null) {
+        if (entity.getFaceEmbedding() == null) {
           statement.bindNull(13);
         } else {
-          statement.bindString(13, entity.getClusterId());
+          statement.bindBlob(13, entity.getFaceEmbedding());
+        }
+        if (entity.getEmbedding() == null) {
+          statement.bindNull(14);
+        } else {
+          statement.bindBlob(14, entity.getEmbedding());
+        }
+        if (entity.getClusterId() == null) {
+          statement.bindNull(15);
+        } else {
+          statement.bindString(15, entity.getClusterId());
         }
         final int _tmp_1 = entity.isSelectedByUser() ? 1 : 0;
-        statement.bindLong(14, _tmp_1);
+        statement.bindLong(16, _tmp_1);
         final int _tmp_2 = entity.isUploaded() ? 1 : 0;
-        statement.bindLong(15, _tmp_2);
+        statement.bindLong(17, _tmp_2);
         final int _tmp_3 = entity.isBestInCluster() ? 1 : 0;
-        statement.bindLong(16, _tmp_3);
+        statement.bindLong(18, _tmp_3);
         if (entity.getCategory() == null) {
-          statement.bindNull(17);
+          statement.bindNull(19);
         } else {
-          statement.bindString(17, entity.getCategory());
+          statement.bindString(19, entity.getCategory());
         }
       }
     };
@@ -139,7 +149,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
       @Override
       @NonNull
       protected String createQuery() {
-        return "UPDATE OR ABORT `image_items` SET `id` = ?,`uri` = ?,`filePath` = ?,`timestamp` = ?,`status` = ?,`pHash` = ?,`nimaScore` = ?,`blurScore` = ?,`exposureScore` = ?,`areEyesClosed` = ?,`smilingProbability` = ?,`faceEmbedding` = ?,`cluster_id` = ?,`isSelectedByUser` = ?,`isUploaded` = ?,`isBestInCluster` = ?,`category` = ? WHERE `id` = ?";
+        return "UPDATE OR ABORT `image_items` SET `id` = ?,`uri` = ?,`filePath` = ?,`timestamp` = ?,`status` = ?,`pHash` = ?,`nimaScore` = ?,`musiqScore` = ?,`blurScore` = ?,`exposureScore` = ?,`areEyesClosed` = ?,`smilingProbability` = ?,`faceEmbedding` = ?,`embedding` = ?,`cluster_id` = ?,`isSelectedByUser` = ?,`isUploaded` = ?,`isBestInCluster` = ?,`category` = ? WHERE `id` = ?";
       }
 
       @Override
@@ -160,49 +170,59 @@ public final class ImageItemDao_Impl implements ImageItemDao {
         } else {
           statement.bindDouble(7, entity.getNimaScore());
         }
-        if (entity.getBlurScore() == null) {
+        if (entity.getMusiqScore() == null) {
           statement.bindNull(8);
         } else {
-          statement.bindDouble(8, entity.getBlurScore());
+          statement.bindDouble(8, entity.getMusiqScore());
         }
-        if (entity.getExposureScore() == null) {
+        if (entity.getBlurScore() == null) {
           statement.bindNull(9);
         } else {
-          statement.bindDouble(9, entity.getExposureScore());
+          statement.bindDouble(9, entity.getBlurScore());
+        }
+        if (entity.getExposureScore() == null) {
+          statement.bindNull(10);
+        } else {
+          statement.bindDouble(10, entity.getExposureScore());
         }
         final Integer _tmp = entity.getAreEyesClosed() == null ? null : (entity.getAreEyesClosed() ? 1 : 0);
         if (_tmp == null) {
-          statement.bindNull(10);
-        } else {
-          statement.bindLong(10, _tmp);
-        }
-        if (entity.getSmilingProbability() == null) {
           statement.bindNull(11);
         } else {
-          statement.bindDouble(11, entity.getSmilingProbability());
+          statement.bindLong(11, _tmp);
         }
-        if (entity.getFaceEmbedding() == null) {
+        if (entity.getSmilingProbability() == null) {
           statement.bindNull(12);
         } else {
-          statement.bindBlob(12, entity.getFaceEmbedding());
+          statement.bindDouble(12, entity.getSmilingProbability());
         }
-        if (entity.getClusterId() == null) {
+        if (entity.getFaceEmbedding() == null) {
           statement.bindNull(13);
         } else {
-          statement.bindString(13, entity.getClusterId());
+          statement.bindBlob(13, entity.getFaceEmbedding());
+        }
+        if (entity.getEmbedding() == null) {
+          statement.bindNull(14);
+        } else {
+          statement.bindBlob(14, entity.getEmbedding());
+        }
+        if (entity.getClusterId() == null) {
+          statement.bindNull(15);
+        } else {
+          statement.bindString(15, entity.getClusterId());
         }
         final int _tmp_1 = entity.isSelectedByUser() ? 1 : 0;
-        statement.bindLong(14, _tmp_1);
+        statement.bindLong(16, _tmp_1);
         final int _tmp_2 = entity.isUploaded() ? 1 : 0;
-        statement.bindLong(15, _tmp_2);
+        statement.bindLong(17, _tmp_2);
         final int _tmp_3 = entity.isBestInCluster() ? 1 : 0;
-        statement.bindLong(16, _tmp_3);
+        statement.bindLong(18, _tmp_3);
         if (entity.getCategory() == null) {
-          statement.bindNull(17);
+          statement.bindNull(19);
         } else {
-          statement.bindString(17, entity.getCategory());
+          statement.bindString(19, entity.getCategory());
         }
-        statement.bindLong(18, entity.getId());
+        statement.bindLong(20, entity.getId());
       }
     };
     this.__preparedStmtOfUpdateImageItemStatus = new SharedSQLiteStatement(__db) {
@@ -369,11 +389,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -402,6 +424,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -435,6 +463,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -459,7 +493,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _result = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _result = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
           } else {
             _result = null;
           }
@@ -506,11 +540,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -541,6 +577,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
             }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
+            }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
               _tmpBlurScore = null;
@@ -573,6 +615,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -597,7 +645,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item_1 = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item_1 = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item_1);
           }
           return _result;
@@ -626,11 +674,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -660,6 +710,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -693,6 +749,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -717,7 +779,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -731,6 +793,142 @@ public final class ImageItemDao_Impl implements ImageItemDao {
         _statement.release();
       }
     });
+  }
+
+  @Override
+  public Object getAllImageItemsList(
+      final Continuation<? super List<ImageItemEntity>> $completion) {
+    final String _sql = "SELECT * FROM image_items ORDER BY timestamp DESC";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 0);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<List<ImageItemEntity>>() {
+      @Override
+      @NonNull
+      public List<ImageItemEntity> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = CursorUtil.getColumnIndexOrThrow(_cursor, "id");
+          final int _cursorIndexOfUri = CursorUtil.getColumnIndexOrThrow(_cursor, "uri");
+          final int _cursorIndexOfFilePath = CursorUtil.getColumnIndexOrThrow(_cursor, "filePath");
+          final int _cursorIndexOfTimestamp = CursorUtil.getColumnIndexOrThrow(_cursor, "timestamp");
+          final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
+          final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
+          final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
+          final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
+          final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
+          final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
+          final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
+          final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
+          final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
+          final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
+          final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
+          final int _cursorIndexOfIsBestInCluster = CursorUtil.getColumnIndexOrThrow(_cursor, "isBestInCluster");
+          final int _cursorIndexOfCategory = CursorUtil.getColumnIndexOrThrow(_cursor, "category");
+          final List<ImageItemEntity> _result = new ArrayList<ImageItemEntity>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final ImageItemEntity _item;
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final String _tmpUri;
+            _tmpUri = _cursor.getString(_cursorIndexOfUri);
+            final String _tmpFilePath;
+            _tmpFilePath = _cursor.getString(_cursorIndexOfFilePath);
+            final long _tmpTimestamp;
+            _tmpTimestamp = _cursor.getLong(_cursorIndexOfTimestamp);
+            final String _tmpStatus;
+            _tmpStatus = _cursor.getString(_cursorIndexOfStatus);
+            final String _tmpPHash;
+            if (_cursor.isNull(_cursorIndexOfPHash)) {
+              _tmpPHash = null;
+            } else {
+              _tmpPHash = _cursor.getString(_cursorIndexOfPHash);
+            }
+            final Float _tmpNimaScore;
+            if (_cursor.isNull(_cursorIndexOfNimaScore)) {
+              _tmpNimaScore = null;
+            } else {
+              _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
+            }
+            final Float _tmpBlurScore;
+            if (_cursor.isNull(_cursorIndexOfBlurScore)) {
+              _tmpBlurScore = null;
+            } else {
+              _tmpBlurScore = _cursor.getFloat(_cursorIndexOfBlurScore);
+            }
+            final Float _tmpExposureScore;
+            if (_cursor.isNull(_cursorIndexOfExposureScore)) {
+              _tmpExposureScore = null;
+            } else {
+              _tmpExposureScore = _cursor.getFloat(_cursorIndexOfExposureScore);
+            }
+            final Boolean _tmpAreEyesClosed;
+            final Integer _tmp;
+            if (_cursor.isNull(_cursorIndexOfAreEyesClosed)) {
+              _tmp = null;
+            } else {
+              _tmp = _cursor.getInt(_cursorIndexOfAreEyesClosed);
+            }
+            _tmpAreEyesClosed = _tmp == null ? null : _tmp != 0;
+            final Float _tmpSmilingProbability;
+            if (_cursor.isNull(_cursorIndexOfSmilingProbability)) {
+              _tmpSmilingProbability = null;
+            } else {
+              _tmpSmilingProbability = _cursor.getFloat(_cursorIndexOfSmilingProbability);
+            }
+            final byte[] _tmpFaceEmbedding;
+            if (_cursor.isNull(_cursorIndexOfFaceEmbedding)) {
+              _tmpFaceEmbedding = null;
+            } else {
+              _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
+            }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
+            final String _tmpClusterId;
+            if (_cursor.isNull(_cursorIndexOfClusterId)) {
+              _tmpClusterId = null;
+            } else {
+              _tmpClusterId = _cursor.getString(_cursorIndexOfClusterId);
+            }
+            final boolean _tmpIsSelectedByUser;
+            final int _tmp_1;
+            _tmp_1 = _cursor.getInt(_cursorIndexOfIsSelectedByUser);
+            _tmpIsSelectedByUser = _tmp_1 != 0;
+            final boolean _tmpIsUploaded;
+            final int _tmp_2;
+            _tmp_2 = _cursor.getInt(_cursorIndexOfIsUploaded);
+            _tmpIsUploaded = _tmp_2 != 0;
+            final boolean _tmpIsBestInCluster;
+            final int _tmp_3;
+            _tmp_3 = _cursor.getInt(_cursorIndexOfIsBestInCluster);
+            _tmpIsBestInCluster = _tmp_3 != 0;
+            final String _tmpCategory;
+            if (_cursor.isNull(_cursorIndexOfCategory)) {
+              _tmpCategory = null;
+            } else {
+              _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
+            }
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
   }
 
   @Override
@@ -752,11 +950,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -786,6 +986,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -819,6 +1025,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -843,7 +1055,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -880,11 +1092,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -914,6 +1128,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -947,6 +1167,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -971,7 +1197,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -1007,11 +1233,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -1041,6 +1269,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -1074,6 +1308,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -1098,7 +1338,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -1129,11 +1369,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -1163,6 +1405,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -1196,6 +1444,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -1220,7 +1474,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -1251,11 +1505,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -1285,6 +1541,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -1318,6 +1580,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -1342,7 +1610,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -1407,11 +1675,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -1441,6 +1711,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -1474,6 +1750,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -1498,7 +1780,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -1669,11 +1951,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -1703,6 +1987,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -1736,6 +2026,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -1760,7 +2056,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;
@@ -1826,11 +2122,13 @@ public final class ImageItemDao_Impl implements ImageItemDao {
           final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
           final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
           final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
           final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
           final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
           final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
           final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
           final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
           final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
           final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
           final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
@@ -1860,6 +2158,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
               _tmpNimaScore = null;
             } else {
               _tmpNimaScore = _cursor.getFloat(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
             }
             final Float _tmpBlurScore;
             if (_cursor.isNull(_cursorIndexOfBlurScore)) {
@@ -1893,6 +2197,12 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
             }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
             final String _tmpClusterId;
             if (_cursor.isNull(_cursorIndexOfClusterId)) {
               _tmpClusterId = null;
@@ -1917,7 +2227,7 @@ public final class ImageItemDao_Impl implements ImageItemDao {
             } else {
               _tmpCategory = _cursor.getString(_cursorIndexOfCategory);
             }
-            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
+            _item = new ImageItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpClusterId,_tmpIsSelectedByUser,_tmpIsUploaded,_tmpIsBestInCluster,_tmpCategory);
             _result.add(_item);
           }
           return _result;

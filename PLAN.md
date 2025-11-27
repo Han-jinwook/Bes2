@@ -1,4 +1,4 @@
-Best2 앱 개발 계획 (PLAN.md) - v6.1 (2025-11-25 18:30)
+Best2 앱 개발 계획 (PLAN.md) - v6.3 (2025-11-27)
 
 1. 앱의 핵심 목표
 
@@ -233,7 +233,7 @@ UI 최적화: 스크린샷 화면(액션바/배너/투명뷰) 및 홈 화면(로
 
 Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
 
-홈 화면 아키텍처 구축: 카드형 메인 액션, 꿀Tip 섹션(우측 하단 정렬) 적용.
+홈 화면 UI/UX 대개편: 상태 기반 카드 디자인(회색/활성), 버튼 재배치(핵심 액션), Pulse 애니메이션, 꿀Tip 섹션(우측 하단 정렬).
 
 리뷰 사용성 강화: '실패 사진 살리기'(터치 시 즉시 복구), 코치마크 강화, 버튼 하단 이동 및 동적 텍스트.
 
@@ -263,7 +263,7 @@ Milestone 10: Smart Classification & Logic Upgrade (v5.9 완료)
 
 UI 고도화: 추억 소환, 미니맵 UI 개선, 자동 충전 로직 구현, 스마트 워터폴 적용.
 
-6. 다음 목표 (Next Mission) - POST MVP (v6.2)
+6. 다음 목표 (Next Mission) - POST MVP (v6.3)
 
 (핵심 기능 및 수익화(AdMob), 미니맵 UI는 Milestone 10으로 이동 완료)
 
@@ -271,15 +271,19 @@ UI 고도화: 추억 소환, 미니맵 UI 개선, 자동 충전 로직 구현, �
 
 자사 커뮤니티 홍보 (Rolling Banner):
 
-상태: 미구현 (다음 작업 대상)
+상태: 미구현 (베타 런칭 전 필수 작업)
 
 계획: 설정 화면 최하단에 Firebase Remote Config를 연동하여 롤링 배너 구현. 베타 테스터 피드백 수집 및 자사 카페 유입 유도.
 
-2. 미래 기술 (Future Tech) - [Long Term]
+2. 차세대 AI 기술 로드맵 (Next-Gen Tech) - [Future Update]
 
-사용자 취향 학습 (ML): 승격된(심폐소생된) 사진 데이터를 기반으로 사용자 맞춤형 판정 기준 보정 (추후 구현).
+복구 (Restoration): ESRGAN(TFLite) 한계 극복을 위해 GFPGAN(얼굴) + Real-ESRGAN(배경) 및 NCNN(Vulkan) 엔진 도입.
 
-구독 모델 (Subscription): 정식 런칭 이후 도입 검토.
+이해 (Understanding): 자연어 검색("웃는 아이 찾아줘") 구현을 위한 MobileCLIP (ONNX) 및 ObjectBox (Vector DB) 도입.
+
+감성 (Aesthetics): 구도 및 분위기 정밀 평가를 위한 MUSIQ (TFLite) 및 표정 분석을 위한 MediaPipe Blendshapes 도입.
+
+구독 모델 (Subscription): 정식 런칭(v1.1) 이후 Google Play Billing 연동.
 
 7. 협업 원칙 (v3.7 - 신규 절차)
 

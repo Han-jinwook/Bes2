@@ -1,6 +1,7 @@
 package com.bes2.ml.util
 
 import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -9,7 +10,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SimpleTokenizer @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     private val vocab = HashMap<String, Int>()
     private val vocabFile = "vocab.txt" // Standard CLIP vocabulary file name

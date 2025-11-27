@@ -41,11 +41,11 @@ public final class Bes2Database_Impl extends Bes2Database {
     final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(5) {
       @Override
       public void createAllTables(@NonNull final SupportSQLiteDatabase db) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS `image_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `filePath` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `status` TEXT NOT NULL, `pHash` TEXT, `nimaScore` REAL, `blurScore` REAL, `exposureScore` REAL, `areEyesClosed` INTEGER, `smilingProbability` REAL, `faceEmbedding` BLOB, `cluster_id` TEXT, `isSelectedByUser` INTEGER NOT NULL, `isUploaded` INTEGER NOT NULL, `isBestInCluster` INTEGER NOT NULL, `category` TEXT)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS `image_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uri` TEXT NOT NULL, `filePath` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `status` TEXT NOT NULL, `pHash` TEXT, `nimaScore` REAL, `musiqScore` REAL, `blurScore` REAL, `exposureScore` REAL, `areEyesClosed` INTEGER, `smilingProbability` REAL, `faceEmbedding` BLOB, `embedding` BLOB, `cluster_id` TEXT, `isSelectedByUser` INTEGER NOT NULL, `isUploaded` INTEGER NOT NULL, `isBestInCluster` INTEGER NOT NULL, `category` TEXT)");
         db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_image_items_uri` ON `image_items` (`uri`)");
         db.execSQL("CREATE TABLE IF NOT EXISTS `image_clusters` (`id` TEXT NOT NULL, `best_image_uri` TEXT, `second_best_image_uri` TEXT, `creation_time` INTEGER NOT NULL, `review_status` TEXT NOT NULL, PRIMARY KEY(`id`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)");
-        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fcb25ec037139a9f492941fb1de7efad')");
+        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0d2e3df2e6bcc0eea03854a46beaa6c1')");
       }
 
       @Override
@@ -95,7 +95,7 @@ public final class Bes2Database_Impl extends Bes2Database {
       @NonNull
       public RoomOpenHelper.ValidationResult onValidateSchema(
           @NonNull final SupportSQLiteDatabase db) {
-        final HashMap<String, TableInfo.Column> _columnsImageItems = new HashMap<String, TableInfo.Column>(17);
+        final HashMap<String, TableInfo.Column> _columnsImageItems = new HashMap<String, TableInfo.Column>(19);
         _columnsImageItems.put("id", new TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("uri", new TableInfo.Column("uri", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("filePath", new TableInfo.Column("filePath", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
@@ -103,11 +103,13 @@ public final class Bes2Database_Impl extends Bes2Database {
         _columnsImageItems.put("status", new TableInfo.Column("status", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("pHash", new TableInfo.Column("pHash", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("nimaScore", new TableInfo.Column("nimaScore", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsImageItems.put("musiqScore", new TableInfo.Column("musiqScore", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("blurScore", new TableInfo.Column("blurScore", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("exposureScore", new TableInfo.Column("exposureScore", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("areEyesClosed", new TableInfo.Column("areEyesClosed", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("smilingProbability", new TableInfo.Column("smilingProbability", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("faceEmbedding", new TableInfo.Column("faceEmbedding", "BLOB", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsImageItems.put("embedding", new TableInfo.Column("embedding", "BLOB", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("cluster_id", new TableInfo.Column("cluster_id", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("isSelectedByUser", new TableInfo.Column("isSelectedByUser", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsImageItems.put("isUploaded", new TableInfo.Column("isUploaded", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
@@ -140,7 +142,7 @@ public final class Bes2Database_Impl extends Bes2Database {
         }
         return new RoomOpenHelper.ValidationResult(true, null);
       }
-    }, "fcb25ec037139a9f492941fb1de7efad", "0279ade17da2ecc0df0fab38557f4c11");
+    }, "0d2e3df2e6bcc0eea03854a46beaa6c1", "888f96f17575817e91772ef9ab9a8273");
     final SupportSQLiteOpenHelper.Configuration _sqliteConfig = SupportSQLiteOpenHelper.Configuration.builder(config.context).name(config.name).callback(_openCallback).build();
     final SupportSQLiteOpenHelper _helper = config.sqliteOpenHelperFactory.create(_sqliteConfig);
     return _helper;
