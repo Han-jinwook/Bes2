@@ -34,83 +34,80 @@ class PastPhotoAnalysisWorker @AssistedInject constructor(
         const val WORK_NAME = "PastPhotoAnalysisWorker"
         const val STATUS_READY_TO_CLEAN = "READY_TO_CLEAN"
         
-        // [TEST MODE] Threshold 20 + Buffer 10 = 30
-        // [RELEASE MODE] Threshold 100 + Buffer 20 = 120
-        // Change this back to 120 for Beta/Production
-        private const val TARGET_PREPARED_COUNT = 30 
+        // [Reverted] Back to original light-weight value
+        private const val TARGET_PREPARED_COUNT = 30
         
         private const val BATCH_SIZE = 50
         private const val MAX_SCAN_LIMIT = 5000
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Timber.tag(WORK_NAME).d("--- PastPhotoAnalysisWorker Started (Pipeline Mode) ---")
+        Timber.tag(WORK_NAME).d("--- PastPhotoAnalysisWorker Started (Light Mode) ---")
 
-        // 1. Check if we need more photos
+        // 1. Check current status
         val currentReadyCount = imageDao.countImagesByStatus(STATUS_READY_TO_CLEAN)
         val currentNewCount = imageDao.countImagesByStatus("NEW")
         val currentPendingCount = imageDao.countImagesByStatus("PENDING_ANALYSIS")
         
         val totalProcessing = currentReadyCount + currentNewCount + currentPendingCount
         
-        if (totalProcessing >= TARGET_PREPARED_COUNT) {
-             Timber.tag(WORK_NAME).d("Enough images in pipeline ($totalProcessing). Stopping.")
-             return@withContext Result.success()
-        }
+        // 2. Fetch more images ONLY IF needed
+        if (totalProcessing < TARGET_PREPARED_COUNT) {
+            val neededCount = TARGET_PREPARED_COUNT - totalProcessing
+            Timber.tag(WORK_NAME).d("Fetching up to $neededCount more images to pipeline.")
 
-        val neededCount = TARGET_PREPARED_COUNT - totalProcessing
-        Timber.tag(WORK_NAME).d("Fetching $neededCount more images to pipeline.")
-
-        var processedCount = 0
-        var offset = 0
-        
-        // 2. Fetch images and save as NEW
-        while (processedCount < neededCount && offset < MAX_SCAN_LIMIT) {
-            val candidates = galleryRepository.getRecentImages(BATCH_SIZE, offset)
-            if (candidates.isEmpty()) {
-                Timber.tag(WORK_NAME).d("No more images in gallery.")
-                break
-            }
-
-            val newEntities = mutableListOf<ImageItemEntity>()
+            var processedCount = 0
+            var offset = 0
             
-            for (candidate in candidates) {
-                 if (processedCount >= neededCount) break
-                 
-                 if (imageDao.isUriProcessed(candidate.uri)) {
-                     continue
-                 }
+            while (processedCount < neededCount && offset < MAX_SCAN_LIMIT) {
+                val candidates = galleryRepository.getRecentImages(BATCH_SIZE, offset)
+                if (candidates.isEmpty()) {
+                    Timber.tag(WORK_NAME).d("No more images in gallery.")
+                    break
+                }
 
-                 val entity = ImageItemEntity(
-                     uri = candidate.uri,
-                     filePath = candidate.filePath,
-                     timestamp = candidate.timestamp,
-                     status = "NEW", // Important: Save as NEW to trigger ClusteringWorker
-                     pHash = null,
-                     nimaScore = null,
-                     blurScore = null,
-                     exposureScore = null,
-                     areEyesClosed = null,
-                     smilingProbability = null,
-                     faceEmbedding = null,
-                     clusterId = null,
-                     isUploaded = false
-                 )
-                 newEntities.add(entity)
-                 processedCount++
+                val newEntities = mutableListOf<ImageItemEntity>()
+                
+                for (candidate in candidates) {
+                     if (processedCount >= neededCount) break
+                     
+                     if (imageDao.isUriProcessed(candidate.uri)) {
+                         continue
+                     }
+
+                     val entity = ImageItemEntity(
+                         uri = candidate.uri,
+                         filePath = candidate.filePath,
+                         timestamp = candidate.timestamp,
+                         status = "NEW",
+                         pHash = null,
+                         nimaScore = null,
+                         blurScore = null,
+                         exposureScore = null,
+                         areEyesClosed = null,
+                         smilingProbability = null,
+                         faceEmbedding = null,
+                         clusterId = null,
+                         isUploaded = false
+                     )
+                     newEntities.add(entity)
+                     processedCount++
+                }
+                
+                if (newEntities.isNotEmpty()) {
+                    imageDao.insertImageItems(newEntities)
+                    Timber.tag(WORK_NAME).d("Saved ${newEntities.size} images as NEW.")
+                }
+                
+                offset += BATCH_SIZE
             }
-            
-            if (newEntities.isNotEmpty()) {
-                imageDao.insertImageItems(newEntities)
-                Timber.tag(WORK_NAME).d("Saved ${newEntities.size} images as NEW.")
-            }
-            
-            offset += BATCH_SIZE
         }
         
-        // 3. Trigger ClusteringWorker if we added any new images
-        if (processedCount > 0) {
-            Timber.tag(WORK_NAME).d("Triggering ClusteringWorker for $processedCount new images.")
+        // 3. Trigger downstream workers if there is pending work
+        val hasPendingWork = imageDao.countImagesByStatus("NEW") > 0 || imageDao.countImagesByStatus("PENDING_ANALYSIS") > 0
+        
+        if (hasPendingWork) {
+            Timber.tag(WORK_NAME).d("Triggering ClusteringWorker to continue the pipeline.")
             
             val inputData = Data.Builder()
                 .putBoolean(ClusteringWorker.KEY_IS_BACKGROUND_DIET, true)
@@ -122,7 +119,7 @@ class PastPhotoAnalysisWorker @AssistedInject constructor(
                 
             workManager.enqueueUniqueWork(
                 ClusteringWorker.WORK_NAME,
-                ExistingWorkPolicy.APPEND_OR_REPLACE, // Append to existing work or replace
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
                 clusteringWorkRequest
             )
         }

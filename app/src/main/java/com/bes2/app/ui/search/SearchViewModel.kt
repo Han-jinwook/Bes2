@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -19,7 +21,8 @@ data class SearchUiState(
     val query: String = "",
     val results: List<SearchResult> = emptyList(),
     val isSearching: Boolean = false,
-    val totalIndexedCount: Int = 0
+    val totalIndexedCount: Int = 0,
+    val totalImagesInDb: Int = 0
 )
 
 data class SearchResult(
@@ -37,15 +40,25 @@ class SearchViewModel @Inject constructor(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     init {
-        checkIndexStatus()
+        observeIndexStatus()
     }
 
-    private fun checkIndexStatus() {
+    private fun observeIndexStatus() {
         viewModelScope.launch(Dispatchers.IO) {
-            // Count images with embeddings
-            // Since we don't have a direct query for non-null embeddings yet, 
-            // we'll just show 0 or implement a query later.
-            // For now, let's just ready the state.
+            // Combine total count and indexed count flows
+            combine(
+                imageDao.getTotalImageCountFlow(),
+                imageDao.getIndexedImageCountFlow()
+            ) { total, indexed ->
+                Pair(total, indexed)
+            }.collectLatest { (total, indexed) ->
+                _uiState.update { 
+                    it.copy(
+                        totalImagesInDb = total,
+                        totalIndexedCount = indexed
+                    ) 
+                }
+            }
         }
     }
 
@@ -69,11 +82,19 @@ class SearchViewModel @Inject constructor(
                     return@launch
                 }
 
-                // 2. Fetch All Images (In a real app, we should fetch only embeddings from DB)
-                // Optimization: Add a DAO method to fetch only (id, uri, embedding)
-                val allImages = imageDao.getAllImageItemsList() // Need to add this method to DAO
+                // 2. Fetch All Images
+                val allImages = imageDao.getAllImageItemsList()
                 
-                val results = allImages.mapNotNull { image ->
+                // Filter only indexed images
+                val indexedImages = allImages.filter { it.embedding != null }
+                
+                if (indexedImages.isEmpty()) {
+                    Timber.w("No indexed images found. Search result will be empty.")
+                    _uiState.update { it.copy(results = emptyList(), isSearching = false) }
+                    return@launch
+                }
+
+                val results = indexedImages.mapNotNull { image ->
                     val embeddingBytes = image.embedding
                     if (embeddingBytes != null) {
                         // Convert ByteArray back to FloatArray

@@ -1,8 +1,11 @@
 package com.bes2.app.ui.search
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -12,8 +15,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,8 +30,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -106,6 +110,51 @@ fun SearchScreen(
                         )
                     }
                 }
+            }
+            
+            // [Updated] Indexing & Status Indicator
+            // Always show regardless of count to indicate system is alive
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val isIndexingComplete = uiState.totalImagesInDb > 0 && uiState.totalIndexedCount >= uiState.totalImagesInDb
+                val isDbEmpty = uiState.totalImagesInDb == 0
+                
+                val icon = when {
+                    isDbEmpty -> Icons.Default.HourglassEmpty
+                    isIndexingComplete -> Icons.Default.CheckCircle
+                    else -> Icons.Default.Sync
+                }
+                
+                val iconColor = when {
+                    isDbEmpty -> Color.Gray
+                    isIndexingComplete -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.secondary
+                }
+                
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "Status",
+                    modifier = Modifier.size(14.dp),
+                    tint = iconColor
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                val statusText = when {
+                    isDbEmpty -> "갤러리에서 사진을 불러오는 중입니다..."
+                    isIndexingComplete -> "총 ${uiState.totalImagesInDb}장의 추억 속에서 검색합니다"
+                    else -> "AI가 사진을 공부하는 중입니다... (${uiState.totalIndexedCount}/${uiState.totalImagesInDb})"
+                }
+                
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = iconColor
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))

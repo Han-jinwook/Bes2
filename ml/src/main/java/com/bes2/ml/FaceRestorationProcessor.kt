@@ -78,7 +78,8 @@ class FaceRestorationProcessor @Inject constructor(
     }
 
     suspend fun restoreFaces(originalBitmap: Bitmap): Bitmap {
-        val interpreter = interpreter ?: return originalBitmap
+        // Fix: Use property directly or checking it differently to avoid unused variable warning
+        if (interpreter == null) return originalBitmap
         
         // 1. Detect Faces
         val inputImage = InputImage.fromBitmap(originalBitmap, 0)

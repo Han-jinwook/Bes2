@@ -25,20 +25,26 @@ import javax.inject.Provider;
 public final class ImageRestorationProcessor_Factory implements Factory<ImageRestorationProcessor> {
   private final Provider<Context> contextProvider;
 
-  public ImageRestorationProcessor_Factory(Provider<Context> contextProvider) {
+  private final Provider<FaceRestorationProcessor> faceRestorationProcessorProvider;
+
+  public ImageRestorationProcessor_Factory(Provider<Context> contextProvider,
+      Provider<FaceRestorationProcessor> faceRestorationProcessorProvider) {
     this.contextProvider = contextProvider;
+    this.faceRestorationProcessorProvider = faceRestorationProcessorProvider;
   }
 
   @Override
   public ImageRestorationProcessor get() {
-    return newInstance(contextProvider.get());
+    return newInstance(contextProvider.get(), faceRestorationProcessorProvider.get());
   }
 
-  public static ImageRestorationProcessor_Factory create(Provider<Context> contextProvider) {
-    return new ImageRestorationProcessor_Factory(contextProvider);
+  public static ImageRestorationProcessor_Factory create(Provider<Context> contextProvider,
+      Provider<FaceRestorationProcessor> faceRestorationProcessorProvider) {
+    return new ImageRestorationProcessor_Factory(contextProvider, faceRestorationProcessorProvider);
   }
 
-  public static ImageRestorationProcessor newInstance(Context context) {
-    return new ImageRestorationProcessor(context);
+  public static ImageRestorationProcessor newInstance(Context context,
+      FaceRestorationProcessor faceRestorationProcessor) {
+    return new ImageRestorationProcessor(context, faceRestorationProcessor);
   }
 }

@@ -25,7 +25,7 @@ data class ScreenshotUiState(
     val isLoading: Boolean = true,
     val pendingDeleteUris: List<Uri>? = null,
     val resultMessage: String? = null,
-    val showAd: Boolean = false // Added for ad trigger
+    val showAd: Boolean = false
 )
 
 @HiltViewModel
@@ -38,12 +38,9 @@ class ScreenshotViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ScreenshotUiState())
     val uiState: StateFlow<ScreenshotUiState> = _uiState.asStateFlow()
 
-    // Track selection for message
     private var lastSelectedCount = 0
 
-    // SharedPreference Keys and Thresholds
     private val PREF_KEY_SCREENSHOT_COUNT = "pref_screenshot_accumulated_count"
-    // TEST VALUE: 40 (Release: 200)
     private val AD_THRESHOLD = 40 
 
     init {
@@ -57,7 +54,7 @@ class ScreenshotViewModel @Inject constructor(
             // 1. Get System Screenshots
             val systemScreenshots = galleryRepository.getScreenshots()
             
-            // 2. Get Analyzed Documents from DB
+            // 2. [Reverted] Get Analyzed Documents from DB
             val documentImages = imageItemDao.getImageItemsByCategory("DOCUMENT")
             
             // 3. Convert Documents to ScreenshotItems
@@ -66,7 +63,7 @@ class ScreenshotViewModel @Inject constructor(
                     id = entity.id,
                     uri = Uri.parse(entity.uri),
                     dateTaken = entity.timestamp,
-                    size = 0 // Size not available in Entity, not critical for UI
+                    size = 0
                 )
             }
             
@@ -113,15 +110,10 @@ class ScreenshotViewModel @Inject constructor(
             val selectedItems = _uiState.value.screenshots.filter { it.isSelected }
             val count = selectedItems.size
             if (count > 0) {
-                // Insert or Update logic
                 val uris = selectedItems.map { it.uri.toString() }
                 
-                // For items already in DB (Documents), just update status
                 imageItemDao.updateImageStatusesByUris(uris, "KEPT")
                 
-                // For items NOT in DB (System screenshots that weren't analyzed yet), insert them
-                // Check existence effectively? 
-                // Or just try insert with IGNORE strategy (Dao handles it)
                 val entities = selectedItems.map { item ->
                     ImageItemEntity(
                         uri = item.uri.toString(),
@@ -132,7 +124,7 @@ class ScreenshotViewModel @Inject constructor(
                         areEyesClosed = null, smilingProbability = null, clusterId = null
                     )
                 }
-                imageItemDao.insertImageItems(entities) // Will ignore duplicates due to URI index
+                imageItemDao.insertImageItems(entities)
 
                 updateAccumulatedCount(count) 
                 

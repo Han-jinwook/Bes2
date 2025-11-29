@@ -50,18 +50,15 @@ interface ImageItemDao {
     @Query("SELECT * FROM image_items WHERE status = 'ANALYZED' AND cluster_id IS NULL ORDER BY timestamp ASC")
     suspend fun getAnalyzedImagesWithoutCluster(): List<ImageItemEntity>
 
-    // DEFINITIVE FIX: Changed clusterId type from Long to String
     @Query("SELECT * FROM image_items WHERE cluster_id = :clusterId ORDER BY timestamp DESC")
     fun getImageItemsByClusterId(clusterId: String): Flow<List<ImageItemEntity>>
 
     @Query("UPDATE image_items SET status = :newStatus WHERE id = :id")
     suspend fun updateImageItemStatus(id: Long, newStatus: String): Int
 
-    // DEFINITIVE FIX: Changed clusterId type from Long to String
     @Query("UPDATE image_items SET status = 'CLUSTERED', cluster_id = :clusterId WHERE id IN (:imageIds)")
     suspend fun updateImageClusterInfo(clusterId: String, imageIds: List<Long>): Int
 
-    // DEFINITIVE FIX: Changed clusterId type from Long to String
     @Query("UPDATE image_items SET cluster_id = :clusterId WHERE id IN (:imageIds)")
     suspend fun setClusterIdForImages(clusterId: String, imageIds: List<Long>): Int
 
@@ -86,38 +83,37 @@ interface ImageItemDao {
     @Query("UPDATE image_items SET isUploaded = :uploaded WHERE uri IN (:uris)")
     suspend fun updateUploadedStatusByUris(uris: List<String>, uploaded: Boolean): Int
 
-    // DEFINITIVE FIX: Add the missing function that caused the build error
     @Query("UPDATE image_items SET cluster_id = :clusterId WHERE uri IN (:uris)")
     suspend fun updateClusterIdByUris(uris: List<String>, clusterId: String)
 
-    // New query for daily statistics
     @Query("SELECT status, COUNT(*) as count FROM image_items WHERE timestamp >= :startTime GROUP BY status")
     fun getDailyStatsFlow(startTime: Long): Flow<List<StatusCount>>
 
-    // New query for range statistics (Monthly/Yearly)
     @Query("SELECT status, COUNT(*) as count FROM image_items WHERE timestamp >= :startTime AND timestamp <= :endTime GROUP BY status")
     suspend fun getStatsByDateRange(startTime: Long, endTime: Long): List<StatusCount>
 
-    // New query to get status by URI
     @Query("SELECT status FROM image_items WHERE uri = :uri LIMIT 1")
     suspend fun getImageStatusByUri(uri: String): String?
 
-    // New query to update status by URI list
     @Query("UPDATE image_items SET status = :newStatus WHERE uri IN (:uris)")
     suspend fun updateImageStatusesByUris(uris: List<String>, newStatus: String): Int
 
     @Query("SELECT COUNT(*) FROM image_items WHERE status = :status")
     suspend fun countImagesByStatus(status: String): Int
     
-    // [New] Get images by category (e.g., DOCUMENT)
     @Query("SELECT * FROM image_items WHERE category = :category ORDER BY timestamp DESC")
     suspend fun getImageItemsByCategory(category: String): List<ImageItemEntity>
 
-    // [New] Count images by category, excluding processed ones
     @Query("SELECT COUNT(*) FROM image_items WHERE category = :category AND status != 'KEPT' AND status != 'DELETED'")
     suspend fun countUnprocessedImagesByCategory(category: String): Int
 
-    // [New] Get images by date range (for Memory Event) - Excluding documents
     @Query("SELECT * FROM image_items WHERE timestamp >= :startTime AND timestamp <= :endTime AND (category != 'DOCUMENT' OR category IS NULL) ORDER BY timestamp DESC")
     suspend fun getImagesByDateRange(startTime: Long, endTime: Long): List<ImageItemEntity>
+
+    // [New] Real-time counters for Search UI
+    @Query("SELECT COUNT(*) FROM image_items")
+    fun getTotalImageCountFlow(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM image_items WHERE embedding IS NOT NULL")
+    fun getIndexedImageCountFlow(): Flow<Int>
 }

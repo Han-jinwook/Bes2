@@ -19,6 +19,7 @@ import java.nio.ByteBuffer
 import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 class FaceEmbedder @Inject constructor(
     @ApplicationContext private val context: Context
@@ -102,7 +103,27 @@ class FaceEmbedder @Inject constructor(
         private const val NORM_MEAN = 127.5f
         private const val NORM_STD = 128.0f
         
-        // TFLite 모델의 입력 데이터 타입에 맞춰야 함 (FLOAT32)
         private val TFLITE_DATA_TYPE = org.tensorflow.lite.DataType.FLOAT32
+
+        // [NEW] Cosine Similarity calculation function
+        fun calculateCosineSimilarity(v1: FloatArray, v2: FloatArray): Float {
+            if (v1.size != v2.size) return 0f
+            
+            var dotProduct = 0.0f
+            var norm1 = 0.0f
+            var norm2 = 0.0f
+            
+            for (i in v1.indices) {
+                dotProduct += v1[i] * v2[i]
+                norm1 += v1[i] * v1[i]
+                norm2 += v2[i] * v2[i]
+            }
+            
+            return if (norm1 == 0.0f || norm2 == 0.0f) {
+                0.0f
+            } else {
+                (dotProduct / (sqrt(norm1) * sqrt(norm2)))
+            }
+        }
     }
 }

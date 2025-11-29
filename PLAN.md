@@ -1,4 +1,6 @@
-Best2 앱 개발 계획 (PLAN.md) - v6.3 (2025-11-27)
+Best2 앱 개발 계획 (PLAN.md) - v6.4
+
+Date: 2025-11-27
 
 1. 앱의 핵심 목표
 
@@ -24,19 +26,17 @@ Best2 앱 개발 계획 (PLAN.md) - v6.3 (2025-11-27)
 
 2. 주요 기능 및 현재 상태
 
-자동 사진 정리: (완료)
+✅ 완료된 기능
 
-사진 변경 감지 및 신규 사진 DB 저장.
+자동 사진 정리: 사진 변경 감지 및 신규 사진 DB 저장.
 
-클러스터링: (완료)
+클러스터링: (상세 규칙은 3. 핵심 규칙 섹션 참조)
 
-(상세 규칙은 3. 핵심 규칙 섹션으로 이동)
-
-사진 분석 및 평가: (완료)
+사진 분석 및 평가:
 
 기본 품질 필터 (눈 감음, 흐림 정도).
 
-미적 품질 평가 (NIMA 모델 활용).
+감성 품질 평가: MUSIQ (예술 점수) 및 NIMA (기술 점수) 하이브리드 평가.
 
 웃음 확률 분석 (ML Kit Vision API 활용).
 
@@ -44,32 +44,31 @@ Best2 앱 개발 계획 (PLAN.md) - v6.3 (2025-11-27)
 
 스마트 분류 (Content Type): 추억(Memory) vs 문서(Document) 자동 분류.
 
-간편 검토 인터페이스: (완료)
+자연어 검색 (Semantic Search): MobileCLIP 기반 문장 검색 ("웃는 아기").
 
-분석 완료 후, 검토가 필요한 클러스터가 있으면 사용자에게 알림을 보낸다.
+간편 검토 인터페이스:
+
+분석 완료 후, 검토가 필요한 클러스터가 있으면 사용자에게 알림 전송.
 
 검토 화면 구성:
 
-베스트 1, 2: 점수 기준으로 선정된 베스트 사진 2장을 표시한다. (칭찬 뱃지 포함)
+베스트 1, 2: 점수 기준으로 선정된 베스트 사진 2장 표시 (칭찬 뱃지 포함).
 
-나머지: 베스트 사진으로 선정되지 않은 정상 사진 목록을 표시한다.
+나머지: 베스트 사진으로 선정되지 않은 정상 사진 목록 표시.
 
-실패: (중요) 분석에 실패한 사진 목록을 표시하며, 각 사진마다 실패 사유(예: 눈감음, 흐림, 역광)를 명확히 Text로 표기하고 '심폐소생(복구)' 버튼을 제공한다.
+실패: 분석 실패 사진 목록 표시. 실패 사유(눈감음, 흐림, 역광)를 명확히 텍스트로 표기하고 '심폐소생(복구)' 버튼 제공.
 
-클라우드 동기화: (부분 구현)
+수익화 (Monetization): Google AdMob 연동 (띠 배너, 전면 광고).
 
-Google Photos 로그인/로그아웃 및 자동 백업.
+🔄 부분 구현
 
-수동 동기화 실행 기능.
-
-수익화 (Monetization): (완료)
-
-Google AdMob 연동 (띠 배너, 전면 광고).
+클라우드 동기화: Google Photos 로그인/로그아웃 및 자동 백업, 수동 동기화 실행 기능.
 
 3. 핵심 규칙 및 정책 (The Guardrails)
 
-사진 처리 파이프라인 (Data Flow Pipeline) - v5.6 고도화
-0. 0단계: 콘텐츠 분류 (ImageContentClassifier):
+📸 사진 처리 파이프라인 (Data Flow Pipeline) - v6.4 고도화
+
+0단계: 콘텐츠 분류 (ImageContentClassifier)
 
 ML Kit을 사용하여 사진을 **'추억(MEMORY)'**과 **'문서(DOCUMENT)'**로 1차 분류한다.
 
@@ -77,213 +76,145 @@ ML Kit을 사용하여 사진을 **'추억(MEMORY)'**과 **'문서(DOCUMENT)'**�
 
 문서(DOCUMENT): 영수증, 문서, 화이트보드 등 -> 정밀 분석을 건너뛰고 '문서 정리' 대상으로 분류(별도 관리).
 
-1단계: 클러스터링 (ClusteringWorker):
+1단계: 클러스터링 (ClusteringWorker)
 
 새로운 사진(NEW 상태)이 감지되면, ClusteringWorker가 가장 먼저 실행된다.
 
-스크린샷 제외 규칙: 파일 경로에 'Screenshot', 'Capture' 등이 포함된 이미지는 클러스터링 대상에서 제외하고 즉시 IGNORED 상태로 처리한다.
+스크린샷 제외 규칙: 파일 경로에 'Screenshot', 'Capture' 등이 포함된 이미지는 제외하고 즉시 IGNORED 상태로 처리한다.
 
-ClusteringWorker는 pHash(임계값 15)를 직접 계산하여 비슷한 사진들을 하나의 '클러스터(묶음)'로 정교하게 묶고(얼굴/사물 구분), 각 사진에 클러스터 ID를 부여한다.
+pHash(임계값 15)를 직접 계산하여 비슷한 사진들을 하나의 '클러스터(묶음)'로 정교하게 묶고(얼굴/사물 구분), 각 사진에 클러스터 ID를 부여한다.
 
-클러스터링이 완료된 사진들의 상태를 다음 단계를 위해 PENDING_ANALYSIS로 변경하고, PhotoAnalysisWorker를 호출한다.
+완료된 사진들의 상태를 PENDING_ANALYSIS로 변경하고, PhotoAnalysisWorker를 호출한다.
 
-2단계: 분석 및 상태 부여 (PhotoAnalysisWorker):
+2단계: 분석 및 상태 부여 (PhotoAnalysisWorker)
 
-PhotoAnalysisWorker는 PENDING_ANALYSIS 상태의 사진들을 가져와 클러스터 단위로 분석을 시작한다.
+PENDING_ANALYSIS 상태의 사진들을 가져와 클러스터 단위로 분석을 시작한다.
 
 자동 충전 로직: 홈 화면 진입 시(ON_RESUME) 부족한 분석 물량을 체크하고 자동으로 채워 넣는다. (목표: 30장 유지)
 
 백그라운드 모드: isBackgroundDiet 플래그가 true일 경우, 알림 없이 조용히 READY_TO_CLEAN 상태로 저장한다.
 
-품질 게이트 (v5.6 강화): '눈 감음', '흐림', **'역광'**을 검사하여, 기준 미달인 사진은 즉시 STATUS_REJECTED(실패) 상태로 변경하고 더 이상의 점수 계산을 진행하지 않는다.
+품질 게이트 (v5.6 강화): '눈 감음', '흐림', **'역광'**을 검사하여, 기준 미달인 사진은 즉시 STATUS_REJECTED(실패) 상태로 변경하고 더 이상의 점수 계산을 중단한다.
 
-점수 계산: 품질 게이트를 통과한 사진에 대해서만 NIMA 점수와 웃음 확률을 계산하고, 상태를 ANALYZED(성공)로 변경한다.
+임베딩 추출 (v6.5 신규): MobileCLIP을 사용하여 사진의 특징 벡터(Embedding)를 추출하고 DB에 저장한다. (자연어 검색용)
+
+점수 계산 (v6.4 업데이트): MUSIQ(예술성), NIMA(기술성), 웃음 확률을 종합하여 최종 점수를 산출하고, 상태를 ANALYZED(성공)로 변경한다.
 
 모든 분석이 완료되면 사용자에게 검토 알림을 보낸다.
 
-3단계: 점수화 및 UI 분리 표시 (ReviewViewModel & Screen) - v5.6 고도화:
+3단계: 점수화 및 UI 분리 표시 (ReviewViewModel & Screen) - v6.4 고도화
 
-(기존과 동일) 검토 화면에서는 ANALYZED 상태의 사진들만을 대상으로 최종 점수를 계산하여 '베스트'와 '나머지'를 선정한다.
+검토 화면에서는 ANALYZED 상태의 사진들만을 대상으로 최종 점수를 계산하여 '베스트'와 '나머지'를 선정한다.
 
-(기존과 동일) STATUS_REJECTED 사진은 '실패' 섹션으로 분리하여 사용자에게 보여준다.
+STATUS_REJECTED 사진은 '실패' 섹션으로 분리하여 보여준다.
 
 베스트 칭찬: 베스트 사진 하단에 선정 사유(예: "보기 좋은 미소 😊")를 뱃지로 표시.
 
-심폐소생: 실패 사진 확대 시 [흔들림 복구] 버튼 제공 -> 성공 시 '나머지'로 승격.
+심폐소생 (하이브리드 복원): 실패 사진 확대 시 [복구] 버튼 제공.
 
-(기존 '구현 노트'는 v2.5의 본문과 내용이 일치하므로 삭제)
+ESRGAN: 전체 해상도 4배 확대 및 노이즈 제거.
 
-분석 시작 지연 규칙 (지능적인 기다림) - v3.6 신규
+GFPGAN: 흐릿해진 얼굴 이목구비(눈/코/입) 선명하게 재건.
 
-원칙: 1.5. 앱의 핵심 원칙의 '지능적인 기다림'을 구현하며, 사용자의 사진 촬영이 일단락될 때까지 대기합니다.
+성공 시 '나머지' 섹션으로 승격.
 
-출처: (AS에이전트가 작업할 파일, 예: PhotoObserverService.kt or WorkScheduler.kt)
+⏱️ 분석 시작 지연 규칙 (지능적인 기다림) - v3.6 신규
 
-트리거: 마지막 사진 촬영(감지) 후, 사용자가 '설정'에서 지정한 시간 동안 추가 촬영이 없으면 ClusteringWorker(파이프라인 1단계)를 트리거합니다.
+원칙: 사용자의 사진 촬영이 일단락될 때까지 대기.
 
-현재 테스트 값: 현재 테스트를 위해 기본값 1분으로 설정되어 있습니다.
+트리거: 마지막 사진 촬영(감지) 후, '설정'에서 지정한 시간 동안 추가 촬영이 없으면 ClusteringWorker 트리거.
 
-다음 작업: AS에이전트가 '설정' UI에 해당 지연 시간(예: 1분, 30분, 1시간)을 사용자가 선택할 수 있는 옵션 추가 예정.
+현재 테스트 값: 기본값 1분. (추후 설정 UI에 옵션 추가 예정)
 
-품질 게이트 규칙 (실패 사진 기준) - v5.8 수정 (복귀)
+🚫 품질 게이트 규칙 (실패 사진 기준) - v5.8 수정 (복귀)
 
-출처: PhotoAnalysisWorker.kt, EyeClosedDetector.kt, BacklightingDetector.kt
+눈 감음 (Eyes Closed): 양쪽 눈 중 어느 한쪽이라도 "눈을 떴을 확률"이 0.5 미만일 경우 실패 처리.
 
-눈 감음 (Eyes Closed) 기준:
+흐림 (Blur): 선명도 점수(Laplacian)가 30.0 미만일 경우 실패 처리.
 
-ML Kit이 분석한 "눈을 떴을 확률 (open probability)" 값을 기준으로 합니다.
+역광 (Backlighting): 얼굴이 배경보다 현저히 어둡거나 절대 밝기가 낮을 경우 실패 처리.
 
-임계값 (v5.8 수정): 양쪽 눈 중 어느 한쪽이라도 "눈을 떴을 확률"이 0.5 미만(기존 0.85에서 복귀)일 경우, '눈 감은 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다. (EyeClosedDetector.kt의 areEyesClosed 함수 로직)
+☁️ 자동 동기화 규칙 - v4.7 최적화
 
-흐림 (Blur) 기준:
+원칙: 신뢰도 높은 OneTimeWorkRequest를 체인 형태로 연결하여 안정성 보장 ('릴레이' 방식).
 
-변수명: BLUR_THRESHOLD
+실행 순서: SettingsViewModel에서 최초 예약 -> DailyCloudSyncWorker가 작업 완료 후 다음 날 작업 스스로 예약.
 
-임계값 (v5.1 확정): 30.0f (OpenCV Laplacian 변환 기준)
+기본값: 앱 설치 시 '바로바로 동기화(IMMEDIATE)' 적용.
 
-판정: 계산된 선명도 점수가 30.0 미만인 경우, '흐린 사진'으로 판단하여 STATUS_REJECTED(실패) 처리합니다.
+🧩 클러스터링 규칙 - v2.6 신규
 
-역광 (Backlighting) 기준 (v5.6 완료):
+기준: pHash 값 사이의 해밍 거리(Hamming Distance).
 
-출처: BacklightingDetector.kt (ML Kit Face Detection 활용)
+임계값: 해밍 거리 15 이하인 경우 유사한 사진으로 판단하여 묶음.
 
-로직: 얼굴 영역의 평균 밝기(FaceLuminosity)와 배경 영역의 평균 밝기(BackgroundLuminosity)를 비교.
+💯 점수 계산 규칙 (베스트 사진 선정) - v6.4 고도화
 
-판정: 얼굴이 배경보다 현저히 어둡거나 절대 밝기가 낮을 경우 STATUS_REJECTED(실패) 처리.
+기본 점수 (Total 100):
 
-자동 동기화 규칙 (안정적인 주기적 실행 보장) - v4.7 최적화
+MUSIQ (예술 점수): 비중 50% (가장 중요).
 
-원칙: 안드로이드의 배터리 최적화 정책으로 인해 신뢰도가 낮은 주기적 작업(PeriodicWorkRequest)을 사용하는 대신, 신뢰도 높은 일회성 작업(OneTimeWorkRequest)을 체인 형태로 연결하여 안정성을 보장합니다.
+NIMA (기술 점수): 비중 30%.
 
-실행 순서:
+기타: 20%.
 
-SettingsViewModel: 사용자가 설정한 시간에 맞춰, 정확한 지연 시간(initialDelay)을 가진 OneTimeWorkRequest를 단 한 번만 예약합니다.
+가산점/감점:
 
-DailyCloudSyncWorker: 동기화 작업을 성공적으로 마친 후, 스스로 다음 날 같은 시간에 실행될 새로운 OneTimeWorkRequest를 다시 예약하고 작업을 종료합니다.
+가산점: 웃음 확률 * 30 (웃는 얼굴 우대).
 
-결과: 이 '릴레이' 방식을 통해, 시스템에 의해 작업이 무기한 연기되는 문제를 방지하고 매일 설정된 시간에 안정적으로 동기화를 실행할 수 있습니다.
+감점: 웃음 확률 0.1 미만 시 -10점 (찡그린 얼굴 필터링).
 
-기본값 (v4.7 변경): 앱 설치 시 **'바로바로 동기화(IMMEDIATE)'**를 기본값으로 적용하여 빠른 백업 경험 제공.
-
-클러스터링 규칙 (사진 묶음 기준) - v2.6 신규
-
-출처: ClusteringWorker.kt
-
-유사도 판단 기준: 두 사진의 pHash 값 사이의 해밍 거리(Hamming Distance)를 측정합니다.
-
-임계값: 해밍 거리가 15 이하인 경우, 두 사진을 '유사한 사진'으로 판단하여 같은 클러스터로 묶습니다. (v2.6 수정: 임계값을 10에서 15로 완화하여, 조명이나 구도가 약간 다른 유사 사진도 하나의 클러스터로 묶일 확률을 높임)
-
-점수 계산 규칙 (베스트 사진 선정 기준) - v3.7 수정
-
-출처: ReviewViewModel.kt의 calculateFinalScore 함수.
-
-점수 체계:
-
-기본 점수 (최대 100점): NIMA 모델이 산출한 1~10점 사이의 미적 품질 원점수를, 사용자 편의를 위해 **100점 만점으로 환산(* 10)**하여 기본 점수로 사용합니다.
-
-가산점 및 감점 (v3.7 수정):
-
-가산점: ML Kit이 분석한 웃음 확률 점수에 30을 곱하여 가산점으로 사용합니다. (기존 10에서 상향 - 웃는 얼굴 우대)
-
-감점: 웃음 확률이 0.1 미만인 경우(찡그림, 무표정 등), -10점을 감점합니다. (인상 쓴 사진 필터링)
-
-최종 점수 산출 공식:
-
-최종 점수 = (NIMA 원점수 * 10) + (웃음 확률 * 30 또는 -10)
-
-이로 인해, 이론상 최고 점수는 **130점(100점 + 30점)**이 될 수 있습니다.
-
-예시:
-
-잘 웃는 사진 (NIMA 6.0, 웃음 0.9): 60 + 27 = 87점
-
-찡그린 사진 (NIMA 6.4, 웃음 0.0): 64 - 10 = 54점 (NIMA가 높아도 웃는 사진에 패배하도록 설계)
+공식: 최종 점수 = (MUSIQ * 5 + NIMA * 3) + (웃음 확률 * 30 또는 -10)
 
 4. 아키텍처 및 데이터 구조
 
 아키텍처: Clean Architecture 변형 (app, data, domain, background, ml 등 모듈 분리).
 
-의존성 주입 / UI / 비동기: Hilt / Jetpack Compose / Coroutines & Flow.
+기술 스택: Hilt, Jetpack Compose, Coroutines & Flow.
 
-데이터베이스 구조 (Room Entities)
+데이터베이스 (Room Entities):
 
-ImageItemEntity: 이미지 개별 정보 (id, uri, pHash, nIMA_Score, areEyesClosed, smilingProbability, clusterId, status 등)
+ImageItemEntity: id, uri, pHash, scores(NIMA/MUSIQ), embedding, 눈감음/웃음 여부, clusterId, status 등.
 
-ImageClusterEntity: 이미지 묶음 정보 (id, creationTime, reviewStatus)
+ImageClusterEntity: id, creationTime, reviewStatus.
 
-5. 주요 개발 히스토리 (Milestones Achieved)
+5. 주요 개발 히스토리 (Milestones)
 
-Milestone 1 ~ 3: (기존과 동일)
+Milestone 10: Smart Classification & Logic Upgrade (v5.9)
 
-Milestone 4 ~ 6: (기존과 동일)
+스마트 분류 (ML Kit): 추억 vs 문서.
 
-Milestone 7: Refactoring & UI/UX Overhaul (v4.2 수정)
+역광 감지 및 이미지 심폐소생(TFLite ESRGAN) 구현.
 
-UI/UX 개선: 설정 화면(MyBox 제거, 팁 추가), 구글 포토 가이드 추가, 알림 고도화(N개 묶음/M장 백업 리포트), 피드백(완료 Toast) 개선.
+감성 품질 강화 (칭찬 뱃지) 및 수익화(AdMob) 구현.
 
-안정성 강화: DB 트랜잭션 보장(NonCancellable), ClusteringWorker 자동 필터링(스크린샷 제외) 적용.
+UI 고도화: 추억 소환, 미니맵, 스마트 워터폴.
 
-Milestone 8: Screenshot Cleaner & UI Polish (v4.3 신규)
+Milestone 11: Semantic Intelligence & Home Evolution (v6.4)
 
-스크린샷 청소 기능 완성: 자동 감지, 일괄 삭제, 보관(Keep) 기능 구현 완료.
+자연어 검색 (MobileCLIP ONNX): 텍스트-이미지 벡터 매칭.
 
-UI 최적화: 스크린샷 화면(액션바/배너/투명뷰) 및 홈 화면(로고/슬로건/배지/통계 연동) 고도화.
+예술 점수 심사 (MUSIQ): 비중 50% 적용.
 
-로직 강화: 갤러리 쿼리 확장 및 DB 상태 기반 필터링 정교화.
+하이브리드 복원 엔진 (ESRGAN + GFPGAN).
 
-Milestone 9: UX Revolution & Logic Deep-dive (v4.7 완료)
+홈 UI 진화 (2.0): 2x2 그리드 카드, 타자기 효과.
 
-홈 화면 UI/UX 대개편: 상태 기반 카드 디자인(회색/활성), 버튼 재배치(핵심 액션), Pulse 애니메이션, 꿀Tip 섹션(우측 하단 정렬).
-
-리뷰 사용성 강화: '실패 사진 살리기'(터치 시 즉시 복구), 코치마크 강화, 버튼 하단 이동 및 동적 텍스트.
-
-데이터 로직 보완: '남은 정리 대상' 기준 갤러리 카운트, 기본 설정값 최적화('바로바로' 동기화), 이벤트 감지 로직 연동.
-
-백그라운드/클러스터링 고도화: 파이프라인 통합, 정교한 pHash, 눈 감음 필터 강화.
-
-무한 루프 리뷰 & 확대 보기 내비게이션: 리뷰 연속성 확보 및 신호등 UI 적용.
-
-광고 로직 안정화: 전면 광고 후 홈 복귀 버그 수정, 노출 빈도 조절(Frequency Capping) 구현.
-
-리포트 고도화 (v4.7+ 추가): '주월간 상세 리포트 팝업' 구현 (파이 차트, AI 효율성 지표).
-
-홈 UI 디테일 완성: 리포트 카드 세로형 레이아웃, 꿀Tip 섹션 레이아웃 개선.
-
-Milestone 10: Smart Classification & Logic Upgrade (v5.9 완료)
-
-스마트 분류 (ML Kit): 사진을 '추억'과 '문서'로 자동 분류하여 정밀 분석 대상 최적화.
-
-역광 감지 (BacklightingDetector): 얼굴/배경 밝기 비교 로직 구현 및 품질 게이트 적용 완료.
-
-이미지 심폐소생 (Image Restoration): TFLite 기반 ESRGAN 모델 연동, 실패 사진 복구(승격) 기능 구현 완료.
-
-감성 품질 강화 (Explainable AI): 베스트 선정 사유 칭찬 뱃지("보기 좋은 미소 😊") 구현 완료.
-
-수익화 구현 (AdMob): 띠 배너 및 전면 광고(가치 기반 노출) 연동 완료.
-
-UI 고도화: 추억 소환, 미니맵 UI 개선, 자동 충전 로직 구현, 스마트 워터폴 적용.
-
-6. 다음 목표 (Next Mission) - POST MVP (v6.3)
-
-(핵심 기능 및 수익화(AdMob), 미니맵 UI는 Milestone 10으로 이동 완료)
+6. 다음 목표 (Next Mission) - POST MVP (v6.4)
 
 1. 커뮤니티 및 운영 (Growth) - [Priority: High]
 
 자사 커뮤니티 홍보 (Rolling Banner):
 
-상태: 미구현 (베타 런칭 전 필수 작업)
+상태: 미구현 (베타 런칭 전 마지막 과제).
 
-계획: 설정 화면 최하단에 Firebase Remote Config를 연동하여 롤링 배너 구현. 베타 테스터 피드백 수집 및 자사 카페 유입 유도.
+계획: 설정 화면 최하단에 Firebase Remote Config를 연동하여 롤링 배너 구현. 베타 테스터 피드백 수집 및 카페 유입 유도.
 
-2. 차세대 AI 기술 로드맵 (Next-Gen Tech) - [Future Update]
+2. 미래 기술 (Future Tech) - [Long Term]
 
-복구 (Restoration): ESRGAN(TFLite) 한계 극복을 위해 GFPGAN(얼굴) + Real-ESRGAN(배경) 및 NCNN(Vulkan) 엔진 도입.
+사용자 취향 학습 (ML): 복구된 사진 데이터를 기반으로 개인화된 판정 기준 학습.
 
-이해 (Understanding): 자연어 검색("웃는 아이 찾아줘") 구현을 위한 MobileCLIP (ONNX) 및 ObjectBox (Vector DB) 도입.
-
-감성 (Aesthetics): 구도 및 분위기 정밀 평가를 위한 MUSIQ (TFLite) 및 표정 분석을 위한 MediaPipe Blendshapes 도입.
-
-구독 모델 (Subscription): 정식 런칭(v1.1) 이후 Google Play Billing 연동.
+구독 모델: 정식 런칭 이후 검토.
 
 7. 협업 원칙 (v3.7 - 신규 절차)
 
@@ -293,57 +224,20 @@ UI 고도화: 추억 소환, 미니맵 UI 개선, 자동 충전 로직 구현, �
 
 AS에이전트: Android Studio AI 어시턴트 (윈드서퍼 에이전트).
 
-7.1. AS에이전트 (Android Studio Agent)
+7.1. AS에이전트 (Android Studio Agent) 원칙
 
-총감독이 AS에이전트에게 지시할 때, AS에이전트가 준수해야 할 원칙
+기능 동결: 허락 없이 기존 기능/UI 수정 금지.
 
-원칙 1 (기능 동결): 총감독의 명확한 허락 없이는 기존에 성공적으로 작동하는 기능 및 UI는 절대 수정하지 않는다.
+선 계획, 후 작업: 변경 계획을 먼저 보고하고 승인(컨펌) 후 작업.
 
-원칙 2 (선 계획, 후 작업): 수정을 시작하기 전에, 변경 계획(Plan)을 먼저 총감독에게 제안하고 컨펌을 받는다. 컨펌이 완료된 후에만 실제 작업을 시작한다.
+결과 보고: PLAN.md 직접 수정 금지. 변경 사항은 텍스트로 요약 보고.
 
-원칙 3 (결과 보고 / 파일 수정 금지):
+Git 커밋 보고: 작업 완료 후 터미널 명령어(커밋 메시지 포함) 보고.
 
-AS에이전트는 plan.md를 포함한 어떤 기획 파일도 직접 수정할 수 없다.
+로그/필터: 긴 로그 요청 금지. 필요한 필터명만 제시.
 
-작업 완료 후, plan.md 반영이 필요한 성과가 생기면, 변경이 필요한 [수정 전(Before)], [수정 후(After)] 또는 **[추가 사항]**을 명확히 워딩하여 총감독에게 텍스트로 보고한다.
+7.2. 재미나이 (Gemini) 원칙
 
-원칙 4 (Git 커밋 보고):
+Plan.md 수정 절차: 변경 사항에 대한 '요약 보고' 제안 -> 총감독 컨펌 -> 캔버스 파일 수정.
 
-(AS에이전트는) 코드 작업 완료 후, 총감독이 커밋/푸시를 요청할 때 깃허브에 반영할 터미널 명령어를 텍스트로 보고한다.
-
-커밋 메시지는 "제목 1줄, 내용 2줄" 형식으로 작성한다.
-
-제공 형식:
-
-git add .
-git commit -m "커밋 메시지 제목 (1줄 요약)
-
-- 상세 내용 1
-- 상세 내용 2
-  "
-  git push origin main
-
-
-원칙 5 (로그 및 필터 요청) - v3.7 신규:
-
-AS에이전트는 총감독에게 com.bes2.app 같은 긴 로그를 요청하지 않는다.
-
-작업에 필요한 필터명이 있다면, 미리 총감독에게 마지막에 적어둔다.
-
-7.2. 재미나이 (Gemini) 및 캔버스 관리
-
-총감독이 이 캔버스에서 재미나이(PM/Gemini)와 'plan.md'를 관리할 때의 원칙
-
-원칙 1 (Plan.md 수정 절차) - v3.7 신규 절차:
-
-(재미나이는) [Before]/[After] 대신, 변경 사항에 대한 **'요약 보고'**를 채팅창에 제안한다.
-
-총감독이 해당 '요약 보고'를 **컨펌(승인)**하면, (재미나이는) 캔버스의 plan.md 파일을 직접 수정한다.
-
-(총감독은 캔버스에 시각적으로 표시되는 'diff/음영'를 통해 최종 변경을 확인할 수 있다.)
-
-원칙 2 (수동 반영):
-
-(재미나이는) plan.md 변경분에 대한 Git 명령어를 제공하지 않는다.
-
-최종 plan.md 파일의 반영 및 모든 Git 명령어 실행 (코드 변경분, plan.md 변경분 모두)은캔버스 밖(Android Studio)에서 총감독이 AS에이전트의 보고를 받아 직접 수동으로 수행한다.
+수동 반영: Git 명령어 제공하지 않음. 파일 반영은 총감독이 수행.

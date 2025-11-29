@@ -2,9 +2,12 @@ package com.bes2.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.bes2.background.worker.MemoryEventWorker
 import com.bes2.background.worker.PastPhotoAnalysisWorker
 import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ImageItemDao
@@ -30,7 +33,6 @@ data class ReportStats(
     val kept: Int = 0,
     val deleted: Int = 0
 ) {
-    // 100장 중 20장 건짐 -> 80장 정리 -> 400% 효율 (사용자 정의)
     val efficiency: Int
         get() = if (kept > 0) ((total - kept).toFloat() / kept * 100).toInt() else 0
 }
@@ -44,6 +46,7 @@ data class HomeUiState(
     val hasPendingReview: Boolean = false,
     val readyToCleanCount: Int = 0,
     val memoryEvent: DateGroup? = null,
+    val isMemoryPrepared: Boolean = false, // [NEW] Indicates if memory is analyzed
     val monthlyReport: ReportStats = ReportStats(),
     val yearlyReport: ReportStats = ReportStats()
 )
@@ -61,6 +64,7 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        sanitizeDatabase()
         loadDailyStats()
         loadGalleryCounts()
         loadMemoryEvent()
@@ -70,20 +74,71 @@ class HomeViewModel @Inject constructor(
         startBackgroundAnalysis()
     }
 
+    private fun sanitizeDatabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val documents = imageItemDao.getImageItemsByCategory("DOCUMENT")
+                val misclassified = documents.filter { 
+                    it.filePath.contains("DCIM", ignoreCase = true) || 
+                    it.filePath.contains("Camera", ignoreCase = true) 
+                }
+                
+                if (misclassified.isNotEmpty()) {
+                    misclassified.forEach { item ->
+                        val fixedItem = item.copy(
+                            category = "MEMORY",
+                            status = "NEW",
+                            clusterId = null
+                        )
+                        imageItemDao.updateImageItem(fixedItem)
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error during DB sanitization")
+            }
+        }
+    }
+
     private fun loadMemoryEvent() {
         viewModelScope.launch(Dispatchers.IO) {
-            // Find events with at least 20 photos
             val events = galleryRepository.findLargePhotoGroups(20)
             if (events.isNotEmpty()) {
-                // Pick the most recent one (or randomize)
-                // For now, let's pick the first one (most recent)
-                _uiState.update { it.copy(memoryEvent = events.first()) }
+                val bestEvent = events.first()
+                _uiState.update { it.copy(memoryEvent = bestEvent) }
+                
+                // [NEW] Trigger background analysis for this event
+                startMemoryAnalysis(bestEvent.date)
+            }
+        }
+    }
+    
+    private fun startMemoryAnalysis(date: String) {
+        val inputData = Data.Builder()
+            .putString(MemoryEventWorker.KEY_TARGET_DATE, date)
+            .build()
+            
+        val workRequest = OneTimeWorkRequestBuilder<MemoryEventWorker>()
+            .setInputData(inputData)
+            .build()
+            
+        workManager.enqueueUniqueWork(
+            MemoryEventWorker.WORK_NAME + "_$date",
+            ExistingWorkPolicy.KEEP, // Don't restart if already running for this date
+            workRequest
+        )
+        
+        // Monitor status
+        viewModelScope.launch {
+            workManager.getWorkInfoByIdFlow(workRequest.id).collect { workInfo ->
+                if (workInfo != null && workInfo.state == WorkInfo.State.SUCCEEDED) {
+                    _uiState.update { it.copy(isMemoryPrepared = true) }
+                }
             }
         }
     }
 
     private fun startBackgroundAnalysis() {
-        Timber.d("Triggering PastPhotoAnalysisWorker from HomeViewModel")
+        Timber.d("Triggering PastPhotoAnalysisWorker from HomeViewModel (Policy: KEEP)")
         val workRequest = OneTimeWorkRequestBuilder<PastPhotoAnalysisWorker>().build()
         workManager.enqueueUniqueWork(
             PastPhotoAnalysisWorker.WORK_NAME,
@@ -121,22 +176,16 @@ class HomeViewModel @Inject constructor(
             
             val unprocessedTotal = (totalCount - processedCount).coerceAtLeast(0)
 
-            // --- Update for Document/Screenshot Cleaning Count ---
             val allScreenshots = galleryRepository.getScreenshots()
             var uniqueSystemScreenshots = 0
             for (item in allScreenshots) {
                 val status = imageItemDao.getImageStatusByUri(item.uri.toString())
-                // If status is null, it means it's not in our DB yet -> Count it!
-                // If it IS in DB, it's either processed (KEPT/DELETED) or analyzed as DOCUMENT/MEMORY.
-                // If it's DOCUMENT, it will be counted by countUnprocessedImagesByCategory.
-                // If it's MEMORY, we don't want to count it here.
-                if (status == null) {
+                if (status == null || (status != "KEPT" && status != "DELETED")) {
                     uniqueSystemScreenshots++
                 }
             }
             
-            val docCount = imageItemDao.countUnprocessedImagesByCategory("DOCUMENT")
-            val totalCleaningCount = uniqueSystemScreenshots + docCount
+            val totalCleaningCount = uniqueSystemScreenshots
 
             _uiState.update { it.copy(
                 galleryTotalCount = unprocessedTotal,
@@ -185,24 +234,20 @@ class HomeViewModel @Inject constructor(
             val now = LocalDate.now()
             val processedStatuses = setOf("ANALYZED", "KEPT", "DELETED", "STATUS_REJECTED", "READY_TO_CLEAN")
 
-            // Monthly Stats
             val monthlyStats = homeRepository.getMonthlyStats(now.year, now.monthValue)
             var mTotal = 0
             var mKept = 0
             var mDeleted = 0
-
             monthlyStats.forEach {
                 if (it.status in processedStatuses) mTotal += it.count
                 if (it.status == "KEPT") mKept = it.count
                 if (it.status == "DELETED") mDeleted = it.count
             }
 
-            // Yearly Stats
             val yearlyStats = homeRepository.getYearlyStats(now.year)
             var yTotal = 0
             var yKept = 0
             var yDeleted = 0
-
             yearlyStats.forEach {
                 if (it.status in processedStatuses) yTotal += it.count
                 if (it.status == "KEPT") yKept = it.count
@@ -218,6 +263,6 @@ class HomeViewModel @Inject constructor(
 
     fun refreshGalleryCount() {
         loadGalleryCounts()
-        startBackgroundAnalysis() // Trigger background analysis to refill the pipeline
+        startBackgroundAnalysis()
     }
 }

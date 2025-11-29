@@ -10,19 +10,26 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -39,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,7 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.bes2.app.MainActivity
+import com.bes2.app.R
 import com.bes2.background.worker.PhotoAnalysisWorker
 import com.bes2.data.model.ImageItemEntity
 import com.google.android.gms.ads.AdError
@@ -62,7 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import timber.log.Timber
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReviewScreen(
     viewModel: ReviewViewModel,
@@ -71,23 +79,12 @@ fun ReviewScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Interstitial Ad State
     var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
-    
-    // Load Interstitial Ad
     LaunchedEffect(Unit) {
         val adRequest = AdRequest.Builder().build()
-        // REAL ID: Bes2_Interstitial_Complete
         InterstitialAd.load(context, "ca-app-pub-6474204369625572/5414444948", adRequest, object : InterstitialAdLoadCallback() {
-            override fun onAdFailedToLoad(adError: LoadAdError) {
-                Timber.e("Interstitial ad failed to load: ${adError.message}")
-                interstitialAd = null
-            }
-
-            override fun onAdLoaded(ad: InterstitialAd) {
-                Timber.d("Interstitial ad loaded")
-                interstitialAd = ad
-            }
+            override fun onAdFailedToLoad(adError: LoadAdError) { interstitialAd = null }
+            override fun onAdLoaded(ad: InterstitialAd) { interstitialAd = ad }
         })
     }
 
@@ -95,63 +92,27 @@ fun ReviewScreen(
         val ad = interstitialAd
         if (ad != null) {
             ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() {
-                    Timber.d("Ad dismissed fullscreen content.")
-                    interstitialAd = null
-                    onNavigateBack()
-                }
-
-                override fun onAdFailedToShowFullScreenContent(adError: AdError) {
-                    Timber.e("Ad failed to show fullscreen content.")
-                    interstitialAd = null
-                    onNavigateBack()
-                }
-
-                override fun onAdShowedFullScreenContent() {
-                    Timber.d("Ad showed fullscreen content.")
-                }
+                override fun onAdDismissedFullScreenContent() { onNavigateBack() }
+                override fun onAdFailedToShowFullScreenContent(adError: AdError) { onNavigateBack() }
             }
-            if (context is Activity) {
-                ad.show(context)
-            } else {
-                Timber.w("Context is not Activity, cannot show Interstitial")
-                onNavigateBack()
-            }
+            if (context is Activity) ad.show(context) else onNavigateBack()
         } else {
-            Timber.d("Interstitial ad not ready, navigating immediately")
             onNavigateBack()
         }
     }
 
     LaunchedEffect(key1 = viewModel.navigationEvent) {
         viewModel.navigationEvent.collectLatest { event ->
-            when (event) {
-                is NavigationEvent.NavigateToHome -> {
-                    val message = "${event.clusterCount}개 묶음 중 베스트 ${event.savedCount}장을 정리했습니다."
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                    
-                    if (event.showAd) {
-                        // If ad is required, wait and show ad
-                        delay(4000)
-                        showInterstitialAndNavigate()
-                    } else {
-                        // If not, just navigate after a short delay for toast
-                        delay(2000) 
-                        onNavigateBack()
-                    }
-                }
-                else -> {}
+            if (event is NavigationEvent.NavigateToHome) {
+                Toast.makeText(context, "${event.clusterCount}개 묶음 중 베스트 ${event.savedCount}장을 정리했습니다.", Toast.LENGTH_LONG).show()
+                if (event.showAd) { delay(4000); showInterstitialAndNavigate() } else { delay(2000); onNavigateBack() }
             }
         }
     }
 
     var zoomedImageState by remember { mutableStateOf<ZoomedImageState?>(null) }
-    
     val prefs = remember { context.getSharedPreferences("bes2_prefs", Context.MODE_PRIVATE) }
-    var showCoachMark by remember {
-        val showCount = prefs.getInt("coach_mark_show_count", 0)
-        mutableStateOf(showCount < 2)
-    }
+    var showCoachMark by remember { mutableStateOf(prefs.getInt("coach_mark_show_count", 0) < 2) }
 
     val deleteLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
@@ -160,13 +121,8 @@ fun ReviewScreen(
     }
 
     when (val state = uiState) {
-        is ReviewUiState.Loading -> {
-            LoadingState()
-        }
-        is ReviewUiState.NoClustersToReview -> {
-            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-            // Navigation handled by event
-        }
+        is ReviewUiState.Loading -> LoadingState()
+        is ReviewUiState.NoClustersToReview -> Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
         is ReviewUiState.Ready -> {
             state.pendingDeleteRequest?.let { urisToDelete ->
                 LaunchedEffect(urisToDelete) {
@@ -175,21 +131,64 @@ fun ReviewScreen(
                 }
             }
 
+            val pagerState = rememberPagerState(
+                initialPage = state.currentClusterIndex - 1,
+                pageCount = { state.totalClusterCount }
+            )
+
+            LaunchedEffect(pagerState.currentPage) {
+                if (state.currentClusterIndex - 1 != pagerState.currentPage) {
+                     if (pagerState.currentPage > state.currentClusterIndex - 1) viewModel.nextCluster()
+                     else viewModel.prevCluster()
+                }
+            }
+            
+            LaunchedEffect(state.currentClusterIndex) {
+                if (pagerState.currentPage != state.currentClusterIndex - 1) {
+                    pagerState.animateScrollToPage(state.currentClusterIndex - 1)
+                }
+            }
+
             Scaffold(
                 topBar = {
-                    // Compact TopAppBar
                     TopAppBar(
                         title = { 
-                            Text(
-                                "Bes2 AI 사진비서", // Changed Title
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            ) 
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_logo),
+                                    contentDescription = "App Logo",
+                                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "AI 사진비서", 
+                                    style = MaterialTheme.typography.titleMedium, 
+                                    fontWeight = FontWeight.Bold, 
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "${pagerState.currentPage + 1} / ${state.totalClusterCount}", 
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.DarkGray,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
                         },
-                        // Removed Actions (Minimap moved to body)
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                        modifier = Modifier.height(48.dp)
+                        modifier = Modifier.height(64.dp)
                     )
                 },
                 bottomBar = {
@@ -217,43 +216,39 @@ fun ReviewScreen(
                             Text(text = buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
 
-                        // Banner Ad
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding() 
-                                .height(60.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    AdView(ctx).apply {
-                                        setAdSize(AdSize.BANNER)
-                                        // REAL ID: Bes2_Banner_Review
-                                        adUnitId = "ca-app-pub-6474204369625572/7317843117"
-                                        loadAd(AdRequest.Builder().build())
-                                    }
+                        Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp), contentAlignment = Alignment.Center) {
+                            AndroidView(factory = { ctx ->
+                                AdView(ctx).apply {
+                                    setAdSize(AdSize.BANNER)
+                                    adUnitId = "ca-app-pub-6474204369625572/7317843117"
+                                    loadAd(AdRequest.Builder().build())
                                 }
-                            )
+                            })
                         }
                     }
                 }
             ) { padding ->
-                Box(modifier = Modifier.padding(padding)) {
-                    ReviewReadyState(
-                        state = state,
-                        onImageClick = { image -> viewModel.selectImage(image) },
-                        onImageLongPress = { sectionIndex, index ->
-                            val best = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
-                            zoomedImageState = ZoomedImageState(
-                                bestList = best,
-                                otherList = state.otherImages,
-                                rejectedList = state.rejectedImages,
-                                initialSection = sectionIndex,
-                                initialIndex = index
-                            )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .padding(padding)
+                        .fillMaxSize(),
+                    userScrollEnabled = true
+                ) { page ->
+                    if (page == state.currentClusterIndex - 1) {
+                        ReviewReadyState(
+                            state = state,
+                            onImageClick = { image -> viewModel.selectImage(image) },
+                            onImageLongPress = { sectionIndex, index ->
+                                val best = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
+                                zoomedImageState = ZoomedImageState(best, state.otherImages, state.rejectedImages, sectionIndex, index)
+                            }
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
-                    )
+                    }
                 }
             }
 
@@ -261,16 +256,13 @@ fun ReviewScreen(
                 ZoomedImageDialogV2(
                     state = it,
                     onDismiss = { zoomedImageState = null },
-                    onRestoreClick = { image -> 
-                        viewModel.restoreImage(image)
-                        zoomedImageState = null // Dismiss after restore to refresh view
-                    }
+                    onRestoreClick = { image -> viewModel.restoreImage(image); zoomedImageState = null }
                 )
             }
 
             if (showCoachMark && (state.selectedBestImage != null || state.otherImages.isNotEmpty())) {
                 CoachMark(
-                    text = "사진을 길게 눌러 크게 확인하고,\n실패한 사진은 탭 하여 되살리세요!",
+                    text = "사진을 길게 눌러 크게 확인하고,\n실패한 사진은 탭 하여 되살리세요!\n(좌우로 밀어서 다른 사진도 확인해보세요)",
                     onDismiss = {
                         val currentCount = prefs.getInt("coach_mark_show_count", 0)
                         prefs.edit().putInt("coach_mark_show_count", currentCount + 1).apply()
@@ -286,17 +278,13 @@ data class ZoomedImageState(
     val bestList: List<ImageItemEntity>,
     val otherList: List<ImageItemEntity>,
     val rejectedList: List<ImageItemEntity>,
-    val initialSection: Int, // 0, 1, 2
+    val initialSection: Int,
     val initialIndex: Int
 )
 
 @Composable
 fun LoadingState() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         CircularProgressIndicator()
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = "검토할 사진을 찾고 있습니다...")
@@ -304,8 +292,7 @@ fun LoadingState() {
 }
 
 @Composable
-fun NoClustersState() {
-}
+fun NoClustersState() {}
 
 @Composable
 fun ReviewReadyState(
@@ -314,120 +301,36 @@ fun ReviewReadyState(
     onImageLongPress: (Int, Int) -> Unit 
 ) {
     val bestImages = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
-
-    // Colors
-    val bestColor = Color(0xFF4CAF50) // Green
-    val otherColor = Color(0xFFFFC107) // Amber
-    val rejectedColor = Color(0xFFF44336) // Red
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp) // Keep horizontal padding
-    ) {
-        // Minimap moved here
-        ClusterMinimap(
-            totalCount = state.totalClusterCount,
-            currentIndex = state.currentClusterIndex
-        )
-        
-        Spacer(modifier = Modifier.height(4.dp)) // Small spacer
-
-        Text("베스트 2장", style = MaterialTheme.typography.titleMedium, color = bestColor, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(190.dp), // Reduced height (approx 5%)
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("베스트 2장", style = MaterialTheme.typography.titleMedium, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+        Row(modifier = Modifier.fillMaxWidth().height(190.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             bestImages.getOrNull(0)?.let { image ->
-                ImageWithInfo(
-                    image = image,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
-                        .pointerInput(image, onImageLongPress) { // Added onImageLongPress as key
-                            detectTapGestures(
-                                onTap = { _ -> onImageClick(image) },
-                                onLongPress = { _ -> onImageLongPress(0, 0) }
-                            )
-                        }
-                )
+                ImageWithInfo(image = image, modifier = Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(8.dp)).pointerInput(image) { detectTapGestures(onTap = { onImageClick(image) }, onLongPress = { onImageLongPress(0, 0) }) })
             }
             bestImages.getOrNull(1)?.let { image ->
-                ImageWithInfo(
-                    image = image,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
-                        .pointerInput(image, onImageLongPress) { // Added onImageLongPress as key
-                            detectTapGestures(
-                                onTap = { _ -> onImageClick(image) },
-                                onLongPress = { _ -> onImageLongPress(0, 1) }
-                            )
-                        }
-                )
+                ImageWithInfo(image = image, modifier = Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(8.dp)).pointerInput(image) { detectTapGestures(onTap = { onImageClick(image) }, onLongPress = { onImageLongPress(0, 1) }) })
             } ?: Box(modifier = Modifier.weight(1f).fillMaxSize())
         }
-
-        Spacer(modifier = Modifier.height(16.dp)) // Reduced spacing
-
-        // Other Images Title with Count
+        Spacer(modifier = Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-            Text("나머지 사진", style = MaterialTheme.typography.titleMedium, color = otherColor, fontWeight = FontWeight.Bold)
+            Text("나머지 사진", style = MaterialTheme.typography.titleMedium, color = Color(0xFFFFC107), fontWeight = FontWeight.Bold)
             Text(" (${state.otherImages.size}장)", style = MaterialTheme.typography.titleMedium, color = Color.Black, fontWeight = FontWeight.Bold)
         }
-        
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(state.otherImages) { index, image ->
-                ImageWithInfo(
-                    image = image,
-                    modifier = Modifier
-                        .height(80.dp)
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .pointerInput(image, onImageLongPress) { // Added onImageLongPress as key
-                            detectTapGestures(
-                                onTap = { _ -> onImageClick(image) },
-                                onLongPress = { _ -> onImageLongPress(1, index) }
-                            )
-                        }
-                )
+                ImageWithInfo(image = image, modifier = Modifier.height(80.dp).aspectRatio(1f).clip(RoundedCornerShape(8.dp)).pointerInput(image) { detectTapGestures(onTap = { onImageClick(image) }, onLongPress = { onImageLongPress(1, index) }) })
             }
         }
-
         if (state.rejectedImages.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp)) // Reduced spacing
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(12.dp)) // Reduced spacing
-
-            // Rejected Images Title with Count
+            Spacer(modifier = Modifier.height(12.dp)); HorizontalDivider(); Spacer(modifier = Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                Text("실패한 사진", style = MaterialTheme.typography.titleMedium, color = rejectedColor, fontWeight = FontWeight.Bold)
+                Text("실패한 사진", style = MaterialTheme.typography.titleMedium, color = Color(0xFFF44336), fontWeight = FontWeight.Bold)
                 Text(" (${state.rejectedImages.size}장)", style = MaterialTheme.typography.titleMedium, color = Color.Black, fontWeight = FontWeight.Bold)
             }
-            
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 itemsIndexed(state.rejectedImages) { index, image ->
-                    ImageWithInfo(
-                        image = image,
-                        modifier = Modifier
-                            .height(100.dp) // Increased height from 80.dp
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .pointerInput(image, onImageLongPress) { // Added onImageLongPress as key
-                                detectTapGestures(
-                                    onTap = { _ -> onImageClick(image) },
-                                    onLongPress = { _ -> onImageLongPress(2, index) }
-                                )
-                            }
-                    )
+                    ImageWithInfo(image = image, modifier = Modifier.height(100.dp).aspectRatio(1f).clip(RoundedCornerShape(8.dp)).pointerInput(image) { detectTapGestures(onTap = { onImageClick(image) }, onLongPress = { onImageLongPress(2, index) }) })
                 }
             }
         }
@@ -435,86 +338,27 @@ fun ReviewReadyState(
 }
 
 @Composable
-fun ClusterMinimap(
-    totalCount: Int,
-    currentIndex: Int,
-    modifier: Modifier = Modifier
-) {
-    // Always show, even if totalCount is 1
-    val count = if (totalCount <= 0) 1 else totalCount
-    val current = if (currentIndex <= 0) 1 else currentIndex
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "$current / $count",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-fun ImageWithInfo(
-    image: ImageItemEntity,
-    modifier: Modifier = Modifier
-) {
+fun ImageWithInfo(image: ImageItemEntity, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
-        AsyncImage(
-            model = image.uri,
-            contentDescription = "Image ${image.id}",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
+        AsyncImage(model = image.uri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         val infoText = if (image.status == "STATUS_REJECTED") {
-            when {
-                image.areEyesClosed == true -> "눈 감김"
-                image.blurScore?.let { it < PhotoAnalysisWorker.BLUR_THRESHOLD } == true -> "흐릿함"
-                else -> "품질 저하"
-            }
+            if (image.areEyesClosed == true) "눈 감김" else if ((image.blurScore ?: 100f) < PhotoAnalysisWorker.BLUR_THRESHOLD) "흐릿함" else "품질 저하"
         } else {
-            val nimaScore = (image.nimaScore ?: 0f) * 10
-            val smileProb = image.smilingProbability ?: 0f
-            val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
-            val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
-            "${displayScore}점"
+            val score = ((image.nimaScore ?: 0f) * 10 + (if ((image.smilingProbability ?: 0f) < 0.1f) -10f else (image.smilingProbability ?: 0f) * 30f)).toInt().coerceAtLeast(1)
+            "${score}점"
         }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(4.dp)
-                .background(Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text = infoText,
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+        Box(modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp).background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp)).padding(4.dp, 2.dp)) {
+            Text(infoText, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
-fun ZoomedImageDialogV2(
-    state: ZoomedImageState,
-    onDismiss: () -> Unit,
-    onRestoreClick: ((ImageItemEntity) -> Unit)? = null // Added Callback
-) {
+fun ZoomedImageDialogV2(state: ZoomedImageState, onDismiss: () -> Unit, onRestoreClick: ((ImageItemEntity) -> Unit)? = null) {
     Dialog(onDismissRequest = onDismiss) {
         var currentSection by remember { mutableStateOf(state.initialSection) }
         var currentIndex by remember { mutableStateOf(state.initialIndex) }
 
-        // Function to find valid next section
         fun getNextSection(start: Int): Int? {
             for (i in start + 1..2) {
                 val list = when(i) { 0 -> state.bestList; 1 -> state.otherList; 2 -> state.rejectedList; else -> emptyList() }
@@ -523,7 +367,6 @@ fun ZoomedImageDialogV2(
             return null
         }
 
-        // Function to find valid prev section
         fun getPrevSection(start: Int): Int? {
             for (i in start - 1 downTo 0) {
                 val list = when(i) { 0 -> state.bestList; 1 -> state.otherList; 2 -> state.rejectedList; else -> emptyList() }
@@ -607,13 +450,7 @@ fun ZoomedImageDialogV2(
                     val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)
                     "${displayScore}점"
                 }
-
-                // Praise Text (Section 0)
-                val praiseText = if (currentSection == 0) {
-                    getPraiseText(currentImage)
-                } else null
                 
-                // Restore Button Logic (Section 2, Eyes Open)
                 val showRestoreButton = currentSection == 2 && 
                                         (currentImage.areEyesClosed == false || currentImage.areEyesClosed == null) && 
                                         onRestoreClick != null
@@ -624,31 +461,10 @@ fun ZoomedImageDialogV2(
                         .padding(bottom = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Praise Text
-                    if (praiseText != null) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFFFFC107).copy(alpha = 0.9f), shape = RoundedCornerShape(12.dp))
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = praiseText,
-                                color = Color.Black,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    
-                    // Restore Button
                     if (showRestoreButton) {
                         Button(
                             onClick = { onRestoreClick?.invoke(currentImage) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = Color.White
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.White),
                             modifier = Modifier.padding(bottom = 8.dp)
                         ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -657,7 +473,6 @@ fun ZoomedImageDialogV2(
                         }
                     }
 
-                    // Score/Status
                     Box(
                         modifier = Modifier
                             .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(8.dp))
@@ -697,12 +512,7 @@ fun ZoomedImageDialogV2(
                     enabled = !isAtStart,
                     modifier = Modifier.align(Alignment.CenterStart).padding(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
-                        contentDescription = "Prev",
-                        tint = if (!isAtStart) Color.White else Color.White.copy(alpha=0.2f),
-                        modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp)
-                    )
+                    Icon(Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription = "Prev", tint = if (!isAtStart) Color.White else Color.White.copy(alpha=0.2f), modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp))
                 }
                 
                 IconButton(
@@ -710,12 +520,7 @@ fun ZoomedImageDialogV2(
                     enabled = !isAtEnd,
                     modifier = Modifier.align(Alignment.CenterEnd).padding(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                        contentDescription = "Next",
-                        tint = if (!isAtEnd) Color.White else Color.White.copy(alpha=0.2f),
-                        modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp)
-                    )
+                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = "Next", tint = if (!isAtEnd) Color.White else Color.White.copy(alpha=0.2f), modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(8.dp))
                 }
                 
                 val prevSectionIndex = getPrevSection(currentSection)
@@ -723,35 +528,19 @@ fun ZoomedImageDialogV2(
 
                 if (prevSectionIndex != null) {
                     IconButton(
-                        onClick = { 
-                            currentSection = prevSectionIndex
-                            currentIndex = 0 
-                        },
+                        onClick = { currentSection = prevSectionIndex; currentIndex = 0 },
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "Prev Section",
-                            tint = Color.White,
-                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(4.dp)
-                        )
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Prev Section", tint = Color.White, modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(4.dp))
                     }
                 }
 
                 if (nextSectionIndex != null) {
                     IconButton(
-                        onClick = { 
-                            currentSection = nextSectionIndex
-                            currentIndex = 0
-                        },
+                        onClick = { currentSection = nextSectionIndex; currentIndex = 0 },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Next Section",
-                            tint = Color.White,
-                            modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(4.dp)
-                        )
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next Section", tint = Color.White, modifier = Modifier.size(48.dp).background(Color.Black.copy(alpha=0.3f), CircleShape).padding(4.dp))
                     }
                 }
             }
@@ -759,19 +548,7 @@ fun ZoomedImageDialogV2(
     }
 }
 
-fun getPraiseText(image: ImageItemEntity): String {
-    val smileProb = image.smilingProbability ?: 0f
-    val eyesOpen = image.areEyesClosed == false
-    val nimaScore = (image.nimaScore ?: 0f) * 10
-
-    return when {
-        smileProb >= 0.8f -> "보기만 해도 기분 좋아지는 미소 😊"
-        smileProb >= 0.5f && nimaScore >= 60f -> "자연스러운 표정과 멋진 분위기 ✨"
-        nimaScore >= 70f -> "전문가 뺨치는 완벽한 구도 🎨"
-        eyesOpen -> "생생하게 살아있는 눈빛 👁️"
-        else -> "균형 잡힌 베스트 컷 👍"
-    }
-}
+// Deleted getPraiseText
 
 @Composable
 fun CoachMark(text: String, onDismiss: () -> Unit) {

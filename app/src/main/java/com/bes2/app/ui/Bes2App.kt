@@ -17,7 +17,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,10 +28,8 @@ import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TipsAndUpdates
 import androidx.compose.material3.*
@@ -41,11 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -67,13 +61,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.bes2.app.R
-import com.bes2.app.ui.component.TypewriterText
 import com.bes2.app.ui.home.HomeUiState
 import com.bes2.app.ui.home.HomeViewModel
-import com.bes2.app.ui.home.ReportStats
 import com.bes2.app.ui.review.ReviewScreen
 import com.bes2.app.ui.screenshot.ScreenshotScreen
-import com.bes2.app.ui.search.SearchScreen
 import com.bes2.app.ui.settings.SettingsScreen
 import java.time.LocalDate
 
@@ -84,14 +75,12 @@ import java.time.LocalDate
 fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
     val context = LocalContext.current
 
-    // Define storage permission based on Android version
     val storagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_IMAGES
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    // State for essential permissions
     var hasCameraPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
@@ -150,7 +139,6 @@ private fun AppNavigation(
                 onStartAnalysisAndExit = onStartAnalysisAndExit,
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") },
-                onNavigateToSearch = { navController.navigate("search") }, // New Navigation
                 onNavigateToReview = { date ->
                     if (date != null) {
                         navController.navigate("review?date=$date")
@@ -184,13 +172,6 @@ private fun AppNavigation(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        // New Route
-        composable("search") {
-            SearchScreen(
-                viewModel = hiltViewModel(),
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
     }
 }
 
@@ -200,7 +181,6 @@ private fun HomeScreen(
     onStartAnalysisAndExit: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToScreenshotClean: () -> Unit,
-    onNavigateToSearch: () -> Unit, // New callback
     onNavigateToReview: (String?) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -252,11 +232,10 @@ private fun HomeScreen(
         context.startActivity(browserIntent)
     }
 
-    // Define shared Pulse Animation
     val infiniteTransition = rememberInfiniteTransition(label = "Pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.03f, // Slightly smaller scale for cards to avoid layout jump
+        targetValue = 1.03f, 
         animationSpec = infiniteRepeatable(
             animation = tween(1000),
             repeatMode = RepeatMode.Reverse
@@ -265,7 +244,6 @@ private fun HomeScreen(
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Settings Button (Top Right)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -298,7 +276,6 @@ private fun HomeScreen(
         ) {
             Spacer(modifier = Modifier.height(48.dp))
 
-            // --- APP LOGO & SLOGAN ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -311,8 +288,12 @@ private fun HomeScreen(
                         .size(100.dp) 
                         .clip(RoundedCornerShape(16.dp))
                 )
+                
                 Spacer(modifier = Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.Center) {
+                
+                Column(
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(
                         text = "AI 사진비서",
                         style = MaterialTheme.typography.headlineSmall, 
@@ -320,6 +301,7 @@ private fun HomeScreen(
                         lineHeight = 28.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    
                     Text(
                         text = "복잡한 갤러리,\nBest 2장으로 완성",
                         style = MaterialTheme.typography.titleMedium, 
@@ -332,191 +314,293 @@ private fun HomeScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // --- NEW 2x2 GRID UI ---
-            // Row 1: Report (Top Left) & Search (Top Right)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // 1. Report Card (Smaller Version)
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(140.dp) // Fixed height
-                        .clickable { showReportDialog = true },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.SpaceBetween,
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = "오늘 정리",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Column {
-                            Text(
-                                text = "${uiState.dailyDeleted}장",
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                            Text(
-                                text = "삭제 완료",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Report",
-                            modifier = Modifier.align(Alignment.End).size(16.dp)
-                        )
-                    }
-                }
-
-                // 2. AI Search Card (New)
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer, // Distinct color
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(140.dp)
-                        .clickable { onNavigateToSearch() },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "AI 검색",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        // Typewriter Effect
-                        val searchExamples = listOf("\"웃는 아이\"", "\"맛있는 파스타\"", "\"푸른 바다\"", "\"생일 파티\"")
-                        TypewriterText(
-                            texts = searchExamples,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-                        )
-                        
-                         Text(
-                            text = "자연어로 찾기",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Search",
-                            modifier = Modifier.align(Alignment.End).size(16.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Row 2: Gallery Diet (Bottom Left) & Screenshots (Bottom Right)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 3. Gallery Diet
-                val isReadyToClean = uiState.readyToCleanCount > 0
-                val dietCardColor = if (isReadyToClean) Color(0xFFFFCC80) else MaterialTheme.colorScheme.surfaceVariant // Orange pastel if ready
-                val dietContentColor = if (isReadyToClean) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
-                
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = dietCardColor, contentColor = dietContentColor),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(120.dp)
-                        .scale(if (isReadyToClean) pulseScale else 1f)
-                        .clickable(enabled = isReadyToClean) {
-                             if (isReadyToClean) onNavigateToReview(null)
-                        },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                     Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("갤러리 정리", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        if (isReadyToClean) {
-                            Text("${uiState.readyToCleanCount}장", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("대기 중", style = MaterialTheme.typography.bodySmall)
-                        } else {
-                            Text("준비 중...", style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-
-                // 4. Screenshot Cleaner
-                val hasScreenshots = uiState.screenshotCount > 0
-                val screenshotCardColor = if (hasScreenshots) Color(0xFFEF9A9A) else MaterialTheme.colorScheme.surfaceVariant // Red pastel
-                val screenshotContentColor = if (hasScreenshots) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = screenshotCardColor, contentColor = screenshotContentColor),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(120.dp)
-                        .scale(if (hasScreenshots) pulseScale else 1f)
-                        .clickable { onNavigateToScreenshotClean() },
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("문서/캡처", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        Text("${uiState.screenshotCount}장", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text(if (hasScreenshots) "정리하기" else "없음", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-
-            // --- MEMORY EVENT CARD (Full Width below Grid) ---
-            Spacer(modifier = Modifier.height(12.dp))
-            val memoryEvent = uiState.memoryEvent
-            if (memoryEvent != null) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary, contentColor = MaterialTheme.colorScheme.onSecondary),
-                    modifier = Modifier
+                        .padding(16.dp)
                         .fillMaxWidth()
-                        .clickable { onNavigateToReview(memoryEvent.date) },
-                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("🎉  ${memoryEvent.date}의 추억 (${memoryEvent.count}장) 확인하기", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "오늘의 정리 리포트",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showReportDialog = true }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "📊 상세 리포트",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Show Report",
+                                modifier = Modifier.size(14.dp),
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "${uiState.dailyTotal}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text(text = "촬영", style = MaterialTheme.typography.labelSmall)
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(32.dp)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                                .align(Alignment.CenterVertically)
+                        )
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${uiState.dailyKept}", 
+                                style = MaterialTheme.typography.headlineMedium, 
+                                fontWeight = FontWeight.Bold, 
+                                color = Color(0xFFFF7043)
+                            )
+                            Text(text = "저장", style = MaterialTheme.typography.labelSmall)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(32.dp)
+                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                                .align(Alignment.CenterVertically)
+                        )
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${uiState.dailyDeleted}", 
+                                style = MaterialTheme.typography.headlineMedium, 
+                                fontWeight = FontWeight.Bold 
+                            )
+                            Text(text = "삭제", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
-                 Spacer(modifier = Modifier.height(12.dp))
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
             
+            val memoryEvent = uiState.memoryEvent
+            val isMemoryActive = memoryEvent != null
+            val eventCardColor = if (isMemoryActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant
+            val eventContentColor = if (isMemoryActive) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+            val eventFontWeight = if (isMemoryActive) FontWeight.Bold else FontWeight.Normal
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = eventCardColor,
+                    contentColor = eventContentColor
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scale(if (isMemoryActive) pulseScale else 1f)
+                    .clickable(enabled = isMemoryActive) {
+                        if (memoryEvent != null) {
+                            onNavigateToReview(memoryEvent.date)
+                        }
+                    },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (memoryEvent != null) {
+                        AsyncImage(
+                            model = memoryEvent.representativeUri,
+                            contentDescription = "Memory Thumbnail",
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "추억 소환 🎉",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = eventFontWeight,
+                                color = if (isMemoryActive) Color.White else Color.Unspecified
+                            )
+                            Text(
+                                text = "${memoryEvent.date}의 추억 (${memoryEvent.count}장) 정리하기",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = eventFontWeight,
+                                color = if (isMemoryActive) Color.White else Color.Unspecified
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Memory",
+                            modifier = Modifier.size(24.dp),
+                            tint = if (isMemoryActive) Color.White.copy(alpha = 0.8f) else LocalContentColor.current
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "숨어있는 추억을 찾는 중...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = eventFontWeight,
+                            color = if (isMemoryActive) Color.White.copy(alpha = 0.8f) else LocalContentColor.current
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val isReadyToClean = uiState.readyToCleanCount > 0
+            val dietCardColor = if (isReadyToClean) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            val dietContentColor = if (isReadyToClean) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            val dietFontWeight = if (isReadyToClean) FontWeight.Bold else FontWeight.Normal
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = dietCardColor,
+                    contentColor = dietContentColor
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scale(if (isReadyToClean) pulseScale else 1f)
+                    .clickable(enabled = isReadyToClean) {
+                        if (isReadyToClean) {
+                            onNavigateToReview(null)
+                        }
+                    },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isReadyToClean) Icons.Default.CleaningServices else Icons.Default.PhotoLibrary,
+                            contentDescription = "Gallery Diet",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "갤러리 다이어트",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = dietFontWeight
+                            )
+                            if (isReadyToClean) {
+                                Text(
+                                    text = "전체 ${uiState.galleryTotalCount}장 중 ${uiState.readyToCleanCount}장 준비됨",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = dietFontWeight
+                                )
+                            } else {
+                                Text(
+                                    text = "현재 갤러리 ${uiState.galleryTotalCount}장", 
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    if (isReadyToClean) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Go"
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val hasScreenshots = uiState.screenshotCount > 0
+            val screenshotCardColor = if (hasScreenshots) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant
+            val screenshotContentColor = if (hasScreenshots) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            val screenshotFontWeight = if (hasScreenshots) FontWeight.Bold else FontWeight.Normal
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = screenshotCardColor,
+                    contentColor = screenshotContentColor
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scale(if (hasScreenshots) pulseScale else 1f)
+                    .clickable { onNavigateToScreenshotClean() },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clean Screenshots",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "스크린샷 정리",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = screenshotFontWeight
+                            )
+                            Text(
+                                text = if (hasScreenshots) "정리할 사진 ${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 사진 0장", 
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    if (hasScreenshots) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Go"
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Main Action Button (Bottom)
             val hasPending = uiState.hasPendingReview
+            
             OutlinedButton(
                 onClick = {
                     if (hasPending) {
@@ -525,12 +609,16 @@ private fun HomeScreen(
                         onStartAnalysisAndExit()
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .scale(if (hasPending) pulseScale else 1f),
                 border = BorderStroke(1.dp, Color.Blue),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Blue)
             ) {
                 Text(
-                    text = if (hasPending) "분석된 사진묶음 정리하기" else "정리 끝! 이제 사진 찍으러 가자",
+                    text = if (hasPending) "분석된 사진묶음 정리하기" 
+                           else "정리 끝! 이제 사진 찍으러 가자",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -538,7 +626,6 @@ private fun HomeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- BES2 TIPS SECTION ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -546,7 +633,9 @@ private fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    modifier = Modifier.weight(1f).height(IntrinsicSize.Max),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(IntrinsicSize.Max),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -558,6 +647,7 @@ private fun HomeScreen(
                         lineHeight = 32.sp
                     )
                 }
+
                 Column(
                     modifier = Modifier.width(IntrinsicSize.Max),
                     horizontalAlignment = Alignment.End
@@ -572,7 +662,9 @@ private fun HomeScreen(
                         Text("Bes2 100% 활용법", fontSize = 14.sp)
                         Spacer(modifier = Modifier.weight(1f))
                     }
+                    
                     Spacer(modifier = Modifier.height(8.dp))
+
                     OutlinedButton(
                         onClick = { showTipsDialog = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -585,12 +677,40 @@ private fun HomeScreen(
                     }
                 }
             }
+            
             Spacer(modifier = Modifier.height(32.dp))
         }
         
-        if (showGuideDialog) GuideDialog(onDismiss = { showGuideDialog = false })
-        if (showTipsDialog) TipsSelectionDialog(onDismiss = { showTipsDialog = false }, onCloudTip = { showTipsDialog = false; launchAIWithPrompt("...") }, onPcTip = { showTipsDialog = false; launchAIWithPrompt("...") })
-        if (showReportDialog) ReportDialog(uiState = uiState, onDismiss = { showReportDialog = false })
+        if (showGuideDialog) {
+            GuideDialog(onDismiss = { showGuideDialog = false })
+        }
+        
+        if (showTipsDialog) {
+            TipsSelectionDialog(
+                onDismiss = { showTipsDialog = false },
+                onCloudTip = {
+                    showTipsDialog = false
+                    val promptText = "안녕! 나는 'Bes2(베스트투)'라는 앱으로 폰 사진을 정리하고 있어.\n" +
+                            "나는 구글 포토 말고 **'네이버 마이박스(MyBox)'**나 다른 클라우드를 주력으로 사용해.\n\n" +
+                            "내 폰의 모든 잡동사니 사진이 클라우드에 자동으로 다 올라가서 용량을 차지하는 게 싫어.\n" +
+                            "Bes2로 '베스트 컷'만 남긴 뒤에 깔끔하게 백업하고 싶은데, **'평소엔 자동 동기화를 꺼두고, 정리가 끝났을 때만 수동으로 백업하는 노하우'**를 단계별로 아주 쉽게 알려줘.\n\n" +
+                            "(팁: 갤러리 정리 후 '수동 올리기'나 '동기화 잠시 켜기' 같은 방법 위주로 설명해 줘)"
+                    launchAIWithPrompt(promptText)
+                },
+                onPcTip = {
+                    showTipsDialog = false
+                    val promptText = "나는 지금 휴대폰 사진을 PC로 옮겨서 정리하려고 해. 수천 장의 사진을 효율적으로 분류하고, 중복되거나 흔들린 사진을 빠르게 골라내는 기준과 팁을 알려줘. 그리고 날짜별/주제별 폴더 구조 추천해줘."
+                    launchAIWithPrompt(promptText)
+                }
+            )
+        }
+
+        if (showReportDialog) {
+            ReportDialog(
+                uiState = uiState,
+                onDismiss = { showReportDialog = false }
+            )
+        }
     }
 }
 
@@ -743,7 +863,7 @@ fun ReportDialog(
                 // Stats Chart (Simple Pie Chart)
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(160.dp) // Increased size
+                    modifier = Modifier.size(160.dp)
                 ) {
                     if (currentStats.total > 0) {
                         Canvas(modifier = Modifier.size(140.dp)) {
