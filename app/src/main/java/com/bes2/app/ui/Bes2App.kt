@@ -411,7 +411,7 @@ private fun HomeScreen(
             Spacer(modifier = Modifier.height(24.dp))
             
             val memoryEvent = uiState.memoryEvent
-            val isMemoryActive = memoryEvent != null
+            val isMemoryActive = memoryEvent != null && uiState.isMemoryPrepared
             val eventCardColor = if (isMemoryActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant
             val eventContentColor = if (isMemoryActive) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
             val eventFontWeight = if (isMemoryActive) FontWeight.Bold else FontWeight.Normal
@@ -437,7 +437,8 @@ private fun HomeScreen(
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (memoryEvent != null) {
+                    // [UI FIX] Use 'isMemoryActive' to decide what to show
+                    if (isMemoryActive && memoryEvent != null) {
                         AsyncImage(
                             model = memoryEvent.representativeUri,
                             contentDescription = "Memory Thumbnail",
@@ -452,28 +453,29 @@ private fun HomeScreen(
                                 text = "추억 소환 🎉",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = eventFontWeight,
-                                color = if (isMemoryActive) Color.White else Color.Unspecified
+                                color = Color.White
                             )
                             Text(
                                 text = "${memoryEvent.date}의 추억 (${memoryEvent.count}장) 정리하기",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = eventFontWeight,
-                                color = if (isMemoryActive) Color.White else Color.Unspecified
+                                color = Color.White
                             )
                         }
                     } else {
+                        // Show "Analyzing" state
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = "Memory",
                             modifier = Modifier.size(24.dp),
-                            tint = if (isMemoryActive) Color.White.copy(alpha = 0.8f) else LocalContentColor.current
+                            tint = LocalContentColor.current.copy(alpha = 0.5f)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "숨어있는 추억을 찾는 중...",
+                            text = if (memoryEvent != null) "추억을 분석하고 있습니다..." else "숨어있는 추억을 찾는 중...",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = eventFontWeight,
-                            color = if (isMemoryActive) Color.White.copy(alpha = 0.8f) else LocalContentColor.current
+                            color = LocalContentColor.current.copy(alpha = 0.5f)
                         )
                     }
                 }
