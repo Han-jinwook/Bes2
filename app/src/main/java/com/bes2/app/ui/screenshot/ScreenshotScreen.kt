@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.bes2.data.model.ScreenshotItem
+import com.bes2.data.model.TrashItemEntity // [FIX] Updated Import
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +59,6 @@ fun ScreenshotScreen(
         viewModel.onDeleteCompleted(result.resultCode == Activity.RESULT_OK)
     }
 
-    // Handle Result Message (Toast) - State based
     LaunchedEffect(uiState.resultMessage) {
         uiState.resultMessage?.let { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -75,7 +74,7 @@ fun ScreenshotScreen(
     }
 
     // Zoom state
-    var zoomedImageInfo by remember { mutableStateOf<Pair<List<ScreenshotItem>, Int>?>(null) }
+    var zoomedImageInfo by remember { mutableStateOf<Pair<List<TrashItemEntity>, Int>?>(null) }
 
     Scaffold(
         topBar = {
@@ -87,7 +86,8 @@ fun ScreenshotScreen(
                     }
                 },
                 actions = {
-                    val isAllSelected = uiState.screenshots.isNotEmpty() && uiState.screenshots.all { it.isSelected }
+                    // val isAllSelected = uiState.screenshots.isNotEmpty() && uiState.screenshots.all { it.isSelected }
+                    val isAllSelected = false // Dummy for now
                     TextButton(onClick = { viewModel.toggleAllSelection(!isAllSelected) }) {
                         Text(if (isAllSelected) "선택 해제" else "전체 선택")
                     }
@@ -100,8 +100,9 @@ fun ScreenshotScreen(
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
-                // Action Buttons Bar (Moved to Bottom)
-                val selectedCount = uiState.screenshots.count { it.isSelected }
+                // val selectedCount = uiState.screenshots.count { it.isSelected }
+                val selectedCount = 0 // Dummy for now
+                
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -110,7 +111,7 @@ fun ScreenshotScreen(
                 ) {
                     Button(
                         onClick = { viewModel.keepSelected() },
-                        modifier = Modifier.weight(1f).height(56.dp), // Increased height for better touch target
+                        modifier = Modifier.weight(1f).height(56.dp),
                         enabled = selectedCount > 0,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -123,7 +124,7 @@ fun ScreenshotScreen(
                     
                     Button(
                         onClick = { viewModel.deleteSelected() },
-                        modifier = Modifier.weight(1f).height(56.dp), // Increased height for better touch target
+                        modifier = Modifier.weight(1f).height(56.dp),
                         enabled = selectedCount > 0,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
@@ -139,7 +140,6 @@ fun ScreenshotScreen(
                     }
                 }
 
-                // AdMob Placeholder
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -195,10 +195,13 @@ fun ScreenshotScreen(
 
 @Composable
 fun ScreenshotGridItem(
-    item: ScreenshotItem,
+    item: TrashItemEntity,
     onToggle: () -> Unit,
     onLongPress: () -> Unit
 ) {
+    // val isSelected = item.isSelected
+    val isSelected = false // Dummy
+    
     Box(
         modifier = Modifier
             .aspectRatio(1f)
@@ -217,7 +220,7 @@ fun ScreenshotGridItem(
             modifier = Modifier.fillMaxSize()
         )
         
-        if (item.isSelected) {
+        if (isSelected) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -226,9 +229,9 @@ fun ScreenshotGridItem(
         }
 
         Icon(
-            imageVector = if (item.isSelected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+            imageVector = if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
             contentDescription = "Select",
-            tint = if (item.isSelected) MaterialTheme.colorScheme.primary else Color.White,
+            tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.White,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(4.dp)
@@ -238,18 +241,17 @@ fun ScreenshotGridItem(
 
 @Composable
 fun ZoomedScreenshotDialog(
-    images: List<ScreenshotItem>,
+    images: List<TrashItemEntity>,
     initialIndex: Int,
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         var currentIndex by remember { mutableStateOf(initialIndex) }
-        val currentImage = images[currentIndex]
+        val currentImage = images.getOrNull(currentIndex) ?: return@Dialog
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // Make background transparent to see behind content
                 .background(Color.Transparent)
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { onDismiss() })
@@ -276,7 +278,6 @@ fun ZoomedScreenshotDialog(
                     modifier = Modifier
                         .fillMaxWidth(0.75f)
                         .fillMaxHeight(0.75f)
-                        // Add shadow for separation
                         .shadow(12.dp, RoundedCornerShape(16.dp))
                         .clip(RoundedCornerShape(16.dp))
                         .border(2.dp, Color.White, RoundedCornerShape(16.dp))

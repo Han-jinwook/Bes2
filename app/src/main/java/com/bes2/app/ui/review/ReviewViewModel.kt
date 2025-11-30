@@ -13,9 +13,10 @@ import androidx.work.WorkManager
 import com.bes2.background.util.ImageClusteringHelper
 import com.bes2.background.worker.DailyCloudSyncWorker
 import com.bes2.data.dao.ImageClusterDao
-import com.bes2.data.dao.ImageItemDao
+import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity
+import com.bes2.data.model.ReviewItemEntity
 import com.bes2.data.repository.GalleryRepository
 import com.bes2.data.repository.SettingsRepository
 import com.bes2.ml.ImagePhashGenerator
@@ -46,7 +47,7 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReviewViewModel @Inject constructor(
     private val imageClusterDao: ImageClusterDao,
-    private val imageItemDao: ImageItemDao,
+    private val reviewItemDao: ReviewItemDao,
     private val galleryRepository: GalleryRepository,
     private val settingsRepository: SettingsRepository,
     private val workManager: WorkManager,
@@ -65,13 +66,12 @@ class ReviewViewModel @Inject constructor(
     val navigationEvent: SharedFlow<NavigationEvent> = _navigationEvent
 
     private var allClusterIds: List<String> = emptyList()
-    private var allMemoryClusters: List<List<ImageItemEntity>> = emptyList()
+    private var allMemoryClusters: List<List<ReviewItemEntity>> = emptyList()
     private var currentIndex = 0
     
     private var isMemoryEventMode = false
     private var memoryEventDateString: String = ""
     
-    // [FIX] Restore session state variables
     private var sessionClusterCount = 0
     private var sessionSavedImageCount = 0
     private var manualSelectionIds: List<Long>? = null
@@ -80,8 +80,6 @@ class ReviewViewModel @Inject constructor(
     private val AD_THRESHOLD = 20 
 
     init {
-        Timber.d("ReviewViewModel init")
-        
         val dateArg = savedStateHandle.get<String>("date")
         if (dateArg != null) {
             isMemoryEventMode = true
@@ -121,32 +119,25 @@ class ReviewViewModel @Inject constructor(
     private fun loadPendingClusters() {
         viewModelScope.launch {
             val clusters = imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW").first()
-            
-            if (clusters.isEmpty()) {
-                val prepared = promoteBackgroundClusters()
-                if (prepared) {
-                    loadPendingClusters()
-                } else {
-                    finishReview()
-                }
-            } else {
+            if (clusters.isNotEmpty()) {
                 allClusterIds = clusters.map { it.id }
                 currentIndex = 0
                 loadNormalClusterAtIndex(0)
+            } else {
+                _uiState.value = ReviewUiState.NoClustersToReview
             }
         }
     }
     
     private fun loadNormalClusterAtIndex(index: Int) {
         if (index !in allClusterIds.indices) return
-        
         val clusterId = allClusterIds[index]
         viewModelScope.launch {
             val cluster = imageClusterDao.getImageClusterById(clusterId).first() ?: return@launch
-            val images = imageItemDao.getImageItemsByClusterId(clusterId).first()
-            val validStatus = setOf("ANALYZED", "READY_TO_CLEAN", "STATUS_REJECTED", "KEPT")
-            val candidates = images.filter { it.status in validStatus }
-            _uiState.value = calculateReadyState(cluster, candidates, allClusterIds.size, index)
+            val allDietItems = reviewItemDao.getItemsBySourceAndStatus("DIET", "READY_TO_CLEAN")
+            val clusterItems = allDietItems.filter { it.cluster_id == clusterId }
+            
+            _uiState.value = calculateReadyState(cluster, clusterItems, allClusterIds.size, index)
         }
     }
 
@@ -158,8 +149,10 @@ class ReviewViewModel @Inject constructor(
                 val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
                 
-                val dbImages = imageItemDao.getImagesByDateRange(startOfDay, endOfDay)
-                val validDbImages = dbImages.filter { it.status == "ANALYZED" || it.status == "KEPT" }
+                val dbImages = reviewItemDao.getImagesByDateRange(startOfDay, endOfDay)
+                val validDbImages = dbImages.filter { 
+                    it.status == "ANALYZED" || it.status == "KEPT" || it.status == "EVENT_MEMORY" 
+                }
                 
                 val imagesToCluster = if (validDbImages.size > 5) {
                     validDbImages
@@ -174,13 +167,14 @@ class ReviewViewModel @Inject constructor(
                             val bitmap = loadBitmap(mediaImage.uri) ?: return@mapNotNull null
                             val pHash = ImagePhashGenerator.generatePhash(bitmap)
                             val nimaScores = nimaAnalyzer.analyze(bitmap)
-                            val nimaScore = nimaScores?.mapIndexed { i, s -> (i + 1) * s }?.sum()
+                            val nimaScore = nimaScores?.mapIndexed { i, s -> (i + 1) * s }?.sum()?.toDouble()
+                            val smileProb = smileDetector.getSmilingProbability(bitmap)
                             bitmap.recycle()
                             
-                            ImageItemEntity(
+                            ReviewItemEntity(
                                 id = mediaImage.id, uri = mediaImage.uri, filePath = mediaImage.filePath, timestamp = mediaImage.timestamp,
-                                status = "ANALYZED", pHash = pHash, nimaScore = nimaScore, blurScore = 100f, exposureScore = 0f,
-                                areEyesClosed = false, smilingProbability = null, clusterId = null, category = "MEMORY"
+                                status = "EVENT_MEMORY", pHash = pHash, nimaScore = nimaScore, blurScore = 100f, exposureScore = 0f,
+                                areEyesClosed = false, smilingProbability = smileProb, cluster_id = null, source_type = "MEMORY"
                             )
                         } catch (e: Exception) { null }
                     }
@@ -191,8 +185,17 @@ class ReviewViewModel @Inject constructor(
                     return@launch
                 }
 
-                val clusters = clusteringHelper.clusterImages(imagesToCluster)
-                allMemoryClusters = clusters.map { it.images }
+                val mappedImages = imagesToCluster.map { 
+                    ImageItemEntity(id = it.id, uri = it.uri, timestamp = it.timestamp, filePath = it.filePath)
+                }
+
+                val clusters = clusteringHelper.clusterImages(mappedImages)
+                allMemoryClusters = clusters.map { cluster ->
+                    cluster.images.mapNotNull { img -> 
+                        imagesToCluster.find { it.uri == img.uri } 
+                    }
+                }
+                
                 currentIndex = 0
                 loadMemoryClusterAtIndex(0)
                 
@@ -205,25 +208,23 @@ class ReviewViewModel @Inject constructor(
     
     private fun loadMemoryClusterAtIndex(index: Int) {
         if (index !in allMemoryClusters.indices) return
-        
         val currentImages = allMemoryClusters[index]
         val dummyCluster = ImageClusterEntity(
             id = "MEMORY_EVENT_${memoryEventDateString}_$index",
             creationTime = System.currentTimeMillis(),
             reviewStatus = "MEMORY_EVENT"
         )
-        
         _uiState.value = calculateReadyState(dummyCluster, currentImages, allMemoryClusters.size, index)
     }
 
-    fun selectImage(imageToSelect: ImageItemEntity) {
+    fun selectImage(imageToSelect: ReviewItemEntity) {
         val currentState = _uiState.value
         if (currentState is ReviewUiState.Ready) {
             if (imageToSelect.status == "STATUS_REJECTED") {
                 restoreRejectedImage(imageToSelect)
                 return
             }
-            if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "READY_TO_CLEAN" && imageToSelect.status != "KEPT" && imageToSelect.status != "NEW") return
+            if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "READY_TO_CLEAN" && imageToSelect.status != "KEPT" && imageToSelect.status != "NEW" && imageToSelect.status != "EVENT_MEMORY") return
 
             val currentSelection = if (manualSelectionIds == null) {
                 listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage)
@@ -251,26 +252,27 @@ class ReviewViewModel @Inject constructor(
         }
     }
     
-    private fun restoreRejectedImage(image: ImageItemEntity) {
+    private fun restoreRejectedImage(image: ReviewItemEntity) {
         viewModelScope.launch {
-            val restoredImage = image.copy(status = "ANALYZED")
-            imageItemDao.updateImageItem(restoredImage)
+            val restoredImage = image.copy(status = "ANALYZED") 
+            reviewItemDao.update(restoredImage)
             loadCurrentCluster() 
         }
     }
     
-    private fun calculateFinalScore(image: ImageItemEntity): Float {
-        val nimaScore = (image.nimaScore ?: 5f) * 10 
-        val musiqRaw = image.musiqScore ?: (nimaScore / 10f)
+    private fun calculateFinalScore(image: ReviewItemEntity): Float {
+        // [FIX] Use 5.0 (Double) instead of 5f (Float) to match nimaScore type
+        val nimaScore = (image.nimaScore ?: 5.0) * 10 
+        val musiqRaw = image.musiqScore ?: (nimaScore / 10.0).toFloat()
         val musiqScore = musiqRaw * 10
         val smileProb = image.smilingProbability ?: 0f
         val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
-        return (nimaScore * 0.3f) + (musiqScore * 0.5f) + smileBonus
+        return (nimaScore.toFloat() * 0.3f) + (musiqScore * 0.5f) + smileBonus
     }
 
-    private fun calculateReadyState(cluster: ImageClusterEntity, allImages: List<ImageItemEntity>, totalCount: Int, index: Int): ReviewUiState.Ready {
-        val (analyzedImages, rejectedImages) = allImages.partition { 
-            it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" || it.status == "KEPT" || it.status == "NEW" || it.status == "PENDING_ANALYSIS"
+    private fun calculateReadyState(cluster: ImageClusterEntity, items: List<ReviewItemEntity>, total: Int, index: Int): ReviewUiState.Ready {
+        val (analyzedImages, rejectedImages) = items.partition { 
+            it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" || it.status == "KEPT" || it.status == "NEW" || it.status == "PENDING_ANALYSIS" || it.status == "EVENT_MEMORY"
         }
 
         val (finalBest, finalSecond) = if (manualSelectionIds == null) {
@@ -290,39 +292,15 @@ class ReviewViewModel @Inject constructor(
 
         return ReviewUiState.Ready(
             cluster = cluster,
-            allImages = allImages,
+            allImages = items,
             otherImages = otherImages,
             rejectedImages = rejectedImages,
             selectedBestImage = finalBest,
             selectedSecondBestImage = finalSecond,
             pendingDeleteRequest = null,
-            totalClusterCount = totalCount,
+            totalClusterCount = total,
             currentClusterIndex = index + 1
         )
-    }
-
-    private suspend fun promoteBackgroundClusters(): Boolean {
-        val readyItems = imageItemDao.getImageItemsListByStatus("READY_TO_CLEAN")
-        if (readyItems.isEmpty()) return false
-        val clusterIds = readyItems.mapNotNull { it.clusterId }.distinct()
-        if (clusterIds.isNotEmpty()) {
-            val targetClusterId = clusterIds.first()
-            val cluster = imageClusterDao.getImageClusterById(targetClusterId).first()
-            if (cluster != null) {
-                imageClusterDao.updateImageClusterReviewStatus(targetClusterId, "PENDING_REVIEW")
-                return true
-            }
-        }
-        return false
-    }
-    
-    private suspend fun schedulePostReviewSync() {
-        val settings = settingsRepository.storedSettings.first()
-        if (settings.syncOption == "NONE" || settings.syncOption == "DAILY") return
-        val constraints = if (settings.uploadOnWifiOnly) Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build() else Constraints.NONE
-        val inputData = Data.Builder().putBoolean(DailyCloudSyncWorker.KEY_IS_ONE_TIME_SYNC, true).build()
-        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>().setConstraints(constraints).setInputData(inputData).build()
-        workManager.enqueue(syncWorkRequest)
     }
 
     fun deleteOtherImages() {
@@ -356,7 +334,7 @@ class ReviewViewModel @Inject constructor(
                     if (successfullyDeleted) {
                         val imageIdsToDelete = (currentState.otherImages + currentState.rejectedImages).map { it.id }
                         if (imageIdsToDelete.isNotEmpty()) {
-                            imageItemDao.updateImageStatusesByIds(imageIdsToDelete, "DELETED")
+                            reviewItemDao.updateStatusByIds(imageIdsToDelete, "DELETED")
                         }
                     }
                     markClusterCompleted(currentState)
@@ -369,7 +347,7 @@ class ReviewViewModel @Inject constructor(
     private suspend fun markClusterCompleted(state: ReviewUiState.Ready) {
         val keptImageIds = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage).map { it.id }
         if (keptImageIds.isNotEmpty()) {
-            imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")
+            reviewItemDao.updateStatusByIds(keptImageIds, "KEPT")
         }
         
         if (!isMemoryEventMode) {
@@ -401,7 +379,7 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    fun restoreImage(image: ImageItemEntity) {
+    fun restoreImage(image: ReviewItemEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val originalBitmap = loadBitmap(image.uri) ?: return@launch
@@ -411,10 +389,25 @@ class ReviewViewModel @Inject constructor(
                     restoredBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, out)
                 }
                 val updatedImage = image.copy(status = "ANALYZED", blurScore = 100.0f, exposureScore = 0.0f)
-                imageItemDao.updateImageItem(updatedImage)
+                reviewItemDao.update(updatedImage)
                 loadCurrentCluster()
             } catch (e: Exception) { Timber.e(e) }
         }
+    }
+    
+    // [FIX] Moved method inside class
+    private suspend fun schedulePostReviewSync() {
+        val settings = settingsRepository.storedSettings.first()
+        if (settings.syncOption == "NONE" || settings.syncOption == "DAILY") return
+        val constraints = if (settings.uploadOnWifiOnly) Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build() else Constraints.NONE
+        val inputData = Data.Builder().putBoolean(DailyCloudSyncWorker.KEY_IS_ONE_TIME_SYNC, true).build()
+        val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>().setConstraints(constraints).setInputData(inputData).build()
+        workManager.enqueue(syncWorkRequest)
+    }
+    
+    private suspend fun promoteBackgroundClusters(): Boolean {
+        // Placeholder for now
+        return false
     }
 
     private fun loadBitmap(uriString: String): android.graphics.Bitmap? {
@@ -427,16 +420,17 @@ class ReviewViewModel @Inject constructor(
     }
 }
 
+// Sealed interfaces remain outside
 sealed interface ReviewUiState {
     object Loading : ReviewUiState
     object NoClustersToReview : ReviewUiState
     data class Ready(
         val cluster: ImageClusterEntity,
-        val allImages: List<ImageItemEntity>,
-        val otherImages: List<ImageItemEntity>,
-        val rejectedImages: List<ImageItemEntity>,
-        val selectedBestImage: ImageItemEntity?,
-        val selectedSecondBestImage: ImageItemEntity?,
+        val allImages: List<ReviewItemEntity>,
+        val otherImages: List<ReviewItemEntity>,
+        val rejectedImages: List<ReviewItemEntity>,
+        val selectedBestImage: ReviewItemEntity?,
+        val selectedSecondBestImage: ReviewItemEntity?,
         val pendingDeleteRequest: List<Uri>? = null,
         val totalClusterCount: Int = 0,
         val currentClusterIndex: Int = 0

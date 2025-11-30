@@ -7,8 +7,8 @@ import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.bes2.data.dao.ImageItemDao
-import com.bes2.data.model.ImageItemEntity
+import com.bes2.data.dao.ReviewItemDao
+import com.bes2.data.model.ReviewItemEntity
 import com.bes2.data.repository.GalleryRepository
 import com.bes2.ml.ImagePhashGenerator
 import com.bes2.ml.NimaQualityAnalyzer
@@ -25,7 +25,7 @@ class MemoryEventWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val galleryRepository: GalleryRepository,
-    private val imageItemDao: ImageItemDao,
+    private val reviewItemDao: ReviewItemDao,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val smileDetector: SmileDetector
 ) : CoroutineWorker(appContext, workerParams) {
@@ -45,19 +45,16 @@ class MemoryEventWorker @AssistedInject constructor(
         Timber.d("Starting Memory Analysis for date: $targetDate")
 
         try {
-            // 1. Fetch images from MediaStore
             val imagesFromMediaStore = galleryRepository.getImagesForDateString(targetDate)
             if (imagesFromMediaStore.isEmpty()) {
                 Timber.w("No images found for $targetDate")
                 return@withContext Result.failure()
             }
 
-            // 2. Analyze each image and save to DB
             val entities = imagesFromMediaStore.mapNotNull { mediaImage ->
-                // Check if already analyzed to avoid duplicate work
-                val existing = imageItemDao.getImageStatusByUri(mediaImage.uri)
-                if (existing != null && existing != "NEW") {
-                    return@mapNotNull null // Skip already processed
+                val isProcessed = reviewItemDao.isUriProcessed(mediaImage.uri)
+                if (isProcessed) {
+                    return@mapNotNull null 
                 }
 
                 try {
@@ -65,30 +62,28 @@ class MemoryEventWorker @AssistedInject constructor(
                     
                     val pHash = ImagePhashGenerator.generatePhash(bitmap)
                     val nimaScores = nimaAnalyzer.analyze(bitmap)
-                    val nimaScore = nimaScores?.mapIndexed { i, s -> (i + 1) * s }?.sum()
+                    val nimaScore = nimaScores?.mapIndexed { i, s -> (i + 1) * s }?.sum()?.toDouble()
                     val smileProb = smileDetector.getSmilingProbability(bitmap)
                     
                     bitmap.recycle()
 
-                    ImageItemEntity(
-                        id = mediaImage.id, // Use MediaStore ID if possible, or let Room generate? 
-                        // Room's ID is auto-gen. We should check if we need to preserve MediaStore ID. 
-                        // Usually we map URI. Let's use 0 for ID to let Room auto-gen or handle conflict via URI.
-                        // Actually our Entity has @PrimaryKey(autoGenerate = true) val id: Long = 0.
-                        // But we also use this ID for logic. Let's rely on URI for uniqueness.
+                    ReviewItemEntity(
                         uri = mediaImage.uri,
                         filePath = mediaImage.filePath,
                         timestamp = mediaImage.timestamp,
-                        status = "ANALYZED", // Mark as ready
+                        
+                        source_type = "MEMORY",
+                        status = "EVENT_MEMORY", 
+                        
                         pHash = pHash,
                         nimaScore = nimaScore,
                         musiqScore = null,
-                        blurScore = 100f, // Assume good
+                        blurScore = 100f,
                         exposureScore = 0f,
                         areEyesClosed = false,
                         smilingProbability = smileProb,
-                        clusterId = null,
-                        category = "MEMORY" // Explicitly mark as MEMORY
+                        cluster_id = null
+                        // [FIX] Removed 'category' as it's replaced by 'source_type'
                     )
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to analyze ${mediaImage.uri}")
@@ -97,8 +92,8 @@ class MemoryEventWorker @AssistedInject constructor(
             }
 
             if (entities.isNotEmpty()) {
-                imageItemDao.insertImageItems(entities)
-                Timber.d("Saved ${entities.size} analyzed images for $targetDate")
+                reviewItemDao.insertAll(entities)
+                Timber.d("Saved ${entities.size} memory images for $targetDate")
             }
             
             return@withContext Result.success()
@@ -112,9 +107,6 @@ class MemoryEventWorker @AssistedInject constructor(
     private fun loadBitmap(uri: String): Bitmap? {
         return try {
             appContext.contentResolver.openInputStream(uri.toUri())?.use {
-                // Decode with sample size to save memory/time for analysis?
-                // NIMA/Smile models usually resize anyway.
-                // Let's decode full for now, or optimize if slow.
                 BitmapFactory.decodeStream(it)
             }
         } catch (e: Exception) {

@@ -1,14 +1,12 @@
 package com.bes2.data.di;
 
 import com.bes2.data.dao.ImageItemDao;
-import com.bes2.data.db.Bes2Database;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.Preconditions;
 import dagger.internal.QualifierMetadata;
 import dagger.internal.ScopeMetadata;
 import javax.annotation.processing.Generated;
-import javax.inject.Provider;
 
 @ScopeMetadata("javax.inject.Singleton")
 @QualifierMetadata
@@ -25,23 +23,20 @@ import javax.inject.Provider;
     "cast"
 })
 public final class DatabaseModule_ProvideImageItemDaoFactory implements Factory<ImageItemDao> {
-  private final Provider<Bes2Database> databaseProvider;
-
-  public DatabaseModule_ProvideImageItemDaoFactory(Provider<Bes2Database> databaseProvider) {
-    this.databaseProvider = databaseProvider;
-  }
-
   @Override
   public ImageItemDao get() {
-    return provideImageItemDao(databaseProvider.get());
+    return provideImageItemDao();
   }
 
-  public static DatabaseModule_ProvideImageItemDaoFactory create(
-      Provider<Bes2Database> databaseProvider) {
-    return new DatabaseModule_ProvideImageItemDaoFactory(databaseProvider);
+  public static DatabaseModule_ProvideImageItemDaoFactory create() {
+    return InstanceHolder.INSTANCE;
   }
 
-  public static ImageItemDao provideImageItemDao(Bes2Database database) {
-    return Preconditions.checkNotNullFromProvides(DatabaseModule.INSTANCE.provideImageItemDao(database));
+  public static ImageItemDao provideImageItemDao() {
+    return Preconditions.checkNotNullFromProvides(DatabaseModule.INSTANCE.provideImageItemDao());
+  }
+
+  private static final class InstanceHolder {
+    private static final DatabaseModule_ProvideImageItemDaoFactory INSTANCE = new DatabaseModule_ProvideImageItemDaoFactory();
   }
 }

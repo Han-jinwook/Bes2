@@ -57,7 +57,7 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.bes2.app.R
 import com.bes2.background.worker.PhotoAnalysisWorker
-import com.bes2.data.model.ImageItemEntity
+import com.bes2.data.model.ReviewItemEntity // [FIX] Updated Import
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
@@ -275,9 +275,9 @@ fun ReviewScreen(
 }
 
 data class ZoomedImageState(
-    val bestList: List<ImageItemEntity>,
-    val otherList: List<ImageItemEntity>,
-    val rejectedList: List<ImageItemEntity>,
+    val bestList: List<ReviewItemEntity>,
+    val otherList: List<ReviewItemEntity>,
+    val rejectedList: List<ReviewItemEntity>,
     val initialSection: Int,
     val initialIndex: Int
 )
@@ -297,7 +297,7 @@ fun NoClustersState() {}
 @Composable
 fun ReviewReadyState(
     state: ReviewUiState.Ready,
-    onImageClick: (ImageItemEntity) -> Unit,
+    onImageClick: (ReviewItemEntity) -> Unit,
     onImageLongPress: (Int, Int) -> Unit 
 ) {
     val bestImages = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage)
@@ -338,13 +338,13 @@ fun ReviewReadyState(
 }
 
 @Composable
-fun ImageWithInfo(image: ImageItemEntity, modifier: Modifier = Modifier) {
+fun ImageWithInfo(image: ReviewItemEntity, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
         AsyncImage(model = image.uri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         val infoText = if (image.status == "STATUS_REJECTED") {
-            if (image.areEyesClosed == true) "눈 감김" else if ((image.blurScore ?: 100f) < PhotoAnalysisWorker.BLUR_THRESHOLD) "흐릿함" else "품질 저하"
+            if (image.areEyesClosed == true) "눈 감김" else if ((image.blurScore ?: 100f) < 30.0f) "흐릿함" else "품질 저하" // [FIX] Hardcode threshold or import worker constant properly
         } else {
-            val score = ((image.nimaScore ?: 0f) * 10 + (if ((image.smilingProbability ?: 0f) < 0.1f) -10f else (image.smilingProbability ?: 0f) * 30f)).toInt().coerceAtLeast(1)
+            val score = ((image.nimaScore ?: 0.0) * 10 + (if ((image.smilingProbability ?: 0f) < 0.1f) -10f else (image.smilingProbability ?: 0f) * 30f)).toInt().coerceAtLeast(1)
             "${score}점"
         }
         Box(modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp).background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp)).padding(4.dp, 2.dp)) {
@@ -354,7 +354,7 @@ fun ImageWithInfo(image: ImageItemEntity, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ZoomedImageDialogV2(state: ZoomedImageState, onDismiss: () -> Unit, onRestoreClick: ((ImageItemEntity) -> Unit)? = null) {
+fun ZoomedImageDialogV2(state: ZoomedImageState, onDismiss: () -> Unit, onRestoreClick: ((ReviewItemEntity) -> Unit)? = null) {
     Dialog(onDismissRequest = onDismiss) {
         var currentSection by remember { mutableStateOf(state.initialSection) }
         var currentIndex by remember { mutableStateOf(state.initialIndex) }
@@ -440,11 +440,11 @@ fun ZoomedImageDialogV2(state: ZoomedImageState, onDismiss: () -> Unit, onRestor
                 val infoText = if (currentImage.status == "STATUS_REJECTED") {
                     when {
                         currentImage.areEyesClosed == true -> "눈 감김"
-                        currentImage.blurScore?.let { it < PhotoAnalysisWorker.BLUR_THRESHOLD } == true -> "흐릿함"
+                        currentImage.blurScore?.let { it < 30.0f } == true -> "흐릿함" // [FIX] Hardcoded constant
                         else -> "품질 저하"
                     }
                 } else {
-                    val nimaScore = (currentImage.nimaScore ?: 0f) * 10
+                    val nimaScore = (currentImage.nimaScore ?: 0.0) * 10
                     val smileProb = currentImage.smilingProbability ?: 0f
                     val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
                     val displayScore = (nimaScore + smileBonus).toInt().coerceAtLeast(1)

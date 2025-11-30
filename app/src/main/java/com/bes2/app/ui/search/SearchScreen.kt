@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.bes2.app.ui.component.TypewriterText
+import com.bes2.data.model.ReviewItemEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,13 +93,12 @@ fun SearchScreen(
                     singleLine = true
                 )
                 
-                // Overlay Placeholder with Animation if query is empty
                 if (uiState.query.isEmpty()) {
                     val placeholders = listOf("예: 바닷가에서 웃는 아이", "예: 맛있는 파스타", "예: 푸른 하늘", "예: 생일 케이크")
                     Row(
                         modifier = Modifier
                             .matchParentSize()
-                            .padding(start = 56.dp), // Adjust for leading icon
+                            .padding(start = 56.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                          TypewriterText(
@@ -112,8 +112,7 @@ fun SearchScreen(
                 }
             }
             
-            // [Updated] Indexing & Status Indicator
-            // Always show regardless of count to indicate system is alive
+            // [FIX] Updated variable names to match ViewModel
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -121,8 +120,8 @@ fun SearchScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                val isIndexingComplete = uiState.totalImagesInDb > 0 && uiState.totalIndexedCount >= uiState.totalImagesInDb
-                val isDbEmpty = uiState.totalImagesInDb == 0
+                val isIndexingComplete = uiState.totalImageCount > 0 && uiState.indexedImageCount >= uiState.totalImageCount
+                val isDbEmpty = uiState.totalImageCount == 0
                 
                 val icon = when {
                     isDbEmpty -> Icons.Default.HourglassEmpty
@@ -146,8 +145,8 @@ fun SearchScreen(
                 
                 val statusText = when {
                     isDbEmpty -> "갤러리에서 사진을 불러오는 중입니다..."
-                    isIndexingComplete -> "총 ${uiState.totalImagesInDb}장의 추억 속에서 검색합니다"
-                    else -> "AI가 사진을 공부하는 중입니다... (${uiState.totalIndexedCount}/${uiState.totalImagesInDb})"
+                    isIndexingComplete -> "총 ${uiState.totalImageCount}장의 추억 속에서 검색합니다"
+                    else -> "AI가 사진을 공부하는 중입니다... (${uiState.indexedImageCount}/${uiState.totalImageCount})"
                 }
                 
                 Text(
@@ -168,9 +167,8 @@ fun SearchScreen(
                     Text("검색 결과가 없습니다.", color = Color.Gray)
                 }
             } else {
-                // Results Grid
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3), // 3 columns
+                    columns = GridCells.Fixed(3),
                     contentPadding = PaddingValues(bottom = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -184,8 +182,9 @@ fun SearchScreen(
     }
 }
 
+// [FIX] Adapted to ReviewItemEntity. Assuming similarity is not available for now in basic entity.
 @Composable
-fun SearchResultItem(result: SearchResult) {
+fun SearchResultItem(result: ReviewItemEntity) {
     Box(
         modifier = Modifier
             .aspectRatio(1f)
@@ -193,29 +192,13 @@ fun SearchResultItem(result: SearchResult) {
             .background(Color.LightGray)
     ) {
         AsyncImage(
-            model = result.image.uri,
+            model = result.uri,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
         
-        // Similarity Score Badge
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        ) {
-            val percentage = (result.score * 100).toInt().coerceAtLeast(0)
-            Text(
-                text = "${percentage}%",
-                color = Color.White,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        
-        // Date Badge (Optional)
+        // Date Badge
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -224,7 +207,7 @@ fun SearchResultItem(result: SearchResult) {
         ) {
              val sdf = SimpleDateFormat("M.d", Locale.getDefault())
              Text(
-                text = sdf.format(Date(result.image.timestamp)),
+                text = sdf.format(Date(result.timestamp)),
                 color = Color.White,
                 fontSize = 10.sp
             )
