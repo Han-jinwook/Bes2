@@ -1,7 +1,9 @@
 package com.bes2.background.service;
 
 import androidx.work.WorkManager;
-import com.bes2.data.dao.ImageItemDao;
+import com.bes2.data.dao.ReviewItemDao;
+import com.bes2.data.dao.TrashItemDao;
+import com.bes2.data.repository.SettingsRepository;
 import dagger.MembersInjector;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.InjectedFieldSignature;
@@ -23,34 +25,57 @@ import javax.inject.Provider;
     "cast"
 })
 public final class MediaDetectionService_MembersInjector implements MembersInjector<MediaDetectionService> {
-  private final Provider<ImageItemDao> imageDaoProvider;
+  private final Provider<ReviewItemDao> reviewItemDaoProvider;
+
+  private final Provider<TrashItemDao> trashItemDaoProvider;
 
   private final Provider<WorkManager> workManagerProvider;
 
-  public MediaDetectionService_MembersInjector(Provider<ImageItemDao> imageDaoProvider,
-      Provider<WorkManager> workManagerProvider) {
-    this.imageDaoProvider = imageDaoProvider;
+  private final Provider<SettingsRepository> settingsRepositoryProvider;
+
+  public MediaDetectionService_MembersInjector(Provider<ReviewItemDao> reviewItemDaoProvider,
+      Provider<TrashItemDao> trashItemDaoProvider, Provider<WorkManager> workManagerProvider,
+      Provider<SettingsRepository> settingsRepositoryProvider) {
+    this.reviewItemDaoProvider = reviewItemDaoProvider;
+    this.trashItemDaoProvider = trashItemDaoProvider;
     this.workManagerProvider = workManagerProvider;
+    this.settingsRepositoryProvider = settingsRepositoryProvider;
   }
 
   public static MembersInjector<MediaDetectionService> create(
-      Provider<ImageItemDao> imageDaoProvider, Provider<WorkManager> workManagerProvider) {
-    return new MediaDetectionService_MembersInjector(imageDaoProvider, workManagerProvider);
+      Provider<ReviewItemDao> reviewItemDaoProvider, Provider<TrashItemDao> trashItemDaoProvider,
+      Provider<WorkManager> workManagerProvider,
+      Provider<SettingsRepository> settingsRepositoryProvider) {
+    return new MediaDetectionService_MembersInjector(reviewItemDaoProvider, trashItemDaoProvider, workManagerProvider, settingsRepositoryProvider);
   }
 
   @Override
   public void injectMembers(MediaDetectionService instance) {
-    injectImageDao(instance, imageDaoProvider.get());
+    injectReviewItemDao(instance, reviewItemDaoProvider.get());
+    injectTrashItemDao(instance, trashItemDaoProvider.get());
     injectWorkManager(instance, workManagerProvider.get());
+    injectSettingsRepository(instance, settingsRepositoryProvider.get());
   }
 
-  @InjectedFieldSignature("com.bes2.background.service.MediaDetectionService.imageDao")
-  public static void injectImageDao(MediaDetectionService instance, ImageItemDao imageDao) {
-    instance.imageDao = imageDao;
+  @InjectedFieldSignature("com.bes2.background.service.MediaDetectionService.reviewItemDao")
+  public static void injectReviewItemDao(MediaDetectionService instance,
+      ReviewItemDao reviewItemDao) {
+    instance.reviewItemDao = reviewItemDao;
+  }
+
+  @InjectedFieldSignature("com.bes2.background.service.MediaDetectionService.trashItemDao")
+  public static void injectTrashItemDao(MediaDetectionService instance, TrashItemDao trashItemDao) {
+    instance.trashItemDao = trashItemDao;
   }
 
   @InjectedFieldSignature("com.bes2.background.service.MediaDetectionService.workManager")
   public static void injectWorkManager(MediaDetectionService instance, WorkManager workManager) {
     instance.workManager = workManager;
+  }
+
+  @InjectedFieldSignature("com.bes2.background.service.MediaDetectionService.settingsRepository")
+  public static void injectSettingsRepository(MediaDetectionService instance,
+      SettingsRepository settingsRepository) {
+    instance.settingsRepository = settingsRepository;
   }
 }

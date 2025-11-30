@@ -49,13 +49,13 @@
             android:launchMode="singleTask"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
-        <!-- 포그라운드 서비스 유형 정의 -->
+        <!-- [FIX] Force replace to ensure foregroundServiceType is not dropped during manifest merge -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
-            tools:node="merge" />
+            tools:node="replace" />
 
-        <!-- WorkManager의 기본 초기화를 비활성화하여 Bes2Application의 Hilt 설정을 사용하도록 강제 -->
+        <!-- WorkManager's default initialization is disabled to use Hilt's configuration from Bes2Application -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

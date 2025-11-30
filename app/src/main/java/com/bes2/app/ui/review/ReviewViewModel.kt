@@ -43,6 +43,27 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
+sealed interface ReviewUiState {
+    object Loading : ReviewUiState
+    object NoClustersToReview : ReviewUiState
+    data class Ready(
+        val cluster: ImageClusterEntity,
+        val allImages: List<ReviewItemEntity>,
+        val otherImages: List<ReviewItemEntity>,
+        val rejectedImages: List<ReviewItemEntity>,
+        val selectedBestImage: ReviewItemEntity?,
+        val selectedSecondBestImage: ReviewItemEntity?,
+        val pendingDeleteRequest: List<Uri>? = null,
+        val totalClusterCount: Int = 0,
+        val currentClusterIndex: Int = 0
+    ) : ReviewUiState
+}
+
+sealed interface NavigationEvent {
+    data class NavigateToHome(val clusterCount: Int, val savedCount: Int, val showAd: Boolean) : NavigationEvent
+    object NavigateToSettings : NavigationEvent
+}
+
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReviewViewModel @Inject constructor(
@@ -71,7 +92,8 @@ class ReviewViewModel @Inject constructor(
     
     private var isMemoryEventMode = false
     private var memoryEventDateString: String = ""
-    
+    private var reviewSourceType: String = "DIET" 
+
     private var sessionClusterCount = 0
     private var sessionSavedImageCount = 0
     private var manualSelectionIds: List<Long>? = null
@@ -81,21 +103,31 @@ class ReviewViewModel @Inject constructor(
 
     init {
         val dateArg = savedStateHandle.get<String>("date")
+        val sourceArg = savedStateHandle.get<String>("source_type")
+
         if (dateArg != null) {
             isMemoryEventMode = true
             memoryEventDateString = dateArg
+            reviewSourceType = "MEMORY"
             loadMemoryEvent(dateArg)
         } else {
+            reviewSourceType = sourceArg ?: "DIET"
+            Timber.d("Review Mode Initialized: $reviewSourceType")
             loadPendingClusters()
         }
     }
     
     fun nextCluster() {
         val total = if (isMemoryEventMode) allMemoryClusters.size else allClusterIds.size
+        
+        // [FIX] If we are at the last cluster (or somehow beyond), finish the review.
         if (currentIndex < total - 1) {
             currentIndex++
             manualSelectionIds = null
             loadCurrentCluster()
+        } else {
+            // No more clusters to show
+            viewModelScope.launch { finishReview() }
         }
     }
     
@@ -119,8 +151,15 @@ class ReviewViewModel @Inject constructor(
     private fun loadPendingClusters() {
         viewModelScope.launch {
             val clusters = imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW").first()
-            if (clusters.isNotEmpty()) {
-                allClusterIds = clusters.map { it.id }
+            
+            val validItems = reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "CLUSTERED")
+            val validClusterIds = validItems.mapNotNull { it.cluster_id }.toSet()
+            val targetClusters = clusters.filter { it.id in validClusterIds }
+            
+            Timber.d("Loading clusters for $reviewSourceType. Found ${targetClusters.size} (Total pending: ${clusters.size})")
+
+            if (targetClusters.isNotEmpty()) {
+                allClusterIds = targetClusters.map { it.id }
                 currentIndex = 0
                 loadNormalClusterAtIndex(0)
             } else {
@@ -134,8 +173,9 @@ class ReviewViewModel @Inject constructor(
         val clusterId = allClusterIds[index]
         viewModelScope.launch {
             val cluster = imageClusterDao.getImageClusterById(clusterId).first() ?: return@launch
-            val allDietItems = reviewItemDao.getItemsBySourceAndStatus("DIET", "READY_TO_CLEAN")
-            val clusterItems = allDietItems.filter { it.cluster_id == clusterId }
+            
+            val allSourceItems = reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "CLUSTERED")
+            val clusterItems = allSourceItems.filter { it.cluster_id == clusterId }
             
             _uiState.value = calculateReadyState(cluster, clusterItems, allClusterIds.size, index)
         }
@@ -224,7 +264,7 @@ class ReviewViewModel @Inject constructor(
                 restoreRejectedImage(imageToSelect)
                 return
             }
-            if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "READY_TO_CLEAN" && imageToSelect.status != "KEPT" && imageToSelect.status != "NEW" && imageToSelect.status != "EVENT_MEMORY") return
+            if (imageToSelect.status != "ANALYZED" && imageToSelect.status != "CLUSTERED" && imageToSelect.status != "KEPT" && imageToSelect.status != "NEW" && imageToSelect.status != "EVENT_MEMORY") return
 
             val currentSelection = if (manualSelectionIds == null) {
                 listOfNotNull(currentState.selectedBestImage, currentState.selectedSecondBestImage)
@@ -254,14 +294,13 @@ class ReviewViewModel @Inject constructor(
     
     private fun restoreRejectedImage(image: ReviewItemEntity) {
         viewModelScope.launch {
-            val restoredImage = image.copy(status = "ANALYZED") 
+            val restoredImage = image.copy(status = "CLUSTERED") // [FIX] Restore to CLUSTERED
             reviewItemDao.update(restoredImage)
             loadCurrentCluster() 
         }
     }
     
     private fun calculateFinalScore(image: ReviewItemEntity): Float {
-        // [FIX] Use 5.0 (Double) instead of 5f (Float) to match nimaScore type
         val nimaScore = (image.nimaScore ?: 5.0) * 10 
         val musiqRaw = image.musiqScore ?: (nimaScore / 10.0).toFloat()
         val musiqScore = musiqRaw * 10
@@ -272,7 +311,7 @@ class ReviewViewModel @Inject constructor(
 
     private fun calculateReadyState(cluster: ImageClusterEntity, items: List<ReviewItemEntity>, total: Int, index: Int): ReviewUiState.Ready {
         val (analyzedImages, rejectedImages) = items.partition { 
-            it.status == "ANALYZED" || it.status == "READY_TO_CLEAN" || it.status == "KEPT" || it.status == "NEW" || it.status == "PENDING_ANALYSIS" || it.status == "EVENT_MEMORY"
+            it.status == "ANALYZED" || it.status == "CLUSTERED" || it.status == "KEPT" || it.status == "NEW" || it.status == "PENDING_ANALYSIS" || it.status == "EVENT_MEMORY"
         }
 
         val (finalBest, finalSecond) = if (manualSelectionIds == null) {
@@ -388,14 +427,13 @@ class ReviewViewModel @Inject constructor(
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     restoredBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, out)
                 }
-                val updatedImage = image.copy(status = "ANALYZED", blurScore = 100.0f, exposureScore = 0.0f)
+                val updatedImage = image.copy(status = "CLUSTERED", blurScore = 100.0f, exposureScore = 0.0f) 
                 reviewItemDao.update(updatedImage)
                 loadCurrentCluster()
             } catch (e: Exception) { Timber.e(e) }
         }
     }
     
-    // [FIX] Moved method inside class
     private suspend fun schedulePostReviewSync() {
         val settings = settingsRepository.storedSettings.first()
         if (settings.syncOption == "NONE" || settings.syncOption == "DAILY") return
@@ -406,7 +444,6 @@ class ReviewViewModel @Inject constructor(
     }
     
     private suspend fun promoteBackgroundClusters(): Boolean {
-        // Placeholder for now
         return false
     }
 
@@ -418,26 +455,4 @@ class ReviewViewModel @Inject constructor(
             }
         } catch (e: Exception) { null }
     }
-}
-
-// Sealed interfaces remain outside
-sealed interface ReviewUiState {
-    object Loading : ReviewUiState
-    object NoClustersToReview : ReviewUiState
-    data class Ready(
-        val cluster: ImageClusterEntity,
-        val allImages: List<ReviewItemEntity>,
-        val otherImages: List<ReviewItemEntity>,
-        val rejectedImages: List<ReviewItemEntity>,
-        val selectedBestImage: ReviewItemEntity?,
-        val selectedSecondBestImage: ReviewItemEntity?,
-        val pendingDeleteRequest: List<Uri>? = null,
-        val totalClusterCount: Int = 0,
-        val currentClusterIndex: Int = 0
-    ) : ReviewUiState
-}
-
-sealed interface NavigationEvent {
-    data class NavigateToHome(val clusterCount: Int, val savedCount: Int, val showAd: Boolean) : NavigationEvent
-    object NavigateToSettings : NavigationEvent
 }

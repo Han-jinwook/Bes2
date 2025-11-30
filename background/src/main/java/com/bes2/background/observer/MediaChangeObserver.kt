@@ -5,12 +5,13 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.provider.MediaStore
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.bes2.background.worker.ClusteringWorker
-import com.bes2.data.dao.ImageItemDao
-import com.bes2.data.model.ImageItemEntity
+import com.bes2.background.worker.PhotoDiscoveryWorker
+import com.bes2.data.dao.ReviewItemDao
+import com.bes2.data.dao.TrashItemDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -21,13 +22,12 @@ private const val DEBUG_TAG = "MediaDetectorDebug"
 class MediaChangeObserver(
     private val context: Context,
     handler: Handler,
-    private val imageItemDao: ImageItemDao,
+    private val reviewItemDao: ReviewItemDao, // [MODIFIED]
+    private val trashItemDao: TrashItemDao,   // [MODIFIED]
     private val workManager: WorkManager,
     private val scope: CoroutineScope
 ) : ContentObserver(handler) {
 
-    // --- DEBOUNCE LOGIC ENHANCEMENT ---
-    // Use a simple in-memory cache to track recently processed URIs.
     private val recentlyProcessedUris = mutableSetOf<Uri>()
     private val handlerForDebounce = Handler(handler.looper)
 
@@ -36,8 +36,6 @@ class MediaChangeObserver(
         super.onChange(selfChange, uri)
         uri ?: return
 
-        // --- DEBOUNCE LOGIC ENHANCEMENT ---
-        // If the URI is already in our recent set, ignore this trigger.
         synchronized(this) {
             if (recentlyProcessedUris.contains(uri)) {
                 Timber.tag(DEBUG_TAG).d("Debounced duplicate URI: $uri")
@@ -46,19 +44,19 @@ class MediaChangeObserver(
             recentlyProcessedUris.add(uri)
         }
 
-        // Remove the URI from the set after a delay to allow for legitimate new events.
         handlerForDebounce.postDelayed({
             synchronized(this) {
                 recentlyProcessedUris.remove(uri)
             }
-        }, 2000) // Increased debounce window to 2 seconds for stability.
+        }, 2000)
 
         Timber.tag(DEBUG_TAG).i("Media change detected for URI: $uri")
 
         scope.launch {
             try {
-                // Check if this exact URI has been fully processed and saved to DB
-                if (imageItemDao.isUriProcessed(uri.toString())) {
+                // [MODIFIED] Check both DAOs
+                val isProcessed = reviewItemDao.isUriProcessed(uri.toString()) || trashItemDao.isUriProcessed(uri.toString())
+                if (isProcessed) {
                     Timber.tag(DEBUG_TAG).w("URI has already been saved to DB: $uri")
                     return@launch
                 }
@@ -73,27 +71,23 @@ class MediaChangeObserver(
                         val timestamp = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED))
                         Timber.tag(DEBUG_TAG).d("Queried image details: Path=$path, Timestamp=$timestamp")
                         
-                        val newImage = ImageItemEntity(
-                            uri = uri.toString(),
-                            filePath = path,
-                            timestamp = timestamp * 1000,
-                            status = "NEW",
-                            pHash = null, nimaScore = null, blurScore = null, exposureScore = null,
-                            areEyesClosed = null, smilingProbability = null, faceEmbedding = null
-                        )
-                        imageItemDao.insertImageItem(newImage)
-                        Timber.tag(DEBUG_TAG).i("SUCCESS: Saved new image to DB. URI: ${newImage.uri}")
-
-                        val clusteringWorkRequest = OneTimeWorkRequestBuilder<ClusteringWorker>()
-                            .setInitialDelay(1, TimeUnit.MINUTES)
+                        Timber.tag(DEBUG_TAG).i("Triggering PhotoDiscoveryWorker (Instant Mode) due to media change.")
+                        
+                        val inputData = Data.Builder()
+                            .putBoolean(PhotoDiscoveryWorker.KEY_IS_INSTANT_MODE, true)
+                            .build()
+                        
+                        val discoveryWorkRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>()
+                            .setInputData(inputData)
+                            .setInitialDelay(60, TimeUnit.SECONDS) 
                             .build()
                         
                         workManager.enqueueUniqueWork(
-                            ClusteringWorker.WORK_NAME,
+                            PhotoDiscoveryWorker.WORK_NAME + "_OnChange",
                             ExistingWorkPolicy.REPLACE,
-                            clusteringWorkRequest
+                            discoveryWorkRequest
                         )
-                        Timber.tag(DEBUG_TAG).i("Enqueued clustering work. Will run in 1 minute.")
+                        Timber.tag(DEBUG_TAG).i("Enqueued PhotoDiscoveryWorker. Will run in 60 seconds.")
 
                     } else {
                         Timber.tag(DEBUG_TAG).w("Could not move cursor to first. URI: $uri may no longer exist.")

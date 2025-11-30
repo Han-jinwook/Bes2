@@ -9,14 +9,13 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.bes2.background.worker.ClusteringWorker
 import com.bes2.background.worker.MemoryEventWorker
-import com.bes2.background.worker.PastPhotoAnalysisWorker
+import com.bes2.background.worker.PhotoDiscoveryWorker
 import com.bes2.background.worker.PhotoAnalysisWorker
 import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.dao.TrashItemDao
 import com.bes2.data.repository.DateGroup
 import com.bes2.data.repository.GalleryRepository
-import com.bes2.data.repository.HomeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,19 +56,36 @@ class HomeViewModel @Inject constructor(
     private val trashItemDao: TrashItemDao,
     private val imageClusterDao: ImageClusterDao,
     private val galleryRepository: GalleryRepository,
-    private val homeRepository: HomeRepository,
     private val workManager: WorkManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    private val TAG = "HomeViewModel"
+
     init {
+        Timber.tag(TAG).d("init - START")
+        
         monitorTrashCount()
+        Timber.tag(TAG).d("init - monitorTrashCount OK")
+        
         checkPendingReviews()
+        Timber.tag(TAG).d("init - checkPendingReviews OK")
+
+        monitorDietCount()
+        Timber.tag(TAG).d("init - monitorDietCount OK")
+        
         loadGalleryCounts()
+        Timber.tag(TAG).d("init - loadGalleryCounts OK")
+        
         loadMemoryEvent()
+        Timber.tag(TAG).d("init - loadMemoryEvent OK")
+        
         startBackgroundAnalysis()
+        Timber.tag(TAG).d("init - startBackgroundAnalysis OK")
+        
+        Timber.tag(TAG).d("init - END")
     }
 
     private fun monitorTrashCount() {
@@ -79,30 +95,25 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+    
+    private fun monitorDietCount() {
+        viewModelScope.launch {
+            reviewItemDao.getActiveDietCountFlow().collectLatest { count ->
+                _uiState.update { it.copy(readyToCleanCount = count) }
+            }
+        }
+    }
 
     private fun checkPendingReviews() {
         viewModelScope.launch {
-            Timber.d("Starting to monitor pending reviews...")
             imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW")
                 .collectLatest { clusters ->
-                    Timber.d("Detected pending clusters: ${clusters.size}")
-                    
-                    // [FIX] Update readyToCleanCount so UI card becomes active
-                    // Ideally we should sum up items in these clusters, but for now just use cluster count or a placeholder if items count is expensive.
-                    // Or better: fetch count of READY_TO_CLEAN items from ReviewItemDao
-                    
-                    val totalItems = if (clusters.isNotEmpty()) {
-                        // Temp: Assume avg 2-3 items per cluster or fetch real count
-                        // Since we are in collectLatest scope, let's just trigger a one-shot count or use cluster count * 1 (at least)
-                        // Correct way: Observe ReviewItemDao count.
-                        // For quick fix:
-                        clusters.size * 2 // Dummy estimation to show non-zero
-                    } else 0
+                    val instantItems = reviewItemDao.getItemsBySourceAndStatus("INSTANT", "CLUSTERED")
+                    val hasInstantPending = instantItems.isNotEmpty()
                     
                     _uiState.update { 
                         it.copy(
-                            hasPendingReview = clusters.isNotEmpty(),
-                            readyToCleanCount = totalItems 
+                            hasPendingReview = hasInstantPending
                         ) 
                     }
                 }
@@ -142,13 +153,11 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun startBackgroundAnalysis() {
-        Timber.d("Starting Background Analysis Pipeline")
-        
-        val pastPhotoRequest = OneTimeWorkRequestBuilder<PastPhotoAnalysisWorker>().build()
+        val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
         workManager.enqueueUniqueWork(
-            PastPhotoAnalysisWorker.WORK_NAME,
+            PhotoDiscoveryWorker.WORK_NAME,
             ExistingWorkPolicy.KEEP,
-            pastPhotoRequest
+            discoveryRequest
         )
         
         val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>()

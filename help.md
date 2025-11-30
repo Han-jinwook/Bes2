@@ -1,45 +1,48 @@
-### 주제: 다중 모듈 Hilt 주입 시 발생한 `Variant Ambiguity` 빌드 오류 해결 과정 요약
+# Bes2 긴급 디버깅 및 해결 과제 (Session Transfer)
 
-#### 1. 최종 목표
-`:background` 모듈이 `:photos_integration` 모듈에 정의된 `NaverMyBoxProvider`를 Hilt로 주입받는 것.
-
-#### 2. 핵심 문제 및 잘못된 접근
-*   **오류:** `Cannot choose between the available variants of project :photos_integration`
-*   **진짜 원인:** `:background` 모듈의 `build.gradle.kts`에서, **라이브러리 모듈**인 `:photos_integration`을 **Annotation Processor를 위한** `ksp` 설정에 잘못 추가함.
-*   **잘못된 시도들:** `publishing` 블록 추가, `kspDebug`/`kspRelease` 분리, `attributes` 강제 주입 등. 이들은 모두 잘못된 `ksp` 설정을 전제로 했기에 근본적인 해결책이 될 수 없었음.
-
-#### 3. 최종 해결책 (2단계)
-1.  **Gradle 문제 해결 (근본 원인 제거):**
-    *   **:background/build.gradle.kts** 에서 `ksp(project(":photos_integration"))` 와 그 변형(`kspDebug` 등)을 **완전히 삭제**함.
-    *   `:photos_integration`은 `implementation(project(":photos_integration"))` 으로만 의존성을 유지함. `ksp` 설정에는 오직 Hilt 컴파일러 라이브러리만 남김.
-
-2.  **연쇄적 컴파일 오류 해결:**
-    *   위 Gradle 문제 해결 후, `Unresolved reference` 컴파일 오류가 발생함.
-    *   **:data** 모듈의 `StoredSettings` 데이터 클래스의 필드명을 (`provider` -> `cloudStorageProvider`) 수정함.
-    *   해당 데이터 클래스를 사용하던 **:background** 모듈(`DailyCloudSyncWorker`)과 **:app** 모듈(`SettingsViewModel`)의 코드도 변경된 필드명에 맞게 모두 수정하여 해결함.
+**Date:** 2025-11-30 23:45
+**Status:** Critical Fixes Applied, Verification Needed
 
 ---
 
-### 새로운 난제 (세션 2) - 리뷰 완료 후 사진 상태(`KEPT`) 불일치 문제
+## 1. 현재 해결되지 않은 문제 (Known Issues)
 
-#### 1. 최종 목표
-사진 리뷰 화면(`ReviewScreen`)에서 베스트 사진 2장을 남기고 나머지 사진을 삭제하면, 남겨진 사진들의 DB 상태가 **"KEPT"**로 변경되어, 자동/수동 동기화 시점에 클라우드로 업로드되어야 한다.
+### ① 감지 서비스 알림 (Foreground Notification) 미표시
+*   **현상:** 앱 실행 시 상단바에 "사진을 감지하고 있습니다" 알림이 뜨지 않음.
+*   **원인:** `InvalidForegroundServiceTypeException` (Android 14+) 크래시를 막기 위해 `PhotoDiscoveryWorker` 등에서 `setForeground()` 호출을 임시로 제거함.
+*   **해결 과제:** `AndroidManifest.xml`의 `foregroundServiceType="dataSync"` 설정이 병합 과정에서 누락되지 않도록 확실히 조치한 후, `setForeground()`를 다시 복구해야 함.
 
-#### 2. 현재 현상 (요약)
-*   **결론:** 리뷰 완료 후, 보관된 사진의 상태가 DB에서 "KEPT"로 변경되지 않아, 동기화 작업(`DailyCloudSyncWorker`)이 업로드할 사진을 찾지 못하고 있다.
-*   **증상 1:** 리뷰 완료 직후 실행되는 자동 동기화("분석 직후 바로바로 동기화") 시 알림이 오지 않음.
-*   **증상 2:** 설정 화면에서 "지금 바로 동기화" 버튼을 누르면, "백업할 새로운 베스트 사진이 없습니다." 라는 토스트 메시지가 즉시 나타남.
-*   **로그 확인:** `DailyCloudSyncWorker` 로그에 `No new images to upload.` 라고 기록되며, 이는 데이터베이스 쿼리 `getImagesByStatusAndUploadFlag("KEPT", false)`의 결과가 0개임을 의미함.
+### ② 다이어트(Diet) & 쓰레기(Trash) 기능 먹통
+*   **현상:** `PhotoDiscoveryWorker` 로그에 `No more images to scan`이 뜨며 아무 사진도 가져오지 못함.
+*   **원인:** `GalleryRepository.getRecentImages()`의 쿼리 조건(`BUCKET_DISPLAY_NAME NOT LIKE %Screenshot%`)이 예상보다 많은 사진을 필터링했을 가능성.
+*   **조치 완료:** 쿼리 조건(`selection`)을 제거하고 모든 사진을 가져오도록 수정함. (다음 빌드에서 검증 필요)
 
-#### 3. 현재까지의 진행 상황 및 코드 상태
-*   **프로젝트 상태:** 모든 코드는 안정적인 마지막 커밋(`9930df1a`) 상태에서 시작하여, 아래 문제들을 해결한 상태임.
-*   **Google 로그인 문제 해결:** Android Studio 재설치로 인해 변경된 `debug.keystore`의 SHA-1 지문을 Google Cloud Console에 새로 등록하여 해결 완료.
-*   **Naver/Google 인증 흐름 최종 수정:** 백그라운드에서는 로그인 `Intent`를 직접 만들지 않고, `ConsentRequiredException`만 발생시키도록 로직을 정리함. (현재 인증 흐름은 정상)
-*   **`ReviewViewModel.kt` 상태:** "삭제" 버튼을 눌러 리뷰를 완료하는 시나리오에서, 선택된 베스트 사진들의 상태를 `"KEPT"`로 변경하는 로직이 `deleteOtherImages()` 및 `onDeletionRequestHandled()` 함수 내에 **분명히 존재함.**
+### ③ 리뷰 화면 삭제 후 멈춤 (Freezing)
+*   **현상:** 마지막 사진 묶음을 정리(삭제/저장)한 후, 화면이 넘어가지 않고 멈추거나 빈 화면이 됨.
+*   **원인:** `ReviewViewModel.nextCluster()`에서 마지막 인덱스(`currentIndex == total - 1`)일 때 종료 로직(`finishReview`)이 누락됨.
+*   **조치 완료:** `nextCluster()`에 종료 로직 추가함. (다음 빌드에서 검증 필요)
 
-#### 4. 핵심 미스터리 및 다음 세션을 위한 제안
-*   **핵심 문제:** `ReviewViewModel`의 코드는 `imageItemDao.updateImageStatusesByIds(keptImageIds, "KEPT")`를 분명히 호출하고 있음에도 불구하고, 실제 DB 상태는 변경되지 않는 것으로 보인다.
-*   **가능성 1 (가장 유력):** `ReviewViewModel`의 `init` 블록에서 관찰하는 `Flow`의 동작 방식 때문에, DB 업데이트 트랜잭션이 완료되기 **전에** 다음 클러스터 상태(`No clusters to review`)가 방출되는 **경쟁 상태(Race Condition)**가 발생하고 있다. 로그를 보면, DB 업데이트가 포함된 `onDeletionRequestHandled` 함수가 끝나기도 전에, `No clusters to review. Triggering post-review sync` 로그가 먼저 찍히는 것을 알 수 있다.
-*   **다음 세션 제안:**
-    1.  `ReviewViewModel`의 `onDeletionRequestHandled` 함수 로직을 `suspend fun`으로 변경하고, `imageClusterDao.updateImageClusterReviewStatus`까지의 모든 DB 작업이 완료될 때까지 기다리도록 `viewModelScope.launch` 블록을 수정해야 함.
-    2.  리뷰 완료 후 다음 상태로 넘어가는 현재의 `Flow` 기반 구조가 너무 복잡하여 경쟁 상태를 유발하고 있으므로, `StateFlow`를 직접 업데이트하는 등, 상태 관리 방식을 조금 더 단순하고 명시적으로 변경하는 것을 고려해야 함.
+---
+
+## 2. 최근 수정 사항 (Recent Fixes)
+
+### 🔹 4번 기능 (Instant Review) 로직 확정
+*   **기준점:** `MediaDetectionService` 시작 시간(`APP_START_TIME`) 이후에 촬영된 사진만 스캔.
+*   **동작:** `PhotoDiscoveryWorker`가 `INSTANT` 모드일 때, 위 기준점 이후의 사진만 `source_type='INSTANT'`로 저장.
+*   **결과:** "분류된 정리하기" 버튼 클릭 시, 엉뚱한 과거 사진이 섞이지 않고 **방금 찍은 사진들만** 깔끔하게 보임.
+
+### 🔹 Hilt 의존성 및 초기화 문제 해결
+*   **`Bes2Application`:** `WorkManager` 초기화 충돌(`IllegalStateException`) 해결. `onCreate` 내 동기 작업(`enqueueUniquePeriodicWork`)을 백그라운드 스레드로 이동하여 ANR 해결.
+*   **`DatabaseModule`:** 가짜 `ImageItemDao` 제거 및 정상 DAO 연결.
+
+---
+
+## 3. 다음 세션 목표 (Next Steps)
+
+1.  **빌드 및 기능 검증:**
+    *   `GalleryRepository` 쿼리 수정 후 다이어트/쓰레기 숫자가 올라가는지 확인.
+    *   리뷰 화면에서 마지막 묶음 처리 후 홈으로 잘 돌아오는지 확인.
+2.  **Foreground Service 복구:**
+    *   `app` 모듈 매니페스트 설정을 재점검하고, `PhotoDiscoveryWorker`에 `setForeground`를 다시 적용하여 **"감지 서비스 알림"**을 되살릴 것. (안드로이드 정책 준수)
+3.  **UI 디테일:** 
+    *   눈 감은 사진이 베스트로 선정되는 등의 AI 점수 로직 튜닝.

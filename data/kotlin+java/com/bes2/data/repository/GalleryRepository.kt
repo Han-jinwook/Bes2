@@ -2,6 +2,7 @@ package com.bes2.data.repository
 
 import android.content.ContentUris
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import com.bes2.data.model.MediaStoreImage
@@ -32,8 +33,9 @@ class GalleryRepository @Inject constructor(
     fun getTotalImageCount(): Int {
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Images.Media._ID)
-        val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ? AND ${MediaStore.Images.Media.DATA} NOT LIKE ?"
-        val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
+        // [MODIFIED] Simplified selection to just exclude screenshots based on path logic later if needed
+        val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ?"
+        val selectionArgs = arrayOf("%Screenshot%")
         
         return try {
             context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { it.count } ?: 0
@@ -51,37 +53,24 @@ class GalleryRepository @Inject constructor(
         } catch (e: Exception) { 0 }
     }
     
-    // [FIXED] Use systemDefault() timezone to match Home screen logic
     fun getImagesForDateString(dateString: String): List<MediaStoreImage> {
         val imageList = mutableListOf<MediaStoreImage>()
-        
         try {
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
             val date = LocalDate.parse(dateString, formatter)
-            
-            // Reverted to ZoneId.systemDefault()
             val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
 
             val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
-            val selection = "${MediaStore.Images.Media.DATE_TAKEN} >= ? AND ${MediaStore.Images.Media.DATE_TAKEN} <= ? AND " +
-                            "(${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ? AND ${MediaStore.Images.Media.DATA} NOT LIKE ?)"
-            val selectionArgs = arrayOf(
-                startOfDay.toString(), // No need to divide by 1000, DATE_TAKEN is usually in ms (checking below)
-                endOfDay.toString(),
-                "%Screenshot%", 
-                "%Screenshot%"
-            )
-            // Note: MediaStore.Images.Media.DATE_TAKEN is in milliseconds since 1970.
-            
+            val selection = "${MediaStore.Images.Media.DATE_TAKEN} >= ? AND ${MediaStore.Images.Media.DATE_TAKEN} <= ?"
+            val selectionArgs = arrayOf(startOfDay.toString(), endOfDay.toString())
             val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
             
             context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-                
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
                     val filePath = cursor.getString(dataColumn)
@@ -90,9 +79,7 @@ class GalleryRepository @Inject constructor(
                     imageList.add(MediaStoreImage(id, contentUri.toString(), filePath, timestamp))
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
         return imageList
     }
 
@@ -109,7 +96,6 @@ class GalleryRepository @Inject constructor(
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
-
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
                     val dateTaken = cursor.getLong(dateColumn)
@@ -126,14 +112,15 @@ class GalleryRepository @Inject constructor(
         val imageList = mutableListOf<ImageItem>()
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
-        val selection = "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} NOT LIKE ? AND ${MediaStore.Images.Media.DATA} NOT LIKE ?"
-        val selectionArgs = arrayOf("%Screenshot%", "%Screenshot%")
+        
+        // [MODIFIED] Removed strict selection args to avoid missing images.
+        // PhotoDiscoveryWorker handles filtering.
+        val selection = null 
+        val selectionArgs = null
         
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val bundle = android.os.Bundle().apply {
-                    putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                    putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
                     putString(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_TAKEN).joinToString(", "))
                     putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION, android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
                     putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
@@ -153,7 +140,7 @@ class GalleryRepository @Inject constructor(
                 }
             } else {
                 val sortOrderWithLimit = "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT $limit OFFSET $offset"
-                context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrderWithLimit)?.use { cursor ->
+                context.contentResolver.query(uri, projection, null, null, sortOrderWithLimit)?.use { cursor ->
                     val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                     val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
                     val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
@@ -164,6 +151,52 @@ class GalleryRepository @Inject constructor(
                         val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                         imageList.add(ImageItem(id = id, uri = contentUri.toString(), filePath = filePath, timestamp = dateTaken, status = "NEW"))
                     }
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        return imageList
+    }
+    
+    fun getImageByUri(uriString: String): ImageItem? {
+        val uri = Uri.parse(uriString)
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
+        
+        return try {
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                    val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                    val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                    
+                    val id = cursor.getLong(idColumn)
+                    val filePath = cursor.getString(dataColumn)
+                    val dateTaken = cursor.getLong(dateColumn)
+                    
+                    ImageItem(id = id, uri = uriString, filePath = filePath, timestamp = dateTaken, status = "NEW")
+                } else null
+            }
+        } catch (e: Exception) { null }
+    }
+    
+    fun getImagesSince(timestamp: Long): List<ImageItem> {
+        val imageList = mutableListOf<ImageItem>()
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
+        val selection = "${MediaStore.Images.Media.DATE_TAKEN} >= ?"
+        val selectionArgs = arrayOf(timestamp.toString())
+        val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
+        
+        try {
+            context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idColumn)
+                    val filePath = cursor.getString(dataColumn)
+                    val dateTaken = cursor.getLong(dateColumn)
+                    val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                    imageList.add(ImageItem(id = id, uri = contentUri.toString(), filePath = filePath, timestamp = dateTaken, status = "NEW"))
                 }
             }
         } catch (e: Exception) { e.printStackTrace() }
@@ -182,25 +215,18 @@ class GalleryRepository @Inject constructor(
             context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
-                
                 val tempMap = mutableMapOf<String, MutableList<Long>>()
                 val idMap = mutableMapOf<String, Long>()
-
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
                 var scanCount = 0
                 while (cursor.moveToNext() && scanCount < 5000) {
                     val id = cursor.getLong(idColumn)
                     val timestamp = cursor.getLong(dateColumn)
                     val dateString = dateFormat.format(Date(timestamp))
-                    
                     tempMap.getOrPut(dateString) { mutableListOf() }.add(timestamp)
-                    if (!idMap.containsKey(dateString)) {
-                        idMap[dateString] = id
-                    }
+                    if (!idMap.containsKey(dateString)) { idMap[dateString] = id }
                     scanCount++
                 }
-
                 tempMap.forEach { (date, timestamps) ->
                     if (timestamps.size >= minCount) {
                         val repId = idMap[date] ?: 0L
@@ -209,10 +235,7 @@ class GalleryRepository @Inject constructor(
                     }
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        
+        } catch (e: Exception) { e.printStackTrace() }
         return groups.sortedByDescending { it.timestamp }
     }
 }

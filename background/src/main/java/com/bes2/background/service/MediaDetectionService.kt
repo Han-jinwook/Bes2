@@ -14,12 +14,15 @@ import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.work.WorkManager
 import com.bes2.background.observer.MediaChangeObserver
-import com.bes2.data.dao.ImageItemDao
+import com.bes2.data.dao.ReviewItemDao
+import com.bes2.data.dao.TrashItemDao
+import com.bes2.data.repository.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -29,10 +32,16 @@ private const val DEBUG_TAG = "MediaDetectorDebug"
 class MediaDetectionService : Service() {
 
     @Inject
-    lateinit var imageDao: ImageItemDao
+    lateinit var reviewItemDao: ReviewItemDao
 
     @Inject
-    lateinit var workManager: WorkManager // Injected to be passed to the observer
+    lateinit var trashItemDao: TrashItemDao
+
+    @Inject
+    lateinit var workManager: WorkManager
+    
+    @Inject
+    lateinit var settingsRepository: SettingsRepository // [ADDED]
 
     private var mediaObserver: MediaChangeObserver? = null
     private var handlerThread: HandlerThread? = null
@@ -47,13 +56,19 @@ class MediaDetectionService : Service() {
     override fun onCreate() {
         super.onCreate()
         Timber.tag(DEBUG_TAG).d("MediaDetectionService onCreate: Initializing...")
+        
+        // [ADDED] Save App Start Time
+        serviceScope.launch {
+            val startTime = System.currentTimeMillis()
+            settingsRepository.saveAppStartTime(startTime)
+            Timber.tag(DEBUG_TAG).i("App Start Time saved: $startTime")
+        }
 
         handlerThread = HandlerThread("MediaObserverThread").apply {
             start()
             val handler = Handler(looper)
             
-            // Observer is now created with WorkManager to schedule analysis tasks.
-            mediaObserver = MediaChangeObserver(applicationContext, handler, imageDao, workManager, serviceScope)
+            mediaObserver = MediaChangeObserver(applicationContext, handler, reviewItemDao, trashItemDao, workManager, serviceScope)
             
             try {
                 contentResolver.registerContentObserver(

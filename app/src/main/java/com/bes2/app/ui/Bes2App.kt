@@ -68,9 +68,6 @@ import com.bes2.app.ui.screenshot.ScreenshotScreen
 import com.bes2.app.ui.settings.SettingsScreen
 import java.time.LocalDate
 
-/**
- * Main entry point for the app's UI.
- */
 @Composable
 fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
     val context = LocalContext.current
@@ -139,12 +136,13 @@ private fun AppNavigation(
                 onStartAnalysisAndExit = onStartAnalysisAndExit,
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") },
-                onNavigateToReview = { date ->
-                    if (date != null) {
-                        navController.navigate("review?date=$date")
+                onNavigateToReview = { date, sourceType ->
+                    val route = if (date != null) {
+                        "review?date=$date&source_type=$sourceType"
                     } else {
-                        navController.navigate("review")
+                        "review?source_type=$sourceType"
                     }
+                    navController.navigate(route)
                 }
             )
         }
@@ -155,11 +153,18 @@ private fun AppNavigation(
             )
         }
         composable(
-            route = "review?date={date}",
-            arguments = listOf(navArgument("date") { 
-                type = NavType.StringType
-                nullable = true 
-            })
+            route = "review?date={date}&source_type={source_type}",
+            arguments = listOf(
+                navArgument("date") { 
+                    type = NavType.StringType
+                    nullable = true 
+                },
+                navArgument("source_type") { 
+                    type = NavType.StringType
+                    nullable = true 
+                    defaultValue = "DIET"
+                }
+            )
         ) {
             ReviewScreen(
                 viewModel = hiltViewModel(),
@@ -181,7 +186,7 @@ private fun HomeScreen(
     onStartAnalysisAndExit: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToScreenshotClean: () -> Unit,
-    onNavigateToReview: (String?) -> Unit
+    onNavigateToReview: (String?, String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -229,7 +234,11 @@ private fun HomeScreen(
 
         val uri = Uri.parse("https://gemini.google.com/")
         val browserIntent = Intent(Intent.ACTION_VIEW, uri)
-        context.startActivity(browserIntent)
+        try {
+            context.startActivity(browserIntent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "브라우저를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "Pulse")
@@ -426,7 +435,7 @@ private fun HomeScreen(
                     .scale(if (isMemoryActive) pulseScale else 1f)
                     .clickable(enabled = isMemoryActive) {
                         if (memoryEvent != null) {
-                            onNavigateToReview(memoryEvent.date)
+                            onNavigateToReview(memoryEvent.date, "MEMORY")
                         }
                     },
                 shape = RoundedCornerShape(12.dp)
@@ -437,7 +446,6 @@ private fun HomeScreen(
                         .fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // [UI FIX] Use 'isMemoryActive' to decide what to show
                     if (isMemoryActive && memoryEvent != null) {
                         AsyncImage(
                             model = memoryEvent.representativeUri,
@@ -463,7 +471,6 @@ private fun HomeScreen(
                             )
                         }
                     } else {
-                        // Show "Analyzing" state
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = "Memory",
@@ -498,7 +505,7 @@ private fun HomeScreen(
                     .scale(if (isReadyToClean) pulseScale else 1f)
                     .clickable(enabled = isReadyToClean) {
                         if (isReadyToClean) {
-                            onNavigateToReview(null)
+                            onNavigateToReview(null, "DIET")
                         }
                     },
                 shape = RoundedCornerShape(12.dp)
@@ -606,7 +613,7 @@ private fun HomeScreen(
             OutlinedButton(
                 onClick = {
                     if (hasPending) {
-                        onNavigateToReview(null)
+                        onNavigateToReview(null, "INSTANT")
                     } else {
                         onStartAnalysisAndExit()
                     }

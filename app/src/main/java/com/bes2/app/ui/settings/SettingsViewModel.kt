@@ -1,8 +1,7 @@
 package com.bes2.app.ui.settings
 
-import android.content.IntentSender // [FIX] Correct package
+import android.content.IntentSender
 import android.content.Context
-import android.content.Intent
 import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +13,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.bes2.background.worker.DailyCloudSyncWorker
 import com.bes2.data.repository.SettingsRepository
+import com.bes2.photos_integration.auth.GooglePhotosAuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -48,6 +48,7 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val workManager: WorkManager,
+    private val googlePhotosAuthManager: GooglePhotosAuthManager, // [FIX] Inject AuthManager
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -78,24 +79,30 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    // [FIX] Observe login status from AuthManager
     private fun checkLoginStatus() {
-        _uiState.update { it.copy(isLoggedIn = false) }
+        viewModelScope.launch {
+            googlePhotosAuthManager.account.collectLatest { account ->
+                _uiState.update { it.copy(isLoggedIn = account != null) }
+            }
+        }
     }
 
     fun onSyncOptionChanged(option: String) {
-        // viewModelScope.launch { settingsRepository.setSyncOption(option) } 
+        viewModelScope.launch { settingsRepository.saveSyncOption(option) } 
     }
 
     fun onUploadOnWifiOnlyChanged(wifiOnly: Boolean) {
-        // viewModelScope.launch { settingsRepository.setUploadOnWifiOnly(wifiOnly) } 
+        viewModelScope.launch { settingsRepository.saveUploadOnWifiOnly(wifiOnly) } 
     }
     
     fun setSyncTime(hour: Int, minute: Int) {
         _uiState.update { it.copy(syncTime = LocalTime.of(hour, minute)) }
+        viewModelScope.launch { settingsRepository.saveSyncTime(LocalTime.of(hour, minute)) }
     }
     
     fun setSyncDelay(hours: Int, minutes: Int) {
-        // viewModelScope.launch { settingsRepository.setSyncDelay(hours, minutes) } 
+        viewModelScope.launch { settingsRepository.saveSyncDelay(hours, minutes) } 
     }
 
     fun onManualSyncClicked() {
@@ -110,16 +117,23 @@ class SettingsViewModel @Inject constructor(
         workManager.enqueueUniqueWork(DailyCloudSyncWorker.WORK_NAME, ExistingWorkPolicy.KEEP, workRequest)
     }
     
-    fun beginGoogleSignIn(): IntentSender? {
-        return null 
+    // [FIX] Delegate to AuthManager
+    suspend fun beginGoogleSignIn(): IntentSender? {
+        return googlePhotosAuthManager.beginSignIn()
     }
     
+    // [FIX] Delegate to AuthManager
     fun handleGoogleSignInResult(result: ActivityResult) {
-        _uiState.update { it.copy(isLoggedIn = true) }
+        viewModelScope.launch {
+            googlePhotosAuthManager.handleSignInResult(result)
+        }
     }
     
+    // [FIX] Delegate to AuthManager
     fun onLogoutClicked() {
-        _uiState.update { it.copy(isLoggedIn = false) }
+        viewModelScope.launch {
+            googlePhotosAuthManager.signOut()
+        }
     }
 
     private fun monitorSyncStatus() {

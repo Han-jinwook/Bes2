@@ -2,6 +2,9 @@ package com.bes2.ml
 
 import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetector
+import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import kotlinx.coroutines.tasks.await
@@ -10,79 +13,93 @@ import javax.inject.Inject
 
 enum class ImageCategory {
     MEMORY,   // Keep: Person, Food, Landscape, Pet
-    DOCUMENT  // Clean: Document, Receipt, Text, Screen, Objects
+    DOCUMENT, // Clean: Document, Receipt, Text, Screen
+    OBJECT,   // Clean: Random objects (Chair, Mouse, etc)
+    IGNORE    // Fallback
 }
 
 class ImageContentClassifier @Inject constructor() {
 
+    private val faceDetector: FaceDetector
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
 
-    // Keywords that indicate this image is a "Memory" to be reviewed
-    private val memoryKeywords = setOf(
-        "Food", "Cuisine", "Dish", "Meal", "Bakery", "Dessert", "Drink",
-        "Person", "Face", "Human", "People", "Selfie", "Smile",
-        "Nature", "Landscape", "Sky", "Cloud", "Sunset", "Sunrise", "Beach", "Mountain", "Tree", "Plant", "Flower",
-        "Animal", "Pet", "Dog", "Cat", "Bird"
-    )
+    init {
+        val faceOptions = FaceDetectorOptions.Builder()
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .build()
+        faceDetector = FaceDetection.getClient(faceOptions)
+    }
 
-    // Keywords that indicate this image is a "Document" or "Object" to be cleaned
     private val documentKeywords = setOf(
-        "Document", "Text", "Paper", "Receipt", "Invoice",
+        "Document", "Text", "Paper", "Receipt", "Invoice", "Menu", "Font",
         "Screen", "Monitor", "Display", "Screenshot", 
-        "Whiteboard", "Blackboard", "Poster",
-        "Handwriting", "Drawing", "Sketch", "Diagram", "Pattern", "Design" // Added handwriting keywords
+        "Whiteboard", "Blackboard", "Poster", "Sign",
+        "Handwriting", "Drawing", "Sketch", "Diagram", "Pattern", "Design"
     )
+    
+    // Keywords for things we definitely want to KEEP (besides faces)
+    private val keepKeywords = setOf(
+        "Food", "Meal", "Dish", "Cuisine", "Dessert", "Drink", "Beverage",
+        "Nature", "Landscape", "Sky", "Cloud", "Sunset", "Sunrise", "Beach", "Mountain", "Forest", "Tree", "Flower", "Plant", "Garden",
+        "Pet", "Dog", "Cat", "Animal", "Bird",
+        "Architecture", "Building", "City", "Cityscape", "Landmark",
+        "Vehicle", "Car", "Bicycle", "Train", "Plane" // Vehicles are often kept
+    )
+    
+    companion object {
+        private const val CONFIDENCE_THRESHOLD = 0.7f 
+    }
 
     suspend fun classify(bitmap: Bitmap): ImageCategory {
         val image = InputImage.fromBitmap(bitmap, 0)
         
+        // --- Step 1: Faces are Priority #1 ---
+        try {
+            val faces = faceDetector.process(image).await()
+            if (faces.isNotEmpty()) {
+                Timber.d("Face detected. Classified as MEMORY.")
+                return ImageCategory.MEMORY
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Face detection failed.")
+        }
+        
+        // --- Step 2: Label Analysis ---
         return try {
             val labels = labeler.process(image).await()
             
-            val labelTexts = labels.map { "${it.text} (${String.format("%.2f", it.confidence)})" }
-            Timber.d("Image Labels Detected: $labelTexts")
-
-            // Calculate Max Confidence Score for each category
-            var maxMemoryScore = 0f
-            var maxDocumentScore = 0f
-
+            var maxDocScore = 0f
+            var maxKeepScore = 0f
+            
             labels.forEach { label ->
-                val text = label.text
-                val score = label.confidence
-
-                // Check Memory
-                if (memoryKeywords.any { text.contains(it, ignoreCase = true) }) {
-                    if (score > maxMemoryScore) maxMemoryScore = score
+                if (documentKeywords.any { label.text.contains(it, ignoreCase = true) }) {
+                    if (label.confidence > maxDocScore) maxDocScore = label.confidence
                 }
-
-                // Check Document
-                if (documentKeywords.any { text.contains(it, ignoreCase = true) }) {
-                    if (score > maxDocumentScore) maxDocumentScore = score
+                if (keepKeywords.any { label.text.contains(it, ignoreCase = true) }) {
+                    if (label.confidence > maxKeepScore) maxKeepScore = label.confidence
                 }
             }
 
-            Timber.d("Score -> Memory: $maxMemoryScore vs Document: $maxDocumentScore")
-
-            // Classification Logic: Compare Scores
-            // If Memory score is significantly high OR higher than document score, keep it.
-            // But if Document score is very high and Memory is low/medium, treat as Document.
-            
-            // Heuristic:
-            // 1. If Memory > Document -> MEMORY
-            // 2. If Document > Memory -> DOCUMENT
-            // 3. If both are 0 (No labels matched) -> DOCUMENT (Default to clean)
-            
-            if (maxMemoryScore > 0 && maxMemoryScore >= maxDocumentScore) {
-                Timber.d("Classified as MEMORY")
-                ImageCategory.MEMORY
-            } else {
-                Timber.d("Classified as DOCUMENT")
-                ImageCategory.DOCUMENT
+            // --- Step 3: Decision ---
+            when {
+                maxDocScore >= CONFIDENCE_THRESHOLD -> {
+                     Timber.d("Document score $maxDocScore. Classified as DOCUMENT.")
+                     ImageCategory.DOCUMENT
+                }
+                maxKeepScore >= 0.6f -> { // Lower threshold for nature/food
+                     Timber.d("Keep keyword score $maxKeepScore. Classified as MEMORY.")
+                     ImageCategory.MEMORY
+                }
+                else -> {
+                    // No face, no document, no keep-keyword -> Assume it's a random object
+                    Timber.d("No face, document($maxDocScore), or keep-keyword($maxKeepScore). Classified as OBJECT.")
+                    ImageCategory.OBJECT
+                }
             }
 
         } catch (e: Exception) {
-            Timber.e(e, "Error classifying image content. Defaulting to DOCUMENT.")
-            ImageCategory.DOCUMENT
+            Timber.e(e, "Error classifying. Defaulting to IGNORE.")
+            ImageCategory.IGNORE
         }
     }
 }

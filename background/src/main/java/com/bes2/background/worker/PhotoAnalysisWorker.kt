@@ -3,24 +3,18 @@ package com.bes2.background.worker
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
-import android.media.ExifInterface
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data // [ADDED] Import Data for companion object constant
 import androidx.work.ExistingWorkPolicy
-import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.bes2.background.notification.NotificationHelper
-import com.bes2.core_common.provider.ResourceProvider
 import com.bes2.data.dao.ReviewItemDao
-import com.bes2.data.repository.SettingsRepository
 import com.bes2.ml.BacklightingDetector
 import com.bes2.ml.EyeClosedDetector
 import com.bes2.ml.FaceEmbedder
-import com.bes2.ml.ImageContentClassifier
 import com.bes2.ml.ImageQualityAssessor
 import com.bes2.ml.MusiqQualityAnalyzer
 import com.bes2.ml.NimaQualityAnalyzer
@@ -31,8 +25,6 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.io.FileNotFoundException
-import java.io.InputStream
 
 @HiltWorker
 class PhotoAnalysisWorker @AssistedInject constructor(
@@ -46,71 +38,46 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val backlightingDetector: BacklightingDetector,
     private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
-    private val semanticSearchEngine: SemanticSearchEngine,
-    private val resourceProvider: ResourceProvider,
-    private val settingsRepository: SettingsRepository
+    private val semanticSearchEngine: SemanticSearchEngine
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
         const val WORK_NAME = "PhotoAnalysisWorker"
-        const val KEY_IS_BACKGROUND_DIET = "is_background_diet"
         const val BLUR_THRESHOLD = 30.0f
-    }
-
-    override suspend fun getForegroundInfo(): ForegroundInfo {
-        val notification = NotificationHelper.createForegroundNotification(appContext, resourceProvider.notificationIcon)
-        return ForegroundInfo(NotificationHelper.APP_STATUS_NOTIFICATION_ID, notification)
+        const val KEY_IS_BACKGROUND_DIET = "is_background_diet" // [RESTORED]
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker Started (Diet Mode) ---")
+        Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker Started ---")
 
         try {
-            val imagesToAnalyze = reviewItemDao.getNewDietItems()
+            val imagesToAnalyze = reviewItemDao.getNewDietItems() + reviewItemDao.getItemsBySourceAndStatus("INSTANT", "NEW")
             
             if (imagesToAnalyze.isEmpty()) {
-                Timber.tag(WORK_NAME).d("No new diet images to analyze.")
+                Timber.tag(WORK_NAME).d("No new images to analyze.")
                 return@withContext Result.success()
             }
             
-            Timber.tag(WORK_NAME).d("Analyzing ${imagesToAnalyze.size} diet images.")
-            
+            Timber.tag(WORK_NAME).d("Analyzing ${imagesToAnalyze.size} images.")
             var hasAnalyzedImages = false
 
             for (imageItem in imagesToAnalyze) {
                 var bitmap: Bitmap? = null
                 try {
                     bitmap = loadBitmapSimple(imageItem.uri)
-                    
                     if (bitmap == null) {
-                        Timber.w("Skipping image ${imageItem.uri}: Bitmap is null")
                         reviewItemDao.updateStatusByIds(listOf(imageItem.id), "ERROR_LOAD")
                         continue
                     }
 
                     val embedding = semanticSearchEngine.encodeImage(bitmap)
-                    val embeddingBytes = embedding?.let { floatArray ->
-                         val buffer = java.nio.ByteBuffer.allocate(floatArray.size * 4)
-                         buffer.asFloatBuffer().put(floatArray)
-                         buffer.array()
-                    }
-                    
                     val faceEmbedding = faceEmbedder.getFaceEmbedding(bitmap)
-                    val faceEmbeddingBytes = faceEmbedding?.let { floatArray ->
-                        val buffer = java.nio.ByteBuffer.allocate(floatArray.size * 4)
-                        buffer.asFloatBuffer().put(floatArray)
-                        buffer.array()
-                    }
-
+                    
                     val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                     val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
                     val isBacklit = backlightingDetector.isBacklit(bitmap)
 
-                    val nextStatus = if (areEyesClosed || blurScore < BLUR_THRESHOLD || isBacklit) {
-                        "STATUS_REJECTED"
-                    } else {
-                        "ANALYZED" 
-                    }
+                    val nextStatus = if (areEyesClosed || blurScore < BLUR_THRESHOLD || isBacklit) "STATUS_REJECTED" else "ANALYZED"
                     
                     val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap)
                     val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()?.toDouble()
@@ -124,15 +91,13 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         blurScore = blurScore,
                         areEyesClosed = areEyesClosed,
                         smilingProbability = smilingProbability,
-                        embedding = embeddingBytes,
-                        faceEmbedding = faceEmbeddingBytes,
+                        embedding = embedding?.let { floatArrayToByteArray(it) },
+                        faceEmbedding = faceEmbedding?.let { floatArrayToByteArray(it) },
                         exposureScore = if (isBacklit) -1.0f else 0.0f
                     )
                     
                     reviewItemDao.update(updatedItem)
-                    Timber.tag(WORK_NAME).d("Updated item ${imageItem.id} to status $nextStatus") // [DEBUG] Added log
                     hasAnalyzedImages = true
-
                 } catch (e: Exception) {
                     Timber.tag(WORK_NAME).e(e, "Error analyzing image: ${imageItem.uri}")
                     reviewItemDao.updateStatusByIds(listOf(imageItem.id), "ERROR_ANALYSIS")
@@ -150,12 +115,17 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                      clusteringRequest
                  )
             }
-
             return@withContext Result.success()
         } catch (e: Exception) {
             Timber.tag(WORK_NAME).e(e, "Error in PhotoAnalysisWorker")
             return@withContext Result.failure()
         }
+    }
+
+    private fun floatArrayToByteArray(floatArray: FloatArray): ByteArray {
+        val buffer = java.nio.ByteBuffer.allocate(floatArray.size * 4)
+        buffer.asFloatBuffer().put(floatArray)
+        return buffer.array()
     }
 
     private fun loadBitmapSimple(uri: String): Bitmap? {

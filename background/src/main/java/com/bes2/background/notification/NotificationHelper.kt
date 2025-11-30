@@ -16,7 +16,7 @@ object NotificationHelper {
     private const val USER_INTERACTION_CHANNEL_ID = "user_interaction_channel"
 
     private const val CONSENT_NOTIFICATION_ID = 101
-    private const val LOGIN_NOTIFICATION_ID = 103 // New ID for login notification
+    private const val LOGIN_NOTIFICATION_ID = 103 
     private const val REVIEW_NOTIFICATION_ID = 102
     private const val SYNC_SUCCESS_NOTIFICATION_ID = 104
     const val APP_STATUS_NOTIFICATION_ID = 1
@@ -57,11 +57,9 @@ object NotificationHelper {
         notificationManager.notify(CONSENT_NOTIFICATION_ID, builder.build())
     }
 
-    // New function for showing a simple login prompt notification.
     fun showLoginRequiredNotification(context: Context, providerName: String) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // This Intent will just open the app, as there's no specific screen to navigate to from the background.
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         val pendingIntent: PendingIntent? = if (intent != null) {
             PendingIntent.getActivity(
@@ -92,12 +90,13 @@ object NotificationHelper {
         notificationManager.notify(LOGIN_NOTIFICATION_ID, builder.build())
     }
 
-
-    fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int, photoCount: Int) {
+    // UPDATED: Added sourceType parameter
+    fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int, photoCount: Int, sourceType: String = "DIET") {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // DEFINITIVE FIX: Removed FLAG_ACTIVITY_CLEAR_TASK to prevent the activity stack from being cleared.
-        val intent = Intent(context, Class.forName("com.bes2.app.ui.review.ReviewActivity"))
+        val intent = Intent(context, Class.forName("com.bes2.app.ui.review.ReviewActivity")).apply {
+            putExtra("source_type", sourceType) // Pass source type to Activity/ViewModel
+        }
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context,
@@ -106,28 +105,27 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val title = if (sourceType == "INSTANT") "방금 찍은 사진 정리" else "사진 정리 알림"
         val contentText = if (clusterCount > 0) {
-            "${clusterCount}개 묶음(${photoCount}장)의 정리가 완료되었습니다."
+            "${clusterCount}개 묶음(${photoCount}장)의 정리가 준비되었습니다."
         } else {
             "새로운 사진 묶음이 준비되었습니다."
         }
 
         val builder = NotificationCompat.Builder(context, USER_INTERACTION_CHANNEL_ID)
             .setSmallIcon(notificationIcon)
-            .setContentTitle("사진을 확인해보세요")
+            .setContentTitle(title)
             .setContentText(contentText)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Increased priority for visibility
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
         notificationManager.notify(REVIEW_NOTIFICATION_ID, builder.build())
     }
 
-    // UPDATED: Added clusterCount parameter
     fun showSyncSuccessNotification(context: Context, successCount: Int, clusterCount: Int) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Clicking the notification opens the app
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         val pendingIntent: PendingIntent? = if (intent != null) {
             PendingIntent.getActivity(
@@ -138,13 +136,13 @@ object NotificationHelper {
             )
         } else null
         
-        val contentText = "${clusterCount}개 묶음 중 베스트 ${successCount}장이 구글 포토로 안전하게 백업되었습니다."
+        val contentText = "${clusterCount}개 묶음 중 베스트 ${successCount}장이 클라우드로 백업되었습니다."
 
         val builder = NotificationCompat.Builder(context, USER_INTERACTION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification) // Assuming this icon exists
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("동기화 완료")
             .setContentText(contentText)
-            .setPriority(NotificationCompat.PRIORITY_LOW) // Less intrusive
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)
 
         pendingIntent?.let {
@@ -172,7 +170,7 @@ object NotificationHelper {
             val userInteractionChannel = NotificationChannel(
                 USER_INTERACTION_CHANNEL_ID,
                 "새로운 사진 및 알림",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH // Changed to HIGH
             ).apply {
                 description = "새로운 사진 묶음이나 권한 요청 등 사용자의 확인이 필요한 알림입니다."
             }
