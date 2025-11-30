@@ -66,10 +66,10 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         Timber.tag(WORK_NAME).d("--- PhotoDiscoveryWorker Started (Mode: $sourceType) ---")
 
         if (isInstantMode) {
-            // [LOGIC] Instant Mode: Scan images since App Start
+            // [LOGIC] Instant Mode: Recent photos ONLY (No AI filtering)
             processInstantScan(sourceType)
         } else {
-            // [LOGIC] Diet Mode: Scan full gallery backwards
+            // [LOGIC] Diet Mode: Past photos ONLY (Strict Time Barrier + AI filtering)
             processGalleryScan(sourceType)
         }
         
@@ -78,12 +78,16 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
     }
     
     private suspend fun processInstantScan(sourceType: String) {
-        // [MODIFIED] Get App Start Time as baseline
+        // [FIX] Instant Scan Logic:
+        // 1. Fetch images strictly AFTER app start time.
+        // 2. DO NOT use AI Classifier.
+        // 3. Only filter out obvious Screenshots by path.
+        // 4. Everything else -> ReviewItem (INSTANT).
+        
         val appStartTime = settingsRepository.getAppStartTime()
         Timber.tag(WORK_NAME).d("Instant Scan Baseline: $appStartTime")
         
         val candidates = galleryRepository.getImagesSince(appStartTime)
-        
         Timber.tag(WORK_NAME).d("Instant Scan: Found ${candidates.size} images since app start.")
 
         val newDietEntities = mutableListOf<ReviewItemEntity>()
@@ -92,28 +96,14 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         for (candidate in candidates) {
              if (reviewItemDao.isUriProcessed(candidate.uri) || trashItemDao.isUriProcessed(candidate.uri)) continue
              
-             var isTrash = false
              val isScreenshotPath = candidate.filePath.contains("screenshot", ignoreCase = true)
+             
              if (isScreenshotPath) {
-                 isTrash = true
-             } else {
-                 try {
-                     val bitmap = loadBitmap(candidate.uri)
-                     if (bitmap != null) {
-                         val result = imageClassifier.classify(bitmap)
-                         if (result == ImageCategory.DOCUMENT || result == ImageCategory.OBJECT) {
-                             isTrash = true
-                         }
-                         bitmap.recycle()
-                     }
-                 } catch (e: Exception) { Timber.e(e) }
-             }
-
-             if (isTrash) {
                  newTrashEntities.add(TrashItemEntity(
                      uri = candidate.uri, filePath = candidate.filePath, timestamp = candidate.timestamp, status = "READY"
                  ))
              } else { 
+                 // Force to ReviewItem (INSTANT) without AI check
                  newDietEntities.add(ReviewItemEntity(
                      uri = candidate.uri, filePath = candidate.filePath, timestamp = candidate.timestamp,
                      status = "NEW", source_type = sourceType 
@@ -124,29 +114,33 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         if (newDietEntities.isNotEmpty()) reviewItemDao.insertAll(newDietEntities)
         if (newTrashEntities.isNotEmpty()) trashItemDao.insertAll(newTrashEntities)
         
-        Timber.tag(WORK_NAME).d("Instant Scan Complete: Added ${newDietEntities.size} normal, ${newTrashEntities.size} trash.")
+        Timber.tag(WORK_NAME).d("Instant Scan Complete: Added ${newDietEntities.size} normal (INSTANT), ${newTrashEntities.size} trash.")
     }
 
     private suspend fun processGalleryScan(sourceType: String) {
-        val currentDietCount = reviewItemDao.getActiveDietCount()
-        val currentTrashCount = trashItemDao.getReadyTrashCount()
+        // [FIX] Diet Scan Logic:
+        // 1. Fetch images strictly BEFORE app start time (Past only).
+        // 2. Use AI Classifier to separate Diet vs Trash.
         
-        if (currentDietCount >= TARGET_DIET_COUNT && currentTrashCount >= TARGET_TRASH_COUNT) {
-            Timber.tag(WORK_NAME).d("Pipeline full. Skipping scan.")
-            return
-        }
-
+        val appStartTime = settingsRepository.getAppStartTime()
         var offset = 0
         var scanCount = 0
         
         while (scanCount < MAX_SCAN_LIMIT) {
-            val dietNeeded = reviewItemDao.getActiveDietCount() < TARGET_DIET_COUNT
-            val trashNeeded = trashItemDao.getReadyTrashCount() < (TARGET_TRASH_COUNT + 20)
+            val currentDietCount = reviewItemDao.getActiveDietCount()
+            val currentTrashCount = trashItemDao.getReadyTrashCount()
             
-            if (!dietNeeded && !trashNeeded) break
+            if (currentDietCount >= TARGET_DIET_COUNT && currentTrashCount >= TARGET_TRASH_COUNT) {
+                Timber.tag(WORK_NAME).d("Diet/Trash Targets Met. Stopping scan.")
+                break
+            }
 
-            val candidates = galleryRepository.getRecentImages(BATCH_SIZE, offset)
-            if (candidates.isEmpty()) break
+            // [CRITICAL FIX] Use getPastImages to ensure we don't fetch Instant photos again
+            val candidates = galleryRepository.getPastImages(appStartTime, BATCH_SIZE, offset)
+            if (candidates.isEmpty()) {
+                Timber.tag(WORK_NAME).d("No more past images in gallery to scan.")
+                break
+            }
 
             val newDietEntities = mutableListOf<ReviewItemEntity>()
             val newTrashEntities = mutableListOf<TrashItemEntity>()
@@ -156,9 +150,11 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                  
                  var isTrash = false
                  val isScreenshotPath = candidate.filePath.contains("screenshot", ignoreCase = true)
+                 
                  if (isScreenshotPath) {
                      isTrash = true
                  } else {
+                     // [AI LOGIC] Only for Past photos
                      try {
                          val bitmap = loadBitmap(candidate.uri)
                          if (bitmap != null) {
@@ -193,10 +189,15 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             
             offset += BATCH_SIZE
         }
+        
+        Timber.tag(WORK_NAME).d("Gallery Scan Loop Finished. Scanned: $scanCount items.")
     }
     
     private suspend fun triggerAnalysis() {
-        if (reviewItemDao.getNewDietItems().isNotEmpty() || reviewItemDao.getItemsBySourceAndStatus("INSTANT", "NEW").isNotEmpty()) {
+        val newInstantCount = reviewItemDao.getItemsBySourceAndStatus("INSTANT", "NEW").size
+        val newDietCount = reviewItemDao.getNewDietItems().size
+        
+        if (newInstantCount > 0 || newDietCount > 0) {
             val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
             workManager.enqueueUniqueWork(
                 PhotoAnalysisWorker.WORK_NAME,
