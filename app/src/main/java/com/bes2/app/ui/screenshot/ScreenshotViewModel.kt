@@ -49,12 +49,12 @@ class ScreenshotViewModel @Inject constructor(
         }
     }
 
-    // [FIX] Added stub functions for UI interactions
-    fun toggleSelection(item: TrashItemEntity) {
+    // [FIX] Suppress unused parameter warnings for stub functions
+    fun toggleSelection(@Suppress("UNUSED_PARAMETER") item: TrashItemEntity) {
         // Logic to toggle selection
     }
 
-    fun toggleAllSelection(selectAll: Boolean) {
+    fun toggleAllSelection(@Suppress("UNUSED_PARAMETER") selectAll: Boolean) {
         // Logic to toggle all
     }
 
@@ -66,7 +66,7 @@ class ScreenshotViewModel @Inject constructor(
         // Logic to keep
     }
 
-    fun onDeleteCompleted(success: Boolean) {
+    fun onDeleteCompleted(@Suppress("UNUSED_PARAMETER") success: Boolean) {
         // Logic after deletion
     }
     

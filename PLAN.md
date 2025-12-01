@@ -1,7 +1,7 @@
-Best2 앱 개발 계획 (PLAN.md) - v6.7
+# Best2 앱 개발 계획 (PLAN.md) - v6.8
 
-Date: 2025-11-30
-Version: v6.7 (The Spec Synchronization)
+Date: 2025-12-01
+Version: v6.8 (The Simplified Pipeline)
 
 1. 앱의 핵심 목표
 
@@ -27,9 +27,17 @@ Version: v6.7 (The Spec Synchronization)
 
 2. 주요 기능 및 현재 상태
 
-✅ 완료된 기능 (v6.7 Update)
+✅ 완료된 기능 (v6.8 Stabilization)
 
-DB 및 파이프라인 구조 개혁 (The Reform):
+파이프라인 정상화 (Pipeline Normalized):
+
+입구 개방: `GalleryRepository`의 복잡한 SQL 필터링을 제거하여 Android 15 등 최신 기기 호환성 확보.
+
+분류 강화: `PhotoDiscoveryWorker` 내부 로직으로 스크린샷/AI 문서를 정밀하게 분류하여 Main/Trash DB로 분배.
+
+즉시 반응성 (Instant UI): 앱 실행 즉시 `MediaStore`를 직접 조회하여 스크린샷 개수를 표시 (지연 시간 0).
+
+DB 및 파이프라인 구조 (The Reform):
 
 이원화 시스템: 본채(ReviewItem)와 별채(TrashItem)의 물리적 분리로 데이터 간섭 원천 차단.
 
@@ -67,21 +75,19 @@ AI 자연어 검색: 배터리 소모 및 성능 이슈로 기능 삭제.
 
 3. 핵심 규칙 및 정책 (The Guardrails)
 
-📸 사진 처리 파이프라인 (Data Flow Pipeline) - v6.7 상세 명세
+📸 사진 처리 파이프라인 (Data Flow Pipeline) - v6.8 상세 명세
 
 0단계: 데이터 분기 및 저장 (The Dispatcher)
 
-담당 엔진: PastPhotoAnalysisWorker (물류 소장)
+담당 엔진: PhotoDiscoveryWorker (물류 소장)
 
-분류 로직 (ImageContentClassifier): 스캔된 이미지를 즉시 판별하여 라우팅.
+입구 (Fetch): `GalleryRepository`가 조건 없이 모든 과거 사진을 가져옴.
 
-문서/스크린샷: -> **별채 (TrashItemEntity)**로 즉시 격리. (다이어트 카운트 제외)
+분류 (Filter): Worker 내부 로직으로 판단.
 
-일반 사진: -> **본채 (ReviewItemEntity)**로 저장.
+경로에 'Screenshot' 포함 or AI 판단 '문서/사물' -> **별채 (TrashItemEntity)**.
 
-source_type = DIET (갤러리 다이어트용)
-
-status = NEW (분석 대기)
+그 외 일반 사진 -> **본채 (ReviewItemEntity)** (source_type = DIET).
 
 1단계: 정밀 분석 (Deep Analysis)
 
@@ -149,7 +155,7 @@ Score = (MUSIQ * 0.5) + (NIMA * 0.3) + (Smile_Prob * 30 or -10) + (Base * 0.2)
 
 기술 스택: Hilt, Jetpack Compose, Coroutines & Flow, WorkManager.
 
-🗄️ 데이터베이스 명세 (Schema) - v6.7 Updated
+🗄️ 데이터베이스 명세 (Schema) - v6.8 Updated
 
 1. ReviewItemEntity (본채 - 소중한 사진)
 
@@ -177,11 +183,11 @@ status: READY, DELETED
 
 5. 주요 개발 히스토리 (Milestones)
 
-Milestone 13: The Structural Reform (v6.6 ~ v6.7 완료)
+Milestone 14: Pipeline Stabilization (v6.8 완료)
 
-Architecture Refactoring: 목적별 DB 분리(Main/Trash) 및 데이터 흐름 정규화.
+Logic Fix: Android 15 호환성을 위한 Query 로직 단순화 및 Worker 기반 분류 체계 확립.
 
-Logic Standardization: 각 Worker(Dispatcher, Analyzer, Clusterer)의 역할과 책임을 명확히 정의.
+UI Response: 앱 실행 시 갤러리 스크린샷 즉시 카운팅 구현 (UX 개선).
 
 6. 다음 목표 (Next Mission) - POST MVP
 

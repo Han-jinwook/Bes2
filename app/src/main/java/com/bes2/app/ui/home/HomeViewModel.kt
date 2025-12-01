@@ -67,8 +67,9 @@ class HomeViewModel @Inject constructor(
     init {
         Timber.tag(TAG).d("init - START")
         
-        monitorTrashCount()
-        Timber.tag(TAG).d("init - monitorTrashCount OK")
+        loadScreenshotCount()
+        // monitorTrashCount() // [MODIFIED] Disabled to prefer immediate MediaStore count
+        Timber.tag(TAG).d("init - monitorTrashCount DISABLED")
         
         checkPendingReviews()
         Timber.tag(TAG).d("init - checkPendingReviews OK")
@@ -86,6 +87,13 @@ class HomeViewModel @Inject constructor(
         Timber.tag(TAG).d("init - startBackgroundAnalysis OK")
         
         Timber.tag(TAG).d("init - END")
+    }
+
+    private fun loadScreenshotCount() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = galleryRepository.getScreenshotCount()
+            _uiState.update { it.copy(screenshotCount = count) }
+        }
     }
 
     private fun monitorTrashCount() {
@@ -107,7 +115,7 @@ class HomeViewModel @Inject constructor(
     private fun checkPendingReviews() {
         viewModelScope.launch {
             imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW")
-                .collectLatest { clusters ->
+                .collectLatest { _ ->
                     val instantItems = reviewItemDao.getItemsBySourceAndStatus("INSTANT", "CLUSTERED")
                     val hasInstantPending = instantItems.isNotEmpty()
                     
@@ -154,9 +162,11 @@ class HomeViewModel @Inject constructor(
 
     private fun startBackgroundAnalysis() {
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
+        
+        // [FIX] Force restart the worker to ensure it runs immediately
         workManager.enqueueUniqueWork(
             PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.REPLACE, // Changed from KEEP to REPLACE
             discoveryRequest
         )
         

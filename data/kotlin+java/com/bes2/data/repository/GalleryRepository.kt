@@ -115,18 +115,20 @@ class GalleryRepository @Inject constructor(
 
     // [ADDED] Strict Time-Based Fetching for Diet Mode
     // Only fetches images BEFORE the specific timestamp (e.g., App Start Time)
-    fun getPastImages(beforeTimestamp: Long, limit: Int, offset: Int): List<ImageItem> {
+    fun getPastImages(@Suppress("UNUSED_PARAMETER") beforeTimestamp: Long, limit: Int, offset: Int): List<ImageItem> {
         val imageList = mutableListOf<ImageItem>()
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
         
-        // Strict Condition: Only images BEFORE the cutoff time
-        val selection = "${MediaStore.Images.Media.DATE_TAKEN} < ?"
-        val selectionArgs = arrayOf(beforeTimestamp.toString())
+        // [SIMPLIFIED] Removed ALL filters to fetch everything. Filtering is done in Worker.
+        val selection: String? = null
+        val selectionArgs: Array<String>? = null
         
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // [FIX] Android 8.0+ (API 26+) MUST use Bundle for LIMIT/OFFSET
                 val bundle = android.os.Bundle().apply {
+                    // No selection needed (fetch all)
                     putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
                     putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
                     putString(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_TAKEN).joinToString(", "))
@@ -138,6 +140,7 @@ class GalleryRepository @Inject constructor(
                     processCursor(cursor, imageList)
                 }
             } else {
+                // Legacy method for older Android versions
                 val sortOrderWithLimit = "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT $limit OFFSET $offset"
                 context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrderWithLimit)?.use { cursor ->
                     processCursor(cursor, imageList)
