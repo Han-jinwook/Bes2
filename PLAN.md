@@ -1,7 +1,7 @@
-# Best2 앱 개발 계획 (PLAN.md) - v6.8
+# Best2 앱 개발 계획 (PLAN.md) - v6.9
 
-Date: 2025-12-01
-Version: v6.8 (The Simplified Pipeline)
+Date: 2025-12-02.  01:18
+Version: v6.9 (The Safety Upgrade)
 
 1. 앱의 핵심 목표
 
@@ -27,7 +27,7 @@ Version: v6.8 (The Simplified Pipeline)
 
 2. 주요 기능 및 현재 상태
 
-✅ 완료된 기능 (v6.8 Stabilization)
+✅ 완료된 기능 (v6.9 Stabilization)
 
 파이프라인 정상화 (Pipeline Normalized):
 
@@ -51,9 +51,11 @@ DB 및 파이프라인 구조 (The Reform):
 
 Swipe Navigation ('자유 탐색' 구조).
 
-안전한 스마트 분류:
+안전한 스마트 분류 (Safety First):
 
-시스템 폴더 경로 기반의 결정론적 분류(ImageContentClassifier) 및 DB 자가 치유.
+사람 우선(Face First) 정책: 얼굴 감지 시 무조건 일반 사진으로 분류하여 오분류 사고 원천 차단.
+
+쓰레기 정리 고도화: 스크린샷 우선 노출 -> DB 쓰레기 노출 순서 적용 및 무한 리필 UI 구현.
 
 추억 소환 (Logic Optimization):
 
@@ -75,7 +77,7 @@ AI 자연어 검색: 배터리 소모 및 성능 이슈로 기능 삭제.
 
 3. 핵심 규칙 및 정책 (The Guardrails)
 
-📸 사진 처리 파이프라인 (Data Flow Pipeline) - v6.8 상세 명세
+📸 사진 처리 파이프라인 (Data Flow Pipeline) - v6.9 상세 명세
 
 0단계: 데이터 분기 및 저장 (The Dispatcher)
 
@@ -85,7 +87,7 @@ AI 자연어 검색: 배터리 소모 및 성능 이슈로 기능 삭제.
 
 분류 (Filter): Worker 내부 로직으로 판단.
 
-경로에 'Screenshot' 포함 or AI 판단 '문서/사물' -> **별채 (TrashItemEntity)**.
+경로에 'Screenshot' 포함 or AI 판단 '문서/사물' (단, 사람 제외) -> **별채 (TrashItemEntity)**.
 
 그 외 일반 사진 -> **본채 (ReviewItemEntity)** (source_type = DIET).
 
@@ -133,7 +135,7 @@ Orphan Merge: 1~2장의 독립 사진(Outliers)을 인접 클러스터로 강제
 
 🚫 품질 게이트 규칙 (Thresholds)
 
-눈 감음: 눈 뜸 확률 0.5 미만.
+눈 감음: 눈 뜸 확률 0.3 미만 (엄격).
 
 흐림: 선명도 점수(Laplacian) 30.0 미만.
 
@@ -155,7 +157,7 @@ Score = (MUSIQ * 0.5) + (NIMA * 0.3) + (Smile_Prob * 30 or -10) + (Base * 0.2)
 
 기술 스택: Hilt, Jetpack Compose, Coroutines & Flow, WorkManager.
 
-🗄️ 데이터베이스 명세 (Schema) - v6.8 Updated
+🗄️ 데이터베이스 명세 (Schema) - v6.9 Updated
 
 1. ReviewItemEntity (본채 - 소중한 사진)
 
@@ -182,6 +184,12 @@ status: READY, DELETED
 용도: 클러스터링 메타데이터 (ReviewItem들을 묶는 그룹 정보).
 
 5. 주요 개발 히스토리 (Milestones)
+
+Milestone 15: Trash Cleaning Upgrade (v6.9 완료)
+
+Logic: 오분류 방지를 위한 '사람 우선(Face First)' 정책 적용 (ImageContentClassifier).
+
+UX: 스크린샷 정리 시 진짜 스크린샷 우선 노출 및 무한 리필(Infinite Refill) UI 구현.
 
 Milestone 14: Pipeline Stabilization (v6.8 완료)
 
