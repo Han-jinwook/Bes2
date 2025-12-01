@@ -19,12 +19,15 @@ interface ReviewItemDao {
     @Update
     suspend fun update(item: ReviewItemEntity)
 
-    // [KEY] Fetch by Source Type (DIET, MEMORY, INSTANT)
     @Query("SELECT * FROM review_items WHERE source_type = :sourceType ORDER BY timestamp DESC")
     fun getItemsBySourceTypeFlow(sourceType: String): Flow<List<ReviewItemEntity>>
     
     @Query("SELECT * FROM review_items WHERE source_type = :sourceType AND status = :status ORDER BY timestamp DESC")
     suspend fun getItemsBySourceAndStatus(sourceType: String, status: String): List<ReviewItemEntity>
+
+    // [ADDED] Get all items for a cluster
+    @Query("SELECT * FROM review_items WHERE cluster_id = :clusterId")
+    suspend fun getItemsByClusterId(clusterId: String): List<ReviewItemEntity>
 
     @Query("SELECT * FROM review_items WHERE status = 'NEW' AND source_type = 'DIET'")
     suspend fun getNewDietItems(): List<ReviewItemEntity>
@@ -37,6 +40,10 @@ interface ReviewItemDao {
     
     @Query("UPDATE review_items SET cluster_id = :clusterId, status = 'CLUSTERED' WHERE id IN (:ids)")
     suspend fun updateClusterInfo(clusterId: String, ids: List<Long>)
+
+    // [ADDED] Update cluster_id ONLY
+    @Query("UPDATE review_items SET cluster_id = :clusterId WHERE id IN (:ids)")
+    suspend fun updateClusterIdOnly(clusterId: String, ids: List<Long>)
     
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' OR status = 'DELETED'")
     fun getProcessedCountFlow(): Flow<Int>
@@ -47,11 +54,9 @@ interface ReviewItemDao {
     @Query("SELECT * FROM review_items WHERE timestamp >= :start AND timestamp <= :end ORDER BY timestamp DESC")
     suspend fun getImagesByDateRange(start: Long, end: Long): List<ReviewItemEntity>
 
-    // [FIX] Count ALL active diet items to prevent over-fetching
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'DIET' AND status != 'KEPT' AND status != 'DELETED'")
     suspend fun getActiveDietCount(): Int
 
-    // [ADDED] Live count for UI
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'DIET' AND status != 'KEPT' AND status != 'DELETED'")
     fun getActiveDietCountFlow(): Flow<Int>
 }

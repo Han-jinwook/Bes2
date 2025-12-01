@@ -15,12 +15,16 @@ class EyeClosedDetector @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
+    // [FINAL CONFIG] Simple & Clean. 
     private val highAccuracyOpts = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
         .build()
 
     private val detector = FaceDetection.getClient(highAccuracyOpts)
+    
+    // [FINAL THRESHOLD] 0.3
+    private val EYE_OPEN_THRESHOLD = 0.3f
 
     suspend fun areEyesClosed(bitmap: Bitmap): Boolean {
         val image = InputImage.fromBitmap(bitmap, 0)
@@ -36,14 +40,13 @@ class EyeClosedDetector @Inject constructor(
                 val leftProb = face.leftEyeOpenProbability
                 val rightProb = face.rightEyeOpenProbability
                 
-                Timber.i("[EyeCheck] Face #$index: LeftOpen=$leftProb, RightOpen=$rightProb")
+                Timber.d("[EyeCheck] Face #$index: Left=$leftProb, Right=$rightProb")
 
-                // Threshold set to 0.5 as requested
-                val isLeftEyeClosed = leftProb?.let { it < 0.5 } ?: false
-                val isRightEyeClosed = rightProb?.let { it < 0.5 } ?: false
+                val isLeftEyeClosed = leftProb?.let { it < EYE_OPEN_THRESHOLD } ?: false
+                val isRightEyeClosed = rightProb?.let { it < EYE_OPEN_THRESHOLD } ?: false
 
                 if (isLeftEyeClosed || isRightEyeClosed) {
-                    Timber.w("[EyeCheck] Eye closed DETECTED! Face #$index. LeftClosed=$isLeftEyeClosed ($leftProb), RightClosed=$isRightEyeClosed ($rightProb)")
+                    Timber.i("[EyeCheck] DETECTED CLOSED! Face #$index. Left=$isLeftEyeClosed, Right=$isRightEyeClosed")
                     eyeClosedDetected = true
                 }
             }

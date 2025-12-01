@@ -39,24 +39,22 @@ class ClusteringWorker @AssistedInject constructor(
 
         for (sourceType in sourceTypes) {
             try {
-                // 1. Get images that are analyzed but not clustered for this source type
                 val candidates = reviewItemDao.getAnalyzedItemsWithoutCluster(sourceType)
                 Timber.tag(WORK_NAME).d("[$sourceType] Query result: ${candidates.size} items found.")
                 
                 if (candidates.isEmpty()) continue
 
-                // Map ReviewItemEntity to ImageItemEntity for helper
-                val mappedCandidates = candidates.map { 
-                    ImageItemEntity(id = it.id, uri = it.uri, timestamp = it.timestamp, filePath = it.filePath)
-                }
+                val validCandidates = candidates.filter { it.status == "ANALYZED" }
+                val rejectedCandidates = candidates.filter { it.status == "STATUS_REJECTED" }
 
-                // 2. Perform Clustering
-                val clusters = clusteringHelper.clusterImages(mappedCandidates)
-                Timber.tag(WORK_NAME).d("[$sourceType] Clustered into ${clusters.size} groups.")
+                val validMapped = validCandidates.map { ImageItemEntity(id = it.id, uri = it.uri, timestamp = it.timestamp, filePath = it.filePath) }
+                val validClusters = clusteringHelper.clusterImages(validMapped)
 
-                // 3. Save Clusters
-                for (cluster in clusters) {
+                val createdClusterIds = mutableListOf<String>()
+
+                for (cluster in validClusters) {
                     val newClusterId = UUID.randomUUID().toString()
+                    createdClusterIds.add(newClusterId)
                     
                     val newClusterEntity = ImageClusterEntity(
                         id = newClusterId,
@@ -66,18 +64,33 @@ class ClusteringWorker @AssistedInject constructor(
                     imageClusterDao.insertImageCluster(newClusterEntity)
                     
                     val imageIdsInCluster = cluster.images.map { it.id }
-                    
                     reviewItemDao.updateClusterInfo(newClusterId, imageIdsInCluster)
                 }
                 
-                // 4. Send Notification for INSTANT source
-                if (sourceType == "INSTANT" && clusters.isNotEmpty()) {
-                    Timber.tag(WORK_NAME).i("Sending notification for INSTANT clusters.")
+                if (rejectedCandidates.isNotEmpty()) {
+                    val targetClusterId = if (createdClusterIds.isNotEmpty()) {
+                        createdClusterIds.last()
+                    } else {
+                        val trashClusterId = UUID.randomUUID().toString()
+                        val trashClusterEntity = ImageClusterEntity(
+                            id = trashClusterId,
+                            creationTime = System.currentTimeMillis(),
+                            reviewStatus = "PENDING_REVIEW"
+                        )
+                        imageClusterDao.insertImageCluster(trashClusterEntity)
+                        trashClusterId
+                    }
+                    
+                    val rejectedIds = rejectedCandidates.map { it.id }
+                    reviewItemDao.updateClusterIdOnly(targetClusterId, rejectedIds)
+                }
+
+                if (sourceType == "INSTANT" && candidates.isNotEmpty()) {
                     NotificationHelper.showReviewNotification(
                         appContext,
                         R.drawable.ic_notification,
-                        clusters.size,
-                        candidates.size, // Total items processed
+                        validClusters.size + (if (rejectedCandidates.isNotEmpty() && validClusters.isEmpty()) 1 else 0),
+                        candidates.size,
                         "INSTANT"
                     )
                 }
@@ -89,7 +102,6 @@ class ClusteringWorker @AssistedInject constructor(
         }
         
         Timber.tag(WORK_NAME).d("Clustering finished.")
-
         return@withContext if (hasError) Result.failure() else Result.success()
     }
 }

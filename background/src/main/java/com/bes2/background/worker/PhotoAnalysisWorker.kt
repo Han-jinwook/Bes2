@@ -6,7 +6,7 @@ import android.graphics.BitmapFactory
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
-import androidx.work.Data // [ADDED] Import Data for companion object constant
+import androidx.work.Data 
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -44,7 +44,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "PhotoAnalysisWorker"
         const val BLUR_THRESHOLD = 30.0f
-        const val KEY_IS_BACKGROUND_DIET = "is_background_diet" // [RESTORED]
+        const val KEY_IS_BACKGROUND_DIET = "is_background_diet" 
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -70,19 +70,31 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         continue
                     }
 
-                    val embedding = semanticSearchEngine.encodeImage(bitmap)
-                    val faceEmbedding = faceEmbedder.getFaceEmbedding(bitmap)
-                    
+                    // 1. Basic Filters (Fail Fast)
                     val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                     val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
                     val isBacklit = backlightingDetector.isBacklit(bitmap)
 
                     val nextStatus = if (areEyesClosed || blurScore < BLUR_THRESHOLD || isBacklit) "STATUS_REJECTED" else "ANALYZED"
                     
-                    val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap)
-                    val nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()?.toDouble()
-                    val musiqScore = musiqAnalyzer.analyze(bitmap)
-                    val smilingProbability = smileDetector.getSmilingProbability(bitmap)
+                    // 2. Score Calculation (ONLY if Passed)
+                    var nimaMeanScore: Double? = null
+                    var musiqScore: Float? = null
+                    var smilingProbability: Float? = null
+                    var embedding: ByteArray? = null
+                    var faceEmbedding: ByteArray? = null
+
+                    if (nextStatus == "ANALYZED") {
+                        embedding = semanticSearchEngine.encodeImage(bitmap)?.let { floatArrayToByteArray(it) }
+                        faceEmbedding = faceEmbedder.getFaceEmbedding(bitmap)?.let { floatArrayToByteArray(it) }
+                        
+                        val nimaScoreDistribution = nimaAnalyzer.analyze(bitmap)
+                        nimaMeanScore = nimaScoreDistribution?.mapIndexed { index, score -> (index + 1) * score }?.sum()?.toDouble()
+                        musiqScore = musiqAnalyzer.analyze(bitmap)
+                        smilingProbability = smileDetector.getSmilingProbability(bitmap)
+                    } else {
+                        Timber.d("Image ${imageItem.id} REJECTED (Eyes: $areEyesClosed, Blur: $blurScore, Backlit: $isBacklit). Skipping detailed scoring.")
+                    }
 
                     val updatedItem = imageItem.copy(
                         status = nextStatus,
@@ -91,8 +103,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         blurScore = blurScore,
                         areEyesClosed = areEyesClosed,
                         smilingProbability = smilingProbability,
-                        embedding = embedding?.let { floatArrayToByteArray(it) },
-                        faceEmbedding = faceEmbedding?.let { floatArrayToByteArray(it) },
+                        embedding = embedding,
+                        faceEmbedding = faceEmbedding,
                         exposureScore = if (isBacklit) -1.0f else 0.0f
                     )
                     

@@ -1,7 +1,10 @@
 package com.bes2.app.ui.review
 
 import android.content.Context
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -120,13 +123,11 @@ class ReviewViewModel @Inject constructor(
     fun nextCluster() {
         val total = if (isMemoryEventMode) allMemoryClusters.size else allClusterIds.size
         
-        // [FIX] If we are at the last cluster (or somehow beyond), finish the review.
         if (currentIndex < total - 1) {
             currentIndex++
             manualSelectionIds = null
             loadCurrentCluster()
         } else {
-            // No more clusters to show
             viewModelScope.launch { finishReview() }
         }
     }
@@ -152,11 +153,13 @@ class ReviewViewModel @Inject constructor(
         viewModelScope.launch {
             val clusters = imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW").first()
             
-            val validItems = reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "CLUSTERED")
+            val validItems = reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "CLUSTERED") +
+                             reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "STATUS_REJECTED")
+
             val validClusterIds = validItems.mapNotNull { it.cluster_id }.toSet()
             val targetClusters = clusters.filter { it.id in validClusterIds }
             
-            Timber.d("Loading clusters for $reviewSourceType. Found ${targetClusters.size} (Total pending: ${clusters.size})")
+            Timber.d("Loading clusters for $reviewSourceType. Found ${targetClusters.size} valid clusters.")
 
             if (targetClusters.isNotEmpty()) {
                 allClusterIds = targetClusters.map { it.id }
@@ -174,10 +177,11 @@ class ReviewViewModel @Inject constructor(
         viewModelScope.launch {
             val cluster = imageClusterDao.getImageClusterById(clusterId).first() ?: return@launch
             
-            val allSourceItems = reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "CLUSTERED")
-            val clusterItems = allSourceItems.filter { it.cluster_id == clusterId }
+            val clusterItems = reviewItemDao.getItemsByClusterId(clusterId)
             
-            _uiState.value = calculateReadyState(cluster, clusterItems, allClusterIds.size, index)
+            if (clusterItems.isNotEmpty()) {
+                _uiState.value = calculateReadyState(cluster, clusterItems, allClusterIds.size, index)
+            }
         }
     }
 
@@ -294,14 +298,14 @@ class ReviewViewModel @Inject constructor(
     
     private fun restoreRejectedImage(image: ReviewItemEntity) {
         viewModelScope.launch {
-            val restoredImage = image.copy(status = "CLUSTERED") // [FIX] Restore to CLUSTERED
+            val restoredImage = image.copy(status = "CLUSTERED") 
             reviewItemDao.update(restoredImage)
             loadCurrentCluster() 
         }
     }
     
     private fun calculateFinalScore(image: ReviewItemEntity): Float {
-        val nimaScore = (image.nimaScore ?: 5.0) * 10 
+        val nimaScore = (image.nimaScore ?: 0.0) * 10 
         val musiqRaw = image.musiqScore ?: (nimaScore / 10.0).toFloat()
         val musiqScore = musiqRaw * 10
         val smileProb = image.smilingProbability ?: 0f
@@ -310,9 +314,7 @@ class ReviewViewModel @Inject constructor(
     }
 
     private fun calculateReadyState(cluster: ImageClusterEntity, items: List<ReviewItemEntity>, total: Int, index: Int): ReviewUiState.Ready {
-        val (analyzedImages, rejectedImages) = items.partition { 
-            it.status == "ANALYZED" || it.status == "CLUSTERED" || it.status == "KEPT" || it.status == "NEW" || it.status == "PENDING_ANALYSIS" || it.status == "EVENT_MEMORY"
-        }
+        val (analyzedImages, rejectedImages) = items.partition { it.status != "STATUS_REJECTED" }
 
         val (finalBest, finalSecond) = if (manualSelectionIds == null) {
             val sortedCandidates = analyzedImages.sortedByDescending { calculateFinalScore(it) }
@@ -448,11 +450,45 @@ class ReviewViewModel @Inject constructor(
     }
 
     private fun loadBitmap(uriString: String): android.graphics.Bitmap? {
-        return try {
-            val uri = Uri.parse(uriString)
-            context.contentResolver.openInputStream(uri)?.use { 
+        val uri = Uri.parse(uriString)
+        try {
+            val originalBitmap = context.contentResolver.openInputStream(uri)?.use {
                 android.graphics.BitmapFactory.decodeStream(it)
+            } ?: return null
+
+            var rotation = 0
+            val cursor = context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Images.ImageColumns.ORIENTATION),
+                null, null, null
+            )
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val columnIndex = it.getColumnIndex(MediaStore.Images.ImageColumns.ORIENTATION)
+                    if (columnIndex != -1) {
+                        rotation = it.getInt(columnIndex)
+                    }
+                }
             }
-        } catch (e: Exception) { null }
+
+            return if (rotation != 0) {
+                val matrix = Matrix()
+                matrix.postRotate(rotation.toFloat())
+                val rotatedBitmap = android.graphics.Bitmap.createBitmap(
+                    originalBitmap, 0, 0,
+                    originalBitmap.width, originalBitmap.height,
+                    matrix, true
+                )
+                if (rotatedBitmap != originalBitmap) {
+                    originalBitmap.recycle()
+                }
+                rotatedBitmap
+            } else {
+                originalBitmap
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to load bitmap: $uriString")
+            return null
+        }
     }
 }
