@@ -24,8 +24,10 @@ class ImageContentClassifier @Inject constructor() {
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
 
     init {
+        // [MODIFIED] Changed to ACCURATE mode to prevent classifying humans as trash.
+        // Safety First: It's better to be slow than to delete a photo with a person.
         val faceOptions = FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
             .build()
         faceDetector = FaceDetection.getClient(faceOptions)
     }

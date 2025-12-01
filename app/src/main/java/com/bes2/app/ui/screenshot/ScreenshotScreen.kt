@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.bes2.data.model.TrashItemEntity // [FIX] Updated Import
+import com.bes2.data.model.TrashItemEntity 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,8 +86,7 @@ fun ScreenshotScreen(
                     }
                 },
                 actions = {
-                    // val isAllSelected = uiState.screenshots.isNotEmpty() && uiState.screenshots.all { it.isSelected }
-                    val isAllSelected = false // Dummy for now
+                    val isAllSelected = uiState.screenshots.isNotEmpty() && uiState.selectedUris.size == uiState.screenshots.size
                     TextButton(onClick = { viewModel.toggleAllSelection(!isAllSelected) }) {
                         Text(if (isAllSelected) "선택 해제" else "전체 선택")
                     }
@@ -100,8 +99,7 @@ fun ScreenshotScreen(
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
-                // val selectedCount = uiState.screenshots.count { it.isSelected }
-                val selectedCount = 0 // Dummy for now
+                val selectedCount = uiState.selectedUris.size
                 
                 Row(
                     modifier = Modifier
@@ -176,6 +174,7 @@ fun ScreenshotScreen(
                 itemsIndexed(uiState.screenshots) { index, item ->
                     ScreenshotGridItem(
                         item = item,
+                        isSelected = uiState.selectedUris.contains(item.uri),
                         onToggle = { viewModel.toggleSelection(item) },
                         onLongPress = { zoomedImageInfo = uiState.screenshots to index }
                     )
@@ -196,12 +195,10 @@ fun ScreenshotScreen(
 @Composable
 fun ScreenshotGridItem(
     item: TrashItemEntity,
+    isSelected: Boolean,
     onToggle: () -> Unit,
     onLongPress: () -> Unit
 ) {
-    // val isSelected = item.isSelected
-    val isSelected = false // Dummy
-    
     Box(
         modifier = Modifier
             .aspectRatio(1f)

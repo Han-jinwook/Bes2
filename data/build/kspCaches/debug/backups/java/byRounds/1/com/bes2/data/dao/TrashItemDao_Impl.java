@@ -204,6 +204,53 @@ public final class TrashItemDao_Impl implements TrashItemDao {
   }
 
   @Override
+  public Object getReadyTrashItems(final int limit,
+      final Continuation<? super List<TrashItemEntity>> $completion) {
+    final String _sql = "SELECT * FROM trash_items WHERE status = 'READY' ORDER BY timestamp DESC LIMIT ?";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, limit);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<List<TrashItemEntity>>() {
+      @Override
+      @NonNull
+      public List<TrashItemEntity> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = CursorUtil.getColumnIndexOrThrow(_cursor, "id");
+          final int _cursorIndexOfUri = CursorUtil.getColumnIndexOrThrow(_cursor, "uri");
+          final int _cursorIndexOfFilePath = CursorUtil.getColumnIndexOrThrow(_cursor, "filePath");
+          final int _cursorIndexOfTimestamp = CursorUtil.getColumnIndexOrThrow(_cursor, "timestamp");
+          final int _cursorIndexOfSize = CursorUtil.getColumnIndexOrThrow(_cursor, "size");
+          final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
+          final List<TrashItemEntity> _result = new ArrayList<TrashItemEntity>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final TrashItemEntity _item;
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final String _tmpUri;
+            _tmpUri = _cursor.getString(_cursorIndexOfUri);
+            final String _tmpFilePath;
+            _tmpFilePath = _cursor.getString(_cursorIndexOfFilePath);
+            final long _tmpTimestamp;
+            _tmpTimestamp = _cursor.getLong(_cursorIndexOfTimestamp);
+            final long _tmpSize;
+            _tmpSize = _cursor.getLong(_cursorIndexOfSize);
+            final String _tmpStatus;
+            _tmpStatus = _cursor.getString(_cursorIndexOfStatus);
+            _item = new TrashItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpSize,_tmpStatus);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
   public Object isUriProcessed(final String uri, final Continuation<? super Boolean> $completion) {
     final String _sql = "SELECT EXISTS(SELECT 1 FROM trash_items WHERE uri = ? LIMIT 1)";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);

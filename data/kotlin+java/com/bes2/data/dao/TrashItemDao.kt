@@ -24,6 +24,10 @@ interface TrashItemDao {
     @Query("SELECT COUNT(*) FROM trash_items WHERE status = 'READY'")
     suspend fun getReadyTrashCount(): Int
 
+    // [ADDED] Fetch ready items with limit for mixing with screenshots
+    @Query("SELECT * FROM trash_items WHERE status = 'READY' ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getReadyTrashItems(limit: Int): List<TrashItemEntity>
+
     @Query("UPDATE trash_items SET status = :status WHERE uri IN (:uris)")
     suspend fun updateStatusByUris(uris: List<String>, status: String)
 
