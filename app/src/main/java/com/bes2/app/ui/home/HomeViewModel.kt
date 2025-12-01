@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 data class ReportStats(
@@ -43,7 +45,7 @@ data class HomeUiState(
     val galleryTotalCount: Int = 0,
     val screenshotCount: Int = 0,
     val hasPendingReview: Boolean = false,
-    val readyToCleanCount: Int = 0, // This is Diet items count
+    val readyToCleanCount: Int = 0, 
     val memoryEvent: DateGroup? = null,
     val isMemoryPrepared: Boolean = false,
     val monthlyReport: ReportStats = ReportStats(),
@@ -68,25 +70,45 @@ class HomeViewModel @Inject constructor(
         Timber.tag(TAG).d("init - START")
         
         loadScreenshotCount()
-        // monitorTrashCount() // [MODIFIED] Disabled to prefer immediate MediaStore count
-        Timber.tag(TAG).d("init - monitorTrashCount DISABLED")
-        
         checkPendingReviews()
-        Timber.tag(TAG).d("init - checkPendingReviews OK")
-
         monitorDietCount()
-        Timber.tag(TAG).d("init - monitorDietCount OK")
-        
         loadGalleryCounts()
-        Timber.tag(TAG).d("init - loadGalleryCounts OK")
-        
         loadMemoryEvent()
-        Timber.tag(TAG).d("init - loadMemoryEvent OK")
-        
         startBackgroundAnalysis()
-        Timber.tag(TAG).d("init - startBackgroundAnalysis OK")
+        
+        // [FIX] Monitor stats for today
+        monitorStats()
         
         Timber.tag(TAG).d("init - END")
+    }
+
+    private fun monitorStats() {
+        // Calculate start of today
+        val startOfDay = LocalDate.now()
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+
+        viewModelScope.launch {
+            reviewItemDao.getDailyKeptCountFlow(startOfDay).collectLatest { kept ->
+                _uiState.update { 
+                    it.copy(
+                        dailyKept = kept,
+                        dailyTotal = kept + it.dailyDeleted
+                    ) 
+                }
+            }
+        }
+        viewModelScope.launch {
+            reviewItemDao.getDailyDeletedCountFlow(startOfDay).collectLatest { deleted ->
+                _uiState.update { 
+                    it.copy(
+                        dailyDeleted = deleted,
+                        dailyTotal = it.dailyKept + deleted
+                    ) 
+                }
+            }
+        }
     }
 
     private fun loadScreenshotCount() {
@@ -96,14 +118,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun monitorTrashCount() {
-        viewModelScope.launch {
-            trashItemDao.getReadyTrashCountFlow().collectLatest { count ->
-                _uiState.update { it.copy(screenshotCount = count) }
-            }
-        }
-    }
-    
     private fun monitorDietCount() {
         viewModelScope.launch {
             reviewItemDao.getActiveDietCountFlow().collectLatest { count ->
@@ -162,11 +176,9 @@ class HomeViewModel @Inject constructor(
 
     private fun startBackgroundAnalysis() {
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
-        
-        // [FIX] Force restart the worker to ensure it runs immediately
         workManager.enqueueUniqueWork(
             PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE, // Changed from KEEP to REPLACE
+            ExistingWorkPolicy.REPLACE, 
             discoveryRequest
         )
         
@@ -190,7 +202,4 @@ class HomeViewModel @Inject constructor(
     fun refreshGalleryCount() {
         startBackgroundAnalysis()
     }
-    
-    private fun loadDailyStats() { }
-    private fun loadReportData() { }
 }

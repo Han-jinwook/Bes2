@@ -25,7 +25,6 @@ interface ReviewItemDao {
     @Query("SELECT * FROM review_items WHERE source_type = :sourceType AND status = :status ORDER BY timestamp DESC")
     suspend fun getItemsBySourceAndStatus(sourceType: String, status: String): List<ReviewItemEntity>
 
-    // [ADDED] Get all items for a cluster
     @Query("SELECT * FROM review_items WHERE cluster_id = :clusterId")
     suspend fun getItemsByClusterId(clusterId: String): List<ReviewItemEntity>
 
@@ -41,7 +40,6 @@ interface ReviewItemDao {
     @Query("UPDATE review_items SET cluster_id = :clusterId, status = 'CLUSTERED' WHERE id IN (:ids)")
     suspend fun updateClusterInfo(clusterId: String, ids: List<Long>)
 
-    // [ADDED] Update cluster_id ONLY
     @Query("UPDATE review_items SET cluster_id = :clusterId WHERE id IN (:ids)")
     suspend fun updateClusterIdOnly(clusterId: String, ids: List<Long>)
     
@@ -59,4 +57,11 @@ interface ReviewItemDao {
 
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'DIET' AND status != 'KEPT' AND status != 'DELETED'")
     fun getActiveDietCountFlow(): Flow<Int>
+
+    // [FIX] Daily stats queries (based on photo timestamp)
+    @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' AND timestamp >= :startOfDay")
+    fun getDailyKeptCountFlow(startOfDay: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :startOfDay")
+    fun getDailyDeletedCountFlow(startOfDay: Long): Flow<Int>
 }
