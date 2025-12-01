@@ -75,15 +75,15 @@ class HomeViewModel @Inject constructor(
         loadGalleryCounts()
         loadMemoryEvent()
         startBackgroundAnalysis()
-        
-        // [FIX] Monitor stats for today
         monitorStats()
+        
+        // [FIX] Load Report Data
+        loadReportData()
         
         Timber.tag(TAG).d("init - END")
     }
 
     private fun monitorStats() {
-        // Calculate start of today
         val startOfDay = LocalDate.now()
             .atStartOfDay(ZoneId.systemDefault())
             .toInstant()
@@ -108,6 +108,34 @@ class HomeViewModel @Inject constructor(
                     ) 
                 }
             }
+        }
+    }
+    
+    private fun loadReportData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = LocalDate.now()
+            val zoneId = ZoneId.systemDefault()
+            
+            // Monthly Range
+            val startOfMonth = now.withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            val endOfMonth = now.plusMonths(1).withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
+            
+            val mKept = reviewItemDao.getKeptCountByDateRange(startOfMonth, endOfMonth)
+            val mDeleted = reviewItemDao.getDeletedCountByDateRange(startOfMonth, endOfMonth)
+            val mTotal = mKept + mDeleted 
+
+            // Yearly Range
+            val startOfYear = now.withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            val endOfYear = now.plusYears(1).withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
+            
+            val yKept = reviewItemDao.getKeptCountByDateRange(startOfYear, endOfYear)
+            val yDeleted = reviewItemDao.getDeletedCountByDateRange(startOfYear, endOfYear)
+            val yTotal = yKept + yDeleted
+
+            _uiState.update { it.copy(
+                monthlyReport = ReportStats(mTotal, mKept, mDeleted),
+                yearlyReport = ReportStats(yTotal, yKept, yDeleted)
+            ) }
         }
     }
 
@@ -201,5 +229,8 @@ class HomeViewModel @Inject constructor(
     
     fun refreshGalleryCount() {
         startBackgroundAnalysis()
+        loadReportData() // Refresh report too
     }
+    
+    private fun loadDailyStats() { }
 }

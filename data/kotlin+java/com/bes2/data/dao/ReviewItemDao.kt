@@ -58,10 +58,16 @@ interface ReviewItemDao {
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'DIET' AND status != 'KEPT' AND status != 'DELETED'")
     fun getActiveDietCountFlow(): Flow<Int>
 
-    // [FIX] Daily stats queries (based on photo timestamp)
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' AND timestamp >= :startOfDay")
     fun getDailyKeptCountFlow(startOfDay: Long): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :startOfDay")
     fun getDailyDeletedCountFlow(startOfDay: Long): Flow<Int>
+
+    // [ADDED] Range stats for Monthly/Yearly Report
+    @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' AND timestamp >= :start AND timestamp <= :end")
+    suspend fun getKeptCountByDateRange(start: Long, end: Long): Int
+
+    @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :start AND timestamp <= :end")
+    suspend fun getDeletedCountByDateRange(start: Long, end: Long): Int
 }
