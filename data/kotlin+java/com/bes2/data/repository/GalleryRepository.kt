@@ -2,6 +2,7 @@ package com.bes2.data.repository
 
 import android.content.ContentUris
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -108,30 +109,26 @@ class GalleryRepository @Inject constructor(
     }
 
     fun getRecentImages(limit: Int, offset: Int): List<ImageItem> {
-        // Fallback: This method now redirects to getPastImages using current time
-        // But for safety in DIET scan, prefer calling getPastImages explicitly.
-        return getPastImages(System.currentTimeMillis(), limit, offset)
+        return getPastImages(0, 0, limit, offset) 
     }
 
-    // [ADDED] Strict Time-Based Fetching for Diet Mode
-    // Only fetches images BEFORE the specific timestamp (e.g., App Start Time)
-    fun getPastImages(@Suppress("UNUSED_PARAMETER") beforeTimestamp: Long, limit: Int, offset: Int): List<ImageItem> {
+    fun getPastImages(@Suppress("UNUSED_PARAMETER") startTimestamp: Long, 
+                      @Suppress("UNUSED_PARAMETER") endTimestamp: Long, 
+                      limit: Int, offset: Int): List<ImageItem> {
         val imageList = mutableListOf<ImageItem>()
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
         
-        // [SIMPLIFIED] Removed ALL filters to fetch everything. Filtering is done in Worker.
         val selection: String? = null
         val selectionArgs: Array<String>? = null
         
+        val sortOrderSql = "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media._ID} DESC"
+        
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // [FIX] Android 8.0+ (API 26+) MUST use Bundle for LIMIT/OFFSET
                 val bundle = android.os.Bundle().apply {
-                    // No selection needed (fetch all)
-                    putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                    putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
-                    putString(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_TAKEN).joinToString(", "))
+                    putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrderSql)
+                    putString(android.content.ContentResolver.QUERY_ARG_SORT_COLUMNS, MediaStore.Images.Media.DATE_TAKEN)
                     putInt(android.content.ContentResolver.QUERY_ARG_SORT_DIRECTION, android.content.ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
                     putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, limit)
                     putInt(android.content.ContentResolver.QUERY_ARG_OFFSET, offset)
@@ -140,8 +137,7 @@ class GalleryRepository @Inject constructor(
                     processCursor(cursor, imageList)
                 }
             } else {
-                // Legacy method for older Android versions
-                val sortOrderWithLimit = "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT $limit OFFSET $offset"
+                val sortOrderWithLimit = "$sortOrderSql LIMIT $limit OFFSET $offset"
                 context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrderWithLimit)?.use { cursor ->
                     processCursor(cursor, imageList)
                 }
@@ -150,7 +146,20 @@ class GalleryRepository @Inject constructor(
         return imageList
     }
     
-    private fun processCursor(cursor: android.database.Cursor, list: MutableList<ImageItem>) {
+    // [ADDED] Efficient Cursor-based scanning for Worker
+    // Returns a raw Cursor so the Worker can iterate one by one.
+    // Caller MUST close the cursor.
+    fun getAllImagesCursor(): Cursor? {
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
+        val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media._ID} DESC"
+        
+        return try {
+            context.contentResolver.query(uri, projection, null, null, sortOrder)
+        } catch (e: Exception) { null }
+    }
+    
+    private fun processCursor(cursor: Cursor, list: MutableList<ImageItem>) {
         val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
         val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
         val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)

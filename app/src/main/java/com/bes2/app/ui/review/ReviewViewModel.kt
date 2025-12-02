@@ -101,8 +101,9 @@ class ReviewViewModel @Inject constructor(
     private var sessionSavedImageCount = 0
     private var manualSelectionIds: List<Long>? = null
 
+    // [MODIFIED] Threshold 20 -> 30 for Review Flow
     private val PREF_KEY_REVIEW_COUNT = "pref_review_accumulated_count"
-    private val AD_THRESHOLD = 20 
+    private val AD_THRESHOLD = 30 
 
     init {
         val dateArg = savedStateHandle.get<String>("date")
@@ -376,6 +377,7 @@ class ReviewViewModel @Inject constructor(
                         val imageIdsToDelete = (currentState.otherImages + currentState.rejectedImages).map { it.id }
                         if (imageIdsToDelete.isNotEmpty()) {
                             reviewItemDao.updateStatusByIds(imageIdsToDelete, "DELETED")
+                            settingsRepository.incrementDailyStats(keptDelta = 0, deletedDelta = imageIdsToDelete.size)
                         }
                     }
                     markClusterCompleted(currentState)
@@ -389,6 +391,7 @@ class ReviewViewModel @Inject constructor(
         val keptImageIds = listOfNotNull(state.selectedBestImage, state.selectedSecondBestImage).map { it.id }
         if (keptImageIds.isNotEmpty()) {
             reviewItemDao.updateStatusByIds(keptImageIds, "KEPT")
+            settingsRepository.incrementDailyStats(keptDelta = keptImageIds.size, deletedDelta = 0)
         }
         
         if (!isMemoryEventMode) {

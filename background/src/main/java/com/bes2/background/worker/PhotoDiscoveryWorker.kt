@@ -3,11 +3,14 @@ package com.bes2.background.worker
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ContentUris
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
@@ -49,28 +52,26 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         const val KEY_IS_INSTANT_MODE = "is_instant_mode"
         const val KEY_IMAGE_URI = "key_image_uri"
         
-        private const val TARGET_DIET_COUNT = 30 
-        private const val TARGET_TRASH_COUNT = 30
-        private const val BATCH_SIZE = 50
-        private const val MAX_SCAN_LIMIT = 5000
+        private const val INSERT_BATCH_SIZE = 100 // Insert to DB every 100 items to save memory
         private const val NOTIFICATION_ID = 2023
         private const val CHANNEL_ID = "bes2_analysis_channel"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        //setForeground(createForegroundInfo())
-
         val isInstantMode = inputData.getBoolean(KEY_IS_INSTANT_MODE, false)
         val sourceType = if (isInstantMode) "INSTANT" else "DIET"
+        
+        if (!isInstantMode) {
+            setForeground(createForegroundInfo())
+        }
         
         Timber.tag(WORK_NAME).d("--- PhotoDiscoveryWorker Started (Mode: $sourceType) ---")
 
         if (isInstantMode) {
-            // [LOGIC] Instant Mode: Recent photos ONLY (No AI filtering)
             processInstantScan(sourceType)
         } else {
-            // [LOGIC] Diet Mode: Past photos ONLY (Strict Time Barrier + AI filtering)
-            processGalleryScan(sourceType)
+            // [LOGIC] Full Gallery Scan using Cursor Stream (Most Efficient)
+            processGalleryScanStream(sourceType)
         }
         
         triggerAnalysis()
@@ -79,10 +80,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
     
     private suspend fun processInstantScan(sourceType: String) {
         val appStartTime = settingsRepository.getAppStartTime()
-        Timber.tag(WORK_NAME).d("Instant Scan Baseline: $appStartTime")
-        
         val candidates = galleryRepository.getImagesSince(appStartTime)
-        Timber.tag(WORK_NAME).d("Instant Scan: Found ${candidates.size} images since app start.")
 
         val newDietEntities = mutableListOf<ReviewItemEntity>()
         val newTrashEntities = mutableListOf<TrashItemEntity>()
@@ -98,7 +96,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                      uri = candidate.uri, filePath = candidate.filePath, timestamp = candidate.timestamp, status = "READY"
                  ))
              } else { 
-                 // Force to ReviewItem (INSTANT) without AI check
                  newDietEntities.add(ReviewItemEntity(
                      uri = candidate.uri, filePath = candidate.filePath, timestamp = candidate.timestamp,
                      status = "NEW", source_type = sourceType 
@@ -108,102 +105,104 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         
         if (newDietEntities.isNotEmpty()) reviewItemDao.insertAll(newDietEntities)
         if (newTrashEntities.isNotEmpty()) trashItemDao.insertAll(newTrashEntities)
-        
-        Timber.tag(WORK_NAME).d("Instant Scan Complete: Added ${newDietEntities.size} normal (INSTANT), ${newTrashEntities.size} trash.")
     }
 
-    private suspend fun processGalleryScan(sourceType: String) {
-        val appStartTime = settingsRepository.getAppStartTime()
-        Timber.tag(WORK_NAME).d("Using appStartTime: $appStartTime")
-        var offset = 0
-        var scanCount = 0
+    private suspend fun processGalleryScanStream(sourceType: String) {
+        Timber.tag(WORK_NAME).d("Starting Full Gallery Scan Stream...")
         
-        while (scanCount < MAX_SCAN_LIMIT) {
-            val currentDietCount = reviewItemDao.getActiveDietCount()
-            val currentTrashCount = trashItemDao.getReadyTrashCount()
-            
-            if (currentDietCount >= TARGET_DIET_COUNT && currentTrashCount >= TARGET_TRASH_COUNT) {
-                Timber.tag(WORK_NAME).d("Diet/Trash Targets Met. Stopping scan.")
-                break
-            }
-
-            // [MODIFIED] Fetch ALL past images (No filters in repo, filtering happens here)
-            // appStartTime is passed but ignored by the repo now, we use it here for strict filtering.
-            val candidates = galleryRepository.getPastImages(appStartTime, BATCH_SIZE, offset)
-            
-            if (candidates.isEmpty()) {
-                Timber.tag(WORK_NAME).d("No more past images in gallery to scan.")
-                break
-            }
-
-            val newDietEntities = mutableListOf<ReviewItemEntity>()
-            val newTrashEntities = mutableListOf<TrashItemEntity>()
-            
-            for (candidate in candidates) {
-                 if (reviewItemDao.isUriProcessed(candidate.uri) || trashItemDao.isUriProcessed(candidate.uri)) continue
-                 
-                 // [STRICT FILTER] Ignore images taken AFTER app start (handled by Instant Scan)
-                 if (candidate.timestamp >= appStartTime) continue
-
-                 var isTrash = false
-                 // [PATH FILTER] Check for screenshots/captures
-                 val isScreenshotPath = candidate.filePath.contains("screenshot", ignoreCase = true) || 
-                                        candidate.filePath.contains("capture", ignoreCase = true)
-                 
-                 if (isScreenshotPath) {
-                     isTrash = true
-                 } else {
-                     // [AI LOGIC] Only for Past photos
-                     try {
-                         val bitmap = loadBitmap(candidate.uri)
-                         if (bitmap != null) {
-                             val result = imageClassifier.classify(bitmap)
-                             if (result == ImageCategory.DOCUMENT || result == ImageCategory.OBJECT) {
-                                 isTrash = true
-                             }
-                             bitmap.recycle()
-                         }
-                     } catch (e: Exception) { }
-                 }
-
-                 if (isTrash) {
-                     if (trashItemDao.getReadyTrashCount() < (TARGET_TRASH_COUNT + 20)) {
-                         newTrashEntities.add(TrashItemEntity(
-                             uri = candidate.uri, filePath = candidate.filePath, timestamp = candidate.timestamp, status = "READY"
-                         ))
-                     }
-                 } else { 
-                     if (reviewItemDao.getActiveDietCount() < TARGET_DIET_COUNT) {
-                         newDietEntities.add(ReviewItemEntity(
-                             uri = candidate.uri, filePath = candidate.filePath, timestamp = candidate.timestamp,
-                             status = "NEW", source_type = sourceType 
-                         ))
-                     }
-                 }
-                 scanCount++
-            }
-            
-            if (newDietEntities.isNotEmpty()) reviewItemDao.insertAll(newDietEntities)
-            if (newTrashEntities.isNotEmpty()) trashItemDao.insertAll(newTrashEntities)
-            
-            offset += BATCH_SIZE
+        val cursor = galleryRepository.getAllImagesCursor()
+        if (cursor == null) {
+            Timber.tag(WORK_NAME).e("Failed to open gallery cursor.")
+            return
         }
         
-        Timber.tag(WORK_NAME).d("Gallery Scan Loop Finished. Scanned: $scanCount items.")
+        var scanCountTotal = 0
+        val newDietBuffer = mutableListOf<ReviewItemEntity>()
+        val newTrashBuffer = mutableListOf<TrashItemEntity>()
+        
+        try {
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+            val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+            
+            while (cursor.moveToNext()) {
+                if (isStopped) break
+                
+                val id = cursor.getLong(idColumn)
+                val filePath = cursor.getString(dataColumn)
+                val timestamp = cursor.getLong(dateColumn)
+                val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id).toString()
+                
+                // 1. Skip if already processed
+                if (reviewItemDao.isUriProcessed(contentUri) || trashItemDao.isUriProcessed(contentUri)) {
+                    continue
+                }
+                
+                // 2. Classify
+                var isTrash = false
+                val isScreenshotPath = filePath.contains("screenshot", ignoreCase = true) || 
+                                       filePath.contains("capture", ignoreCase = true)
+                
+                if (isScreenshotPath) {
+                    isTrash = true
+                } else {
+                    // AI Classification
+                    try {
+                        val bitmap = loadBitmap(contentUri)
+                        if (bitmap != null) {
+                            val result = imageClassifier.classify(bitmap)
+                            if (result == ImageCategory.DOCUMENT || result == ImageCategory.OBJECT) {
+                                isTrash = true
+                            }
+                            bitmap.recycle()
+                        }
+                    } catch (e: Exception) { }
+                }
+
+                // 3. Add to Buffer
+                if (isTrash) {
+                    newTrashBuffer.add(TrashItemEntity(
+                        uri = contentUri, filePath = filePath, timestamp = timestamp, status = "READY"
+                    ))
+                } else { 
+                    newDietBuffer.add(ReviewItemEntity(
+                        uri = contentUri, filePath = filePath, timestamp = timestamp,
+                        status = "NEW", source_type = sourceType 
+                    ))
+                }
+                scanCountTotal++
+                
+                // 4. Flush Buffer if full
+                if (newDietBuffer.size >= INSERT_BATCH_SIZE) {
+                    reviewItemDao.insertAll(newDietBuffer)
+                    newDietBuffer.clear()
+                }
+                if (newTrashBuffer.size >= INSERT_BATCH_SIZE) {
+                    trashItemDao.insertAll(newTrashBuffer)
+                    newTrashBuffer.clear()
+                }
+            }
+            
+            // 5. Flush Remaining
+            if (newDietBuffer.isNotEmpty()) reviewItemDao.insertAll(newDietBuffer)
+            if (newTrashBuffer.isNotEmpty()) trashItemDao.insertAll(newTrashBuffer)
+            
+        } catch (e: Exception) {
+            Timber.tag(WORK_NAME).e(e, "Error during gallery scan stream")
+        } finally {
+            cursor.close()
+        }
+        
+        Timber.tag(WORK_NAME).d("Full Scan Complete. Scanned: $scanCountTotal items.")
     }
     
     private suspend fun triggerAnalysis() {
-        val newInstantCount = reviewItemDao.getItemsBySourceAndStatus("INSTANT", "NEW").size
-        val newDietCount = reviewItemDao.getNewDietItems().size
-        
-        if (newInstantCount > 0 || newDietCount > 0) {
-            val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
-            workManager.enqueueUniqueWork(
-                PhotoAnalysisWorker.WORK_NAME,
-                ExistingWorkPolicy.APPEND_OR_REPLACE,
-                analysisWorkRequest
-            )
-        }
+        val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+        workManager.enqueueUniqueWork(
+            PhotoAnalysisWorker.WORK_NAME,
+            ExistingWorkPolicy.APPEND_OR_REPLACE, 
+            analysisWorkRequest
+        )
     }
 
     private fun loadBitmap(uri: String): Bitmap? {
@@ -227,10 +226,11 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         }
 
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setContentTitle("사진을 감지하고 있습니다")
-            .setContentText("Bes2가 사진을 정리중입니다...")
+            .setContentTitle("갤러리를 분석하고 있습니다")
+            .setContentText("사진을 정리할 준비를 하고 있어요...")
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
+            .setProgress(0, 0, true) 
             .build()
 
         return if (Build.VERSION.SDK_INT >= 34) {

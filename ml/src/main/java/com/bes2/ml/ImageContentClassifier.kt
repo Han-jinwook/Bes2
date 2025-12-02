@@ -24,8 +24,6 @@ class ImageContentClassifier @Inject constructor() {
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
 
     init {
-        // [MODIFIED] Changed to ACCURATE mode to prevent classifying humans as trash.
-        // Safety First: It's better to be slow than to delete a photo with a person.
         val faceOptions = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
             .build()
@@ -45,9 +43,13 @@ class ImageContentClassifier @Inject constructor() {
         "Nature", "Landscape", "Sky", "Cloud", "Sunset", "Sunrise", "Beach", "Mountain", "Forest", "Tree", "Flower", "Plant", "Garden",
         "Pet", "Dog", "Cat", "Animal", "Bird",
         "Architecture", "Building", "City", "Cityscape", "Landmark",
-        "Vehicle", "Car", "Bicycle", "Train", "Plane" // Vehicles are often kept
+        "Vehicle", "Car", "Bicycle", "Train", "Plane",
+        "Sunglasses", "Glasses", "Eyewear", "Goggles",
+        "Person", "Human", "Face", "Crowd", "Selfie", "Smile", "People" // [ADDED] People keywords
     )
     
+    private val sunglassesKeywords = setOf("Sunglasses", "Glasses", "Eyewear", "Goggles", "Shades")
+
     companion object {
         private const val CONFIDENCE_THRESHOLD = 0.7f 
     }
@@ -82,26 +84,44 @@ class ImageContentClassifier @Inject constructor() {
                 }
             }
 
-            // --- Step 3: Decision ---
+            // --- Step 3: Decision (Safety First Logic) ---
             when {
-                maxDocScore >= CONFIDENCE_THRESHOLD -> {
-                     Timber.d("Document score $maxDocScore. Classified as DOCUMENT.")
-                     ImageCategory.DOCUMENT
-                }
-                maxKeepScore >= 0.6f -> { // Lower threshold for nature/food
+                // Keep if 'Keep Keyword' is strong
+                maxKeepScore >= 0.6f -> { 
                      Timber.d("Keep keyword score $maxKeepScore. Classified as MEMORY.")
                      ImageCategory.MEMORY
                 }
+                // Only classify as Document if 'Doc Keyword' is very strong AND 'Keep Keyword' is weak
+                maxDocScore >= CONFIDENCE_THRESHOLD && maxKeepScore < 0.5f -> {
+                     Timber.d("Document score $maxDocScore. Classified as DOCUMENT.")
+                     ImageCategory.DOCUMENT
+                }
                 else -> {
-                    // No face, no document, no keep-keyword -> Assume it's a random object
-                    Timber.d("No face, document($maxDocScore), or keep-keyword($maxKeepScore). Classified as OBJECT.")
-                    ImageCategory.OBJECT
+                    // [MODIFIED] Default to MEMORY (Keep) instead of OBJECT (Trash)
+                    // If we are not sure, it's safer to keep it than to trash it.
+                    // This prevents photos of people/events (that AI missed) from going to trash.
+                    Timber.d("Uncertain classification (Doc:$maxDocScore, Keep:$maxKeepScore). Defaulting to MEMORY.")
+                    ImageCategory.MEMORY
                 }
             }
 
         } catch (e: Exception) {
             Timber.e(e, "Error classifying. Defaulting to IGNORE.")
             ImageCategory.IGNORE
+        }
+    }
+    
+    suspend fun hasSunglasses(bitmap: Bitmap): Boolean {
+        return try {
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val labels = labeler.process(image).await()
+            labels.any { label ->
+                sunglassesKeywords.any { keyword -> 
+                    label.text.contains(keyword, ignoreCase = true) && label.confidence > 0.6f
+                }
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 }

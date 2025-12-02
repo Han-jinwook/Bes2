@@ -11,6 +11,7 @@ import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.model.ImageClusterEntity
 import com.bes2.data.model.ImageItemEntity 
+import com.bes2.data.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,8 @@ class ClusteringWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val reviewItemDao: ReviewItemDao,
     private val imageClusterDao: ImageClusterDao,
-    private val clusteringHelper: ImageClusteringHelper
+    private val clusteringHelper: ImageClusteringHelper,
+    private val settingsRepository: SettingsRepository // [ADDED]
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -85,14 +87,23 @@ class ClusteringWorker @AssistedInject constructor(
                     reviewItemDao.updateClusterIdOnly(targetClusterId, rejectedIds)
                 }
 
-                if (sourceType == "INSTANT" && candidates.isNotEmpty()) {
-                    NotificationHelper.showReviewNotification(
-                        appContext,
-                        R.drawable.ic_notification,
-                        validClusters.size + (if (rejectedCandidates.isNotEmpty() && validClusters.isEmpty()) 1 else 0),
-                        candidates.size,
-                        "INSTANT"
-                    )
+                // [MODIFIED] Send Notification with Throttling
+                if (candidates.isNotEmpty()) {
+                    if (settingsRepository.shouldShowNotification(sourceType)) {
+                        val clusterCount = validClusters.size + (if (rejectedCandidates.isNotEmpty() && validClusters.isEmpty()) 1 else 0)
+                        
+                        NotificationHelper.showReviewNotification(
+                            appContext,
+                            R.drawable.ic_notification,
+                            clusterCount,
+                            candidates.size,
+                            sourceType
+                        )
+                        
+                        settingsRepository.updateLastNotificationTime(sourceType)
+                    } else {
+                        Timber.d("Notification throttled for $sourceType. Already shown today.")
+                    }
                 }
                 
             } catch (e: Exception) {

@@ -15,7 +15,6 @@ class EyeClosedDetector @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    // [FINAL CONFIG] Simple & Clean. 
     private val highAccuracyOpts = FaceDetectorOptions.Builder()
         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
@@ -23,30 +22,42 @@ class EyeClosedDetector @Inject constructor(
 
     private val detector = FaceDetection.getClient(highAccuracyOpts)
     
-    // [FINAL THRESHOLD] 0.3
-    private val EYE_OPEN_THRESHOLD = 0.3f
+    // [MODIFIED] Increased threshold to 0.4 (Strict but safe for small faces)
+    private val EYE_OPEN_THRESHOLD = 0.4f
+    
+    // [ADDED] Minimum Face Ratio (Face Area / Image Area) to consider eye status
+    // If face is too small (< 3% of image), we can't reliably detect eyes -> assume open.
+    private val MIN_FACE_RATIO = 0.03f
 
     suspend fun areEyesClosed(bitmap: Bitmap): Boolean {
         val image = InputImage.fromBitmap(bitmap, 0)
+        val imageArea = bitmap.width * bitmap.height
+        
         return try {
             val faces = detector.process(image).await()
             if (faces.isEmpty()) {
-                Timber.d("No faces detected in EyeClosedDetector, returning false.")
                 return false
             }
             
             var eyeClosedDetected = false
             faces.forEachIndexed { index, face ->
+                // Check face size
+                val faceArea = face.boundingBox.width() * face.boundingBox.height()
+                val ratio = faceArea.toFloat() / imageArea.toFloat()
+                
+                if (ratio < MIN_FACE_RATIO) {
+                    Timber.d("[EyeCheck] Face #$index too small ($ratio). Skipping.")
+                    return@forEachIndexed // Skip this face
+                }
+                
                 val leftProb = face.leftEyeOpenProbability
                 val rightProb = face.rightEyeOpenProbability
                 
-                Timber.d("[EyeCheck] Face #$index: Left=$leftProb, Right=$rightProb")
-
                 val isLeftEyeClosed = leftProb?.let { it < EYE_OPEN_THRESHOLD } ?: false
                 val isRightEyeClosed = rightProb?.let { it < EYE_OPEN_THRESHOLD } ?: false
 
                 if (isLeftEyeClosed || isRightEyeClosed) {
-                    Timber.i("[EyeCheck] DETECTED CLOSED! Face #$index. Left=$isLeftEyeClosed, Right=$isRightEyeClosed")
+                    Timber.i("[EyeCheck] DETECTED CLOSED! Face #$index. Left=$leftProb, Right=$rightProb")
                     eyeClosedDetected = true
                 }
             }

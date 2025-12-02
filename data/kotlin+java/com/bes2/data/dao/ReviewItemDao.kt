@@ -31,6 +31,10 @@ interface ReviewItemDao {
     @Query("SELECT * FROM review_items WHERE status = 'NEW' AND source_type = 'DIET'")
     suspend fun getNewDietItems(): List<ReviewItemEntity>
     
+    // [ADDED] Batch query for Analysis Worker
+    @Query("SELECT * FROM review_items WHERE status = 'NEW' AND source_type = 'DIET' LIMIT :limit")
+    suspend fun getNewDietItemsBatch(limit: Int): List<ReviewItemEntity>
+    
     @Query("SELECT EXISTS(SELECT 1 FROM review_items WHERE uri = :uri LIMIT 1)")
     suspend fun isUriProcessed(uri: String): Boolean
 
@@ -57,6 +61,9 @@ interface ReviewItemDao {
 
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'DIET' AND status != 'KEPT' AND status != 'DELETED'")
     fun getActiveDietCountFlow(): Flow<Int>
+    
+    @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'DIET' AND status = 'CLUSTERED'")
+    fun getClusteredDietCountFlow(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' AND timestamp >= :startOfDay")
     fun getDailyKeptCountFlow(startOfDay: Long): Flow<Int>
@@ -64,7 +71,12 @@ interface ReviewItemDao {
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :startOfDay")
     fun getDailyDeletedCountFlow(startOfDay: Long): Flow<Int>
 
-    // [ADDED] Range stats for Monthly/Yearly Report
+    @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' AND timestamp >= :start AND timestamp <= :end")
+    fun getKeptCountByDateRangeFlow(start: Long, end: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :start AND timestamp <= :end")
+    fun getDeletedCountByDateRangeFlow(start: Long, end: Long): Flow<Int>
+    
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'KEPT' AND timestamp >= :start AND timestamp <= :end")
     suspend fun getKeptCountByDateRange(start: Long, end: Long): Int
 

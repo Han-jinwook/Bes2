@@ -78,16 +78,13 @@ fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    var hasCameraPermission by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
-    }
+    // [MODIFIED] Removed Camera Permission Logic
     var hasStoragePermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED)
     }
 
     val permissionsToRequest = remember {
         mutableListOf(
-            Manifest.permission.CAMERA,
             storagePermission
         ).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -99,24 +96,23 @@ fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissionsMap ->
-        hasCameraPermission = permissionsMap[Manifest.permission.CAMERA] ?: hasCameraPermission
         hasStoragePermission = permissionsMap[storagePermission] ?: hasStoragePermission
     }
 
     LaunchedEffect(Unit) {
-        if (!hasCameraPermission || !hasStoragePermission) {
+        if (!hasStoragePermission) {
             permissionLauncher.launch(permissionsToRequest)
         }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        if (hasCameraPermission && hasStoragePermission) {
+        if (hasStoragePermission) {
             val navController = rememberNavController()
             AppNavigation(navController = navController, onStartAnalysisAndExit = onStartAnalysisAndExit)
         } else {
             Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "앱을 사용하려면 카메라와 저장 공간 접근 권한을 모두 허용해야 합니다. 앱 설정에서 권한을 허용해주세요.",
+                    text = "앱을 사용하려면 저장 공간 접근 권한을 허용해야 합니다. 앱 설정에서 권한을 허용해주세요.",
                     textAlign = TextAlign.Center
                 )
             }
@@ -587,7 +583,8 @@ private fun HomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "스크린샷 정리",
+                                // [MODIFIED] Button name change
+                                text = "스크린샷/불필요 사진 비우기",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = screenshotFontWeight
                             )

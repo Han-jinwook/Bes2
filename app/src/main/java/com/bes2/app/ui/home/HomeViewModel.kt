@@ -16,12 +16,14 @@ import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.dao.TrashItemDao
 import com.bes2.data.repository.DateGroup
 import com.bes2.data.repository.GalleryRepository
+import com.bes2.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -58,6 +60,7 @@ class HomeViewModel @Inject constructor(
     private val trashItemDao: TrashItemDao,
     private val imageClusterDao: ImageClusterDao,
     private val galleryRepository: GalleryRepository,
+    private val settingsRepository: SettingsRepository,
     private val workManager: WorkManager
 ) : ViewModel() {
 
@@ -75,67 +78,56 @@ class HomeViewModel @Inject constructor(
         loadGalleryCounts()
         loadMemoryEvent()
         startBackgroundAnalysis()
-        monitorStats()
-        
-        // [FIX] Load Report Data
-        loadReportData()
+        monitorStats() 
+        monitorReports() 
         
         Timber.tag(TAG).d("init - END")
     }
 
     private fun monitorStats() {
-        val startOfDay = LocalDate.now()
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-
         viewModelScope.launch {
-            reviewItemDao.getDailyKeptCountFlow(startOfDay).collectLatest { kept ->
-                _uiState.update { 
-                    it.copy(
-                        dailyKept = kept,
-                        dailyTotal = kept + it.dailyDeleted
-                    ) 
-                }
-            }
-        }
-        viewModelScope.launch {
-            reviewItemDao.getDailyDeletedCountFlow(startOfDay).collectLatest { deleted ->
-                _uiState.update { 
-                    it.copy(
-                        dailyDeleted = deleted,
-                        dailyTotal = it.dailyKept + deleted
-                    ) 
+            settingsRepository.dailyStats.collectLatest { stats ->
+                _uiState.update { state ->
+                    state.copy(
+                        dailyKept = stats.keptCount,
+                        dailyDeleted = stats.deletedCount,
+                        dailyTotal = stats.keptCount + stats.deletedCount
+                    )
                 }
             }
         }
     }
     
-    private fun loadReportData() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val now = LocalDate.now()
-            val zoneId = ZoneId.systemDefault()
-            
-            // Monthly Range
-            val startOfMonth = now.withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            val endOfMonth = now.plusMonths(1).withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
-            
-            val mKept = reviewItemDao.getKeptCountByDateRange(startOfMonth, endOfMonth)
-            val mDeleted = reviewItemDao.getDeletedCountByDateRange(startOfMonth, endOfMonth)
-            val mTotal = mKept + mDeleted 
+    private fun monitorReports() {
+        val now = LocalDate.now()
+        val zoneId = ZoneId.systemDefault()
+        
+        val startOfMonth = now.withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val endOfMonth = now.plusMonths(1).withDayOfMonth(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
+        
+        viewModelScope.launch {
+            combine(
+                reviewItemDao.getKeptCountByDateRangeFlow(startOfMonth, endOfMonth),
+                reviewItemDao.getDeletedCountByDateRangeFlow(startOfMonth, endOfMonth)
+            ) { kept, deleted ->
+                ReportStats(total = kept + deleted, kept = kept, deleted = deleted)
+            }.collectLatest { stats ->
+                _uiState.update { it.copy(monthlyReport = stats) }
+            }
+        }
 
-            // Yearly Range
-            val startOfYear = now.withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
-            val endOfYear = now.plusYears(1).withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
-            
-            val yKept = reviewItemDao.getKeptCountByDateRange(startOfYear, endOfYear)
-            val yDeleted = reviewItemDao.getDeletedCountByDateRange(startOfYear, endOfYear)
-            val yTotal = yKept + yDeleted
-
-            _uiState.update { it.copy(
-                monthlyReport = ReportStats(mTotal, mKept, mDeleted),
-                yearlyReport = ReportStats(yTotal, yKept, yDeleted)
-            ) }
+        val startOfYear = now.withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val endOfYear = now.plusYears(1).withDayOfYear(1).atStartOfDay(zoneId).toInstant().toEpochMilli() - 1
+        
+        viewModelScope.launch {
+            combine(
+                reviewItemDao.getKeptCountByDateRangeFlow(startOfYear, endOfYear),
+                reviewItemDao.getDeletedCountByDateRangeFlow(startOfYear, endOfYear)
+            ) { kept, deleted ->
+                ReportStats(total = kept + deleted, kept = kept, deleted = deleted)
+            }.collectLatest { stats ->
+                _uiState.update { it.copy(yearlyReport = stats) }
+            }
         }
     }
 
@@ -148,8 +140,17 @@ class HomeViewModel @Inject constructor(
 
     private fun monitorDietCount() {
         viewModelScope.launch {
-            reviewItemDao.getActiveDietCountFlow().collectLatest { count ->
+            reviewItemDao.getClusteredDietCountFlow().collectLatest { count ->
                 _uiState.update { it.copy(readyToCleanCount = count) }
+            }
+        }
+        
+        viewModelScope.launch {
+            reviewItemDao.getActiveDietCountFlow().collectLatest { count ->
+                if (count < 5) {
+                    Timber.tag(TAG).d("Total Diet count low ($count). Triggering refill.")
+                    startBackgroundAnalysis()
+                }
             }
         }
     }
@@ -206,31 +207,14 @@ class HomeViewModel @Inject constructor(
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
         workManager.enqueueUniqueWork(
             PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE, 
+            ExistingWorkPolicy.KEEP, // [FIX] Changed from REPLACE to KEEP to avoid thrashing
             discoveryRequest
-        )
-        
-        val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>()
-            .setInputData(Data.Builder().putBoolean(PhotoAnalysisWorker.KEY_IS_BACKGROUND_DIET, true).build())
-            .build()
-        workManager.enqueueUniqueWork(
-            PhotoAnalysisWorker.WORK_NAME, 
-            ExistingWorkPolicy.REPLACE, 
-            analysisRequest
-        )
-        
-        val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
-        workManager.enqueueUniqueWork(
-            ClusteringWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
-            clusteringRequest
         )
     }
     
     fun refreshGalleryCount() {
         startBackgroundAnalysis()
-        loadReportData() // Refresh report too
+        loadScreenshotCount()
+        loadGalleryCounts()
     }
-    
-    private fun loadDailyStats() { }
 }
