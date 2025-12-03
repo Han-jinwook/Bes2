@@ -78,7 +78,6 @@ fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    // [MODIFIED] Removed Camera Permission Logic
     var hasStoragePermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED)
     }
@@ -415,6 +414,7 @@ private fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
             
+            // [Memory Event Card]
             val memoryEvent = uiState.memoryEvent
             val isMemoryActive = memoryEvent != null && uiState.isMemoryPrepared
             val eventCardColor = if (isMemoryActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant
@@ -486,10 +486,11 @@ private fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            val isReadyToClean = uiState.readyToCleanCount > 0
-            val dietCardColor = if (isReadyToClean) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant
-            val dietContentColor = if (isReadyToClean) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-            val dietFontWeight = if (isReadyToClean) FontWeight.Bold else FontWeight.Normal
+            // [Gallery Diet Card]
+            val isDietActive = !uiState.isAnalysisInProgress && uiState.readyToCleanCount > 0
+            val dietCardColor = if (isDietActive) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            val dietContentColor = if (isDietActive) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            val dietFontWeight = if (isDietActive) FontWeight.Bold else FontWeight.Normal
 
             Card(
                 colors = CardDefaults.cardColors(
@@ -498,9 +499,9 @@ private fun HomeScreen(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .scale(if (isReadyToClean) pulseScale else 1f)
-                    .clickable(enabled = isReadyToClean) {
-                        if (isReadyToClean) {
+                    .scale(if (isDietActive) pulseScale else 1f)
+                    .clickable(enabled = isDietActive) {
+                        if (isDietActive) {
                             onNavigateToReview(null, "DIET")
                         }
                     },
@@ -515,7 +516,7 @@ private fun HomeScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = if (isReadyToClean) Icons.Default.CleaningServices else Icons.Default.PhotoLibrary,
+                            imageVector = if (isDietActive) Icons.Default.CleaningServices else Icons.Default.PhotoLibrary,
                             contentDescription = "Gallery Diet",
                             modifier = Modifier.size(24.dp)
                         )
@@ -526,7 +527,19 @@ private fun HomeScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = dietFontWeight
                             )
-                            if (isReadyToClean) {
+                            if (uiState.isAnalysisInProgress) {
+                                // [MODIFIED] Show progress numbers
+                                val progressText = if (uiState.analysisProgressTotal > 0) {
+                                    "AI 심층 분석 중... (${uiState.analysisProgressCurrent} / ${uiState.analysisProgressTotal})"
+                                } else {
+                                    "전체 갤러리 분석 중... (준비 중)"
+                                }
+                                Text(
+                                    text = progressText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = dietFontWeight
+                                )
+                            } else if (isDietActive) {
                                 Text(
                                     text = "전체 ${uiState.galleryTotalCount}장 중 ${uiState.readyToCleanCount}장 준비됨",
                                     style = MaterialTheme.typography.bodyMedium,
@@ -540,7 +553,7 @@ private fun HomeScreen(
                             }
                         }
                     }
-                    if (isReadyToClean) {
+                    if (isDietActive) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = "Go"
@@ -551,10 +564,13 @@ private fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // [Trash Cleaning Card] - [MODIFIED] Activated as soon as Discovery finishes
             val hasScreenshots = uiState.screenshotCount > 0
-            val screenshotCardColor = if (hasScreenshots) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant
-            val screenshotContentColor = if (hasScreenshots) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
-            val screenshotFontWeight = if (hasScreenshots) FontWeight.Bold else FontWeight.Normal
+            val isDiscoveryActive = !uiState.isDiscoveryInProgress // Can click if scan is done
+            val isTrashActive = isDiscoveryActive && hasScreenshots
+            val screenshotCardColor = if (isTrashActive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant
+            val screenshotContentColor = if (isTrashActive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            val screenshotFontWeight = if (isTrashActive) FontWeight.Bold else FontWeight.Normal
 
             Card(
                 colors = CardDefaults.cardColors(
@@ -563,8 +579,8 @@ private fun HomeScreen(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .scale(if (hasScreenshots) pulseScale else 1f)
-                    .clickable { onNavigateToScreenshotClean() },
+                    .scale(if (isTrashActive) pulseScale else 1f)
+                    .clickable(enabled = isTrashActive) { onNavigateToScreenshotClean() },
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
@@ -583,18 +599,24 @@ private fun HomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                // [MODIFIED] Button name change
                                 text = "스크린샷/불필요 사진 비우기",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = screenshotFontWeight
                             )
-                            Text(
-                                text = if (hasScreenshots) "정리할 사진 ${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 사진 0장", 
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            if (uiState.isDiscoveryInProgress) {
+                                Text(
+                                    text = "전체 갤러리 분류 중... (잠시만요)",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            } else {
+                                Text(
+                                    text = if (hasScreenshots) "정리할 사진 ${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 사진 0장", 
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
-                    if (hasScreenshots) {
+                    if (isTrashActive) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = "Go"
@@ -604,7 +626,8 @@ private fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-
+            
+            // ... [Remaining UI components unchanged]
             val hasPending = uiState.hasPendingReview
             
             OutlinedButton(
@@ -720,6 +743,7 @@ private fun HomeScreen(
     }
 }
 
+// ... [Dialog Composables unchanged]
 @Composable
 fun GuideDialog(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {

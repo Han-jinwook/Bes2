@@ -19,6 +19,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.bes2.data.dao.ReviewItemDao
+import com.bes2.data.repository.SettingsRepository
 import com.bes2.ml.BacklightingDetector
 import com.bes2.ml.EyeClosedDetector
 import com.bes2.ml.FaceEmbedder
@@ -47,7 +48,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     private val faceEmbedder: FaceEmbedder,
     private val smileDetector: SmileDetector,
     private val semanticSearchEngine: SemanticSearchEngine,
-    private val imageClassifier: ImageContentClassifier 
+    private val imageClassifier: ImageContentClassifier,
+    private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -69,18 +71,8 @@ class PhotoAnalysisWorker @AssistedInject constructor(
 
         var totalAnalyzed = 0
         
-        // Loop until no more NEW items
         while (true) {
-            // [LOGIC] Fetch Batch (Limit 50)
             val newItems = reviewItemDao.getNewDietItemsBatch(BATCH_SIZE)
-            // Note: For INSTANT items and REJECTED items, we process them in one go or separate logic?
-            // Current logic mixed them. Let's simplify.
-            // Priority: NEW Diet Items (Bulk)
-            // But we should also process REJECTED ones for re-run.
-            // Let's assume REJECTED re-run is done on-demand or separate worker.
-            // Here we focus on Bulk Analysis of NEW items.
-            
-            // Also check INSTANT items
             val instantItems = reviewItemDao.getItemsBySourceAndStatus("INSTANT", "NEW")
             val itemsToAnalyze = newItems + instantItems
             
@@ -99,7 +91,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         continue
                     }
 
-                    // 1. Basic Filters (Fail Fast)
                     var areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                     
                     if (areEyesClosed) {
@@ -151,6 +142,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     
                     reviewItemDao.update(updatedItem)
                     totalAnalyzed++
+                    
+                    // [MODIFIED] Update progress immediately for real-time UI feedback
+                    settingsRepository.updateCurrentAnalysisProgress(totalAnalyzed)
+                    
                 } catch (e: Exception) {
                     Timber.tag(WORK_NAME).e(e, "Error analyzing image: ${imageItem.uri}")
                     reviewItemDao.updateStatusByIds(listOf(imageItem.id), "ERROR_ANALYSIS")
@@ -159,7 +154,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                 }
             }
             
-            // Check if stopped
             if (isStopped) break
         }
         

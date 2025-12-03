@@ -1,27 +1,26 @@
-# Bes2 개발 계획서 (v7.0 - Final Architecture)
+# Bes2 개발 계획서 (v7.1 - Final Polish & UX Upgrade)
 
 **Date:** 2025-12-03
-**Status:** Core Logic Stabilized & Ready for Polish
+**Status:** Core Logic Stabilized & UI/UX Polished
 **Author:** Han-jinwook
 
 ---
 
 ## 📅 Development Log
 
-### ✅ v7.0: Core Logic Stabilization (2025-12-03)
-*   **Pipeline Overhaul:**
-    *   `PhotoDiscoveryWorker`: `Cursor` 기반 스트림 처리로 변경 (전수 스캔, 누락 없음).
-    *   `PhotoAnalysisWorker`: 배치 루프 처리로 변경 (전수 분석, OOM 방지).
-    *   `GalleryRepository`: 날짜 필터 제거 및 단순화.
-*   **Safety First:**
-    *   `ImageContentClassifier`: 애매하면 `MEMORY`로 분류 (군복/야간 사진 구제).
-    *   `EyeClosedDetector`: 얼굴 크기 3% 미만 시 눈 감음 패스.
-    *   `PhotoAnalysisWorker`: 흐림 기준 20.0으로 완화.
-*   **UI/UX:**
-    *   **Infinite Refill:** DB 선행 확보를 통한 무로딩 경험 구현.
-    *   **Report:** `SettingsRepository` 기반 활동량 카운터 적용 (오늘 정리한 개수 정확도 100%).
-    *   **Ads:** 30장 기준, 화면별 독립 카운팅 적용.
-    *   **Permissions:** 불필요한 카메라 권한 제거.
+### ✅ v7.1: UX Upgrade & Stability (2025-12-03)
+*   **Waiting UX Overhaul:**
+    *   **Real-time Progress:** 다이어트 분석 시 "전체 갤러리 분석 중... (350 / 1063)" 실시간 카운팅 표시.
+    *   **Stage Separation:**
+        *   **1단계 (분류):** 스캔 완료 즉시 '쓰레기 정리' 카드 활성화 (AI 분석 안 기다림).
+        *   **2단계 (분석):** '다이어트' 카드는 심층 분석 완료 시까지 대기 메시지 표시.
+    *   **Friendly Messages:** "숨은 쓰레기 찾는 중...", "잠시만 기다려주세요" 등 친절한 안내 문구 적용.
+*   **Logic Stabilization:**
+    *   **Worker Policy:** `ExistingWorkPolicy.REPLACE` 적용으로 작업 취소/멈춤 현상 해결 (개발 모드).
+    *   **Progress Tracking:** 1장 분석마다 즉시 DB/Settings 저장하여 UI 반응성 극대화.
+*   **Memory Recall:**
+    *   **Notification:** 분석 완료 시 "추억 소환 🎉" 알림 발송.
+    *   **Logic:** 하루 20장 이상 촬영된 날짜 자동 감지 및 제안.
 
 ---
 
@@ -31,13 +30,10 @@
 *   **대용량 테스트:** 사진 5,000장 이상 기기에서 발열 및 배터리 소모 체크.
 *   **예외 케이스:** 권한 거부 시, DB 손상 시 복구 로직 확인.
 
-### 2. UI 폴리싱 (Polishing)
-*   **텅 빈 화면 처리:** Worker가 도는 동안(초기 1~2분) 사용자에게 보여줄 "열심히 분석 중입니다" 애니메이션이나 안내 문구 강화.
-*   **튜토리얼:** "전체 스캔 모드"에 대한 안내 (처음 한 번만 오래 걸려요).
-
-### 3. 출시 준비
+### 2. 출시 준비
 *   `proguard-rules.pro` 확인 (ML Kit 등).
 *   버전 코드 올리기.
+*   **Worker 정책 변경:** 배터리 효율을 위해 `REPLACE` -> `KEEP`으로 최종 변경 검토.
 
 ---
 
@@ -45,12 +41,15 @@
 
 ### Data Flow
 1.  **Scanner (`PhotoDiscoveryWorker`):** `MediaStore` -> `Cursor` -> `ReviewItemDao` (NEW) / `TrashItemDao` (READY).
+    *   *Update:* 전체 스캔 개수(`totalScanCount`) 즉시 저장.
 2.  **Analyzer (`PhotoAnalysisWorker`):** `NEW` items -> AI Check -> `ANALYZED` / `REJECTED`.
+    *   *Update:* 1장마다 `analysisProgressCurrent` 저장 (실시간 카운팅).
 3.  **Clusterer (`ClusteringWorker`):** `ANALYZED` -> `ImageClusteringHelper` -> `CLUSTERED`.
-4.  **UI (`ViewModel`):** `CLUSTERED` items -> User Action -> `KEPT` / `DELETED` -> `SettingsRepository` (Count++).
+4.  **UI (`ViewModel`):**
+    *   `isDiscoveryInProgress` (스캔 중): 쓰레기 카드 대기.
+    *   `isAnalysisInProgress` (분석 중): 다이어트 카드 대기 (진행률 표시).
 
 ### Key Components
-*   `SettingsRepository`: Daily stats counters, last scan timestamps.
+*   `SettingsRepository`: Daily stats counters, last scan timestamps, **real-time analysis progress**.
 *   **`GalleryRepository`:** `findLargePhotoGroups(minCount: 20)` - 하루에 20장 이상 촬영된 날짜 그룹을 찾아 '추억'으로 제안.
-*   `ImageContentClassifier`: Safety-first classification logic.
-*   `EyeClosedDetector`: Small face rescue logic.
+*   `NotificationHelper`: "추억 소환", "정리 완료" 등 상황별 알림 관리.

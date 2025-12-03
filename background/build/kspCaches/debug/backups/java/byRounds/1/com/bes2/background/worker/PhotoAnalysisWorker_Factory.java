@@ -4,6 +4,7 @@ import android.content.Context;
 import androidx.work.WorkManager;
 import androidx.work.WorkerParameters;
 import com.bes2.data.dao.ReviewItemDao;
+import com.bes2.data.repository.SettingsRepository;
 import com.bes2.ml.BacklightingDetector;
 import com.bes2.ml.EyeClosedDetector;
 import com.bes2.ml.FaceEmbedder;
@@ -53,6 +54,8 @@ public final class PhotoAnalysisWorker_Factory {
 
   private final Provider<ImageContentClassifier> imageClassifierProvider;
 
+  private final Provider<SettingsRepository> settingsRepositoryProvider;
+
   public PhotoAnalysisWorker_Factory(Provider<ReviewItemDao> reviewItemDaoProvider,
       Provider<WorkManager> workManagerProvider, Provider<NimaQualityAnalyzer> nimaAnalyzerProvider,
       Provider<MusiqQualityAnalyzer> musiqAnalyzerProvider,
@@ -60,7 +63,8 @@ public final class PhotoAnalysisWorker_Factory {
       Provider<BacklightingDetector> backlightingDetectorProvider,
       Provider<FaceEmbedder> faceEmbedderProvider, Provider<SmileDetector> smileDetectorProvider,
       Provider<SemanticSearchEngine> semanticSearchEngineProvider,
-      Provider<ImageContentClassifier> imageClassifierProvider) {
+      Provider<ImageContentClassifier> imageClassifierProvider,
+      Provider<SettingsRepository> settingsRepositoryProvider) {
     this.reviewItemDaoProvider = reviewItemDaoProvider;
     this.workManagerProvider = workManagerProvider;
     this.nimaAnalyzerProvider = nimaAnalyzerProvider;
@@ -71,10 +75,11 @@ public final class PhotoAnalysisWorker_Factory {
     this.smileDetectorProvider = smileDetectorProvider;
     this.semanticSearchEngineProvider = semanticSearchEngineProvider;
     this.imageClassifierProvider = imageClassifierProvider;
+    this.settingsRepositoryProvider = settingsRepositoryProvider;
   }
 
   public PhotoAnalysisWorker get(Context appContext, WorkerParameters workerParams) {
-    return newInstance(appContext, workerParams, reviewItemDaoProvider.get(), workManagerProvider.get(), nimaAnalyzerProvider.get(), musiqAnalyzerProvider.get(), eyeClosedDetectorProvider.get(), backlightingDetectorProvider.get(), faceEmbedderProvider.get(), smileDetectorProvider.get(), semanticSearchEngineProvider.get(), imageClassifierProvider.get());
+    return newInstance(appContext, workerParams, reviewItemDaoProvider.get(), workManagerProvider.get(), nimaAnalyzerProvider.get(), musiqAnalyzerProvider.get(), eyeClosedDetectorProvider.get(), backlightingDetectorProvider.get(), faceEmbedderProvider.get(), smileDetectorProvider.get(), semanticSearchEngineProvider.get(), imageClassifierProvider.get(), settingsRepositoryProvider.get());
   }
 
   public static PhotoAnalysisWorker_Factory create(Provider<ReviewItemDao> reviewItemDaoProvider,
@@ -84,8 +89,9 @@ public final class PhotoAnalysisWorker_Factory {
       Provider<BacklightingDetector> backlightingDetectorProvider,
       Provider<FaceEmbedder> faceEmbedderProvider, Provider<SmileDetector> smileDetectorProvider,
       Provider<SemanticSearchEngine> semanticSearchEngineProvider,
-      Provider<ImageContentClassifier> imageClassifierProvider) {
-    return new PhotoAnalysisWorker_Factory(reviewItemDaoProvider, workManagerProvider, nimaAnalyzerProvider, musiqAnalyzerProvider, eyeClosedDetectorProvider, backlightingDetectorProvider, faceEmbedderProvider, smileDetectorProvider, semanticSearchEngineProvider, imageClassifierProvider);
+      Provider<ImageContentClassifier> imageClassifierProvider,
+      Provider<SettingsRepository> settingsRepositoryProvider) {
+    return new PhotoAnalysisWorker_Factory(reviewItemDaoProvider, workManagerProvider, nimaAnalyzerProvider, musiqAnalyzerProvider, eyeClosedDetectorProvider, backlightingDetectorProvider, faceEmbedderProvider, smileDetectorProvider, semanticSearchEngineProvider, imageClassifierProvider, settingsRepositoryProvider);
   }
 
   public static PhotoAnalysisWorker newInstance(Context appContext, WorkerParameters workerParams,
@@ -93,7 +99,7 @@ public final class PhotoAnalysisWorker_Factory {
       MusiqQualityAnalyzer musiqAnalyzer, EyeClosedDetector eyeClosedDetector,
       BacklightingDetector backlightingDetector, FaceEmbedder faceEmbedder,
       SmileDetector smileDetector, SemanticSearchEngine semanticSearchEngine,
-      ImageContentClassifier imageClassifier) {
-    return new PhotoAnalysisWorker(appContext, workerParams, reviewItemDao, workManager, nimaAnalyzer, musiqAnalyzer, eyeClosedDetector, backlightingDetector, faceEmbedder, smileDetector, semanticSearchEngine, imageClassifier);
+      ImageContentClassifier imageClassifier, SettingsRepository settingsRepository) {
+    return new PhotoAnalysisWorker(appContext, workerParams, reviewItemDao, workManager, nimaAnalyzer, musiqAnalyzer, eyeClosedDetector, backlightingDetector, faceEmbedder, smileDetector, semanticSearchEngine, imageClassifier, settingsRepository);
   }
 }

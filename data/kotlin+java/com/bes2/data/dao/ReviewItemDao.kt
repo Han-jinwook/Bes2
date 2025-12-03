@@ -21,6 +21,9 @@ interface ReviewItemDao {
 
     @Query("SELECT * FROM review_items WHERE source_type = :sourceType ORDER BY timestamp DESC")
     fun getItemsBySourceTypeFlow(sourceType: String): Flow<List<ReviewItemEntity>>
+
+    @Query("SELECT * FROM review_items WHERE source_type = :sourceType ORDER BY timestamp DESC")
+    suspend fun getItemsBySourceType(sourceType: String): List<ReviewItemEntity>
     
     @Query("SELECT * FROM review_items WHERE source_type = :sourceType AND status = :status ORDER BY timestamp DESC")
     suspend fun getItemsBySourceAndStatus(sourceType: String, status: String): List<ReviewItemEntity>

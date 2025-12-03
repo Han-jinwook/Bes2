@@ -52,7 +52,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         const val KEY_IS_INSTANT_MODE = "is_instant_mode"
         const val KEY_IMAGE_URI = "key_image_uri"
         
-        private const val INSERT_BATCH_SIZE = 100 // Insert to DB every 100 items to save memory
+        private const val INSERT_BATCH_SIZE = 100 
         private const val NOTIFICATION_ID = 2023
         private const val CHANNEL_ID = "bes2_analysis_channel"
     }
@@ -63,6 +63,8 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         
         if (!isInstantMode) {
             setForeground(createForegroundInfo())
+            // [ADDED] Reset progress for full scan
+            settingsRepository.resetAnalysisProgress()
         }
         
         Timber.tag(WORK_NAME).d("--- PhotoDiscoveryWorker Started (Mode: $sourceType) ---")
@@ -70,7 +72,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         if (isInstantMode) {
             processInstantScan(sourceType)
         } else {
-            // [LOGIC] Full Gallery Scan using Cursor Stream (Most Efficient)
             processGalleryScanStream(sourceType)
         }
         
@@ -133,12 +134,13 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 val timestamp = cursor.getLong(dateColumn)
                 val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id).toString()
                 
-                // 1. Skip if already processed
+                // [LOGIC] Count ALL scanned items, even processed ones, to show total progress correctly
+                scanCountTotal++
+                
                 if (reviewItemDao.isUriProcessed(contentUri) || trashItemDao.isUriProcessed(contentUri)) {
                     continue
                 }
                 
-                // 2. Classify
                 var isTrash = false
                 val isScreenshotPath = filePath.contains("screenshot", ignoreCase = true) || 
                                        filePath.contains("capture", ignoreCase = true)
@@ -146,7 +148,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 if (isScreenshotPath) {
                     isTrash = true
                 } else {
-                    // AI Classification
                     try {
                         val bitmap = loadBitmap(contentUri)
                         if (bitmap != null) {
@@ -159,7 +160,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                     } catch (e: Exception) { }
                 }
 
-                // 3. Add to Buffer
                 if (isTrash) {
                     newTrashBuffer.add(TrashItemEntity(
                         uri = contentUri, filePath = filePath, timestamp = timestamp, status = "READY"
@@ -170,9 +170,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                         status = "NEW", source_type = sourceType 
                     ))
                 }
-                scanCountTotal++
                 
-                // 4. Flush Buffer if full
                 if (newDietBuffer.size >= INSERT_BATCH_SIZE) {
                     reviewItemDao.insertAll(newDietBuffer)
                     newDietBuffer.clear()
@@ -183,9 +181,11 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 }
             }
             
-            // 5. Flush Remaining
             if (newDietBuffer.isNotEmpty()) reviewItemDao.insertAll(newDietBuffer)
             if (newTrashBuffer.isNotEmpty()) trashItemDao.insertAll(newTrashBuffer)
+            
+            // [ADDED] Save total count for progress UI
+            settingsRepository.setTotalScanCount(scanCountTotal)
             
         } catch (e: Exception) {
             Timber.tag(WORK_NAME).e(e, "Error during gallery scan stream")

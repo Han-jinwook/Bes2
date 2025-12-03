@@ -54,10 +54,13 @@ class SettingsRepository @Inject constructor(
         val LAST_STATS_DATE = stringPreferencesKey("last_stats_date") 
         val LAST_DIET_SCAN_TIME = longPreferencesKey("last_diet_scan_time")
         
-        // [ADDED] Last Notification Time per Source Type
         val LAST_NOTI_TIME_DIET = longPreferencesKey("last_noti_time_diet")
         val LAST_NOTI_TIME_INSTANT = longPreferencesKey("last_noti_time_instant")
         val LAST_NOTI_TIME_TRASH = longPreferencesKey("last_noti_time_trash")
+        
+        // [ADDED] Analysis Progress Tracking
+        val ANALYSIS_PROGRESS_CURRENT = intPreferencesKey("analysis_progress_current")
+        val ANALYSIS_PROGRESS_TOTAL = intPreferencesKey("analysis_progress_total")
     }
 
     val storedSettings: Flow<StoredSettings> = context.dataStore.data
@@ -93,6 +96,14 @@ class SettingsRepository @Inject constructor(
                     deletedCount = prefs[PreferencesKeys.TODAY_DELETED_COUNT] ?: 0
                 )
             }
+        }
+        
+    // [ADDED] Flow for UI to observe progress
+    val analysisProgress: Flow<Pair<Int, Int>> = context.dataStore.data
+        .map { prefs ->
+            val current = prefs[PreferencesKeys.ANALYSIS_PROGRESS_CURRENT] ?: 0
+            val total = prefs[PreferencesKeys.ANALYSIS_PROGRESS_TOTAL] ?: 0
+            Pair(current, total)
         }
 
     suspend fun incrementDailyStats(keptDelta: Int, deletedDelta: Int) {
@@ -151,19 +162,16 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[PreferencesKeys.LAST_DIET_SCAN_TIME] = timestamp }
     }
     
-    // [ADDED] Notification Throttling
     suspend fun shouldShowNotification(sourceType: String): Boolean {
         val prefs = context.dataStore.data.first()
         val key = when(sourceType) {
             "DIET" -> PreferencesKeys.LAST_NOTI_TIME_DIET
             "INSTANT" -> PreferencesKeys.LAST_NOTI_TIME_INSTANT
-            "TRASH" -> PreferencesKeys.LAST_NOTI_TIME_TRASH // Optional
+            "TRASH" -> PreferencesKeys.LAST_NOTI_TIME_TRASH 
             else -> PreferencesKeys.LAST_NOTI_TIME_DIET
         }
         
         val lastTime = prefs[key] ?: 0L
-        // Show if first time (0L) or passed 12 hours (approx daily check)
-        // Adjust interval as needed. 20 hours is safe for "Daily".
         val currentTime = System.currentTimeMillis()
         val interval = 20L * 60 * 60 * 1000 
         
@@ -182,5 +190,21 @@ class SettingsRepository @Inject constructor(
             else -> PreferencesKeys.LAST_NOTI_TIME_DIET
         }
         context.dataStore.edit { it[key] = System.currentTimeMillis() }
+    }
+    
+    // [ADDED] Update functions for progress tracking
+    suspend fun setTotalScanCount(total: Int) {
+        context.dataStore.edit { it[PreferencesKeys.ANALYSIS_PROGRESS_TOTAL] = total }
+    }
+    
+    suspend fun updateCurrentAnalysisProgress(current: Int) {
+        context.dataStore.edit { it[PreferencesKeys.ANALYSIS_PROGRESS_CURRENT] = current }
+    }
+    
+    suspend fun resetAnalysisProgress() {
+        context.dataStore.edit { 
+            it[PreferencesKeys.ANALYSIS_PROGRESS_CURRENT] = 0
+            it[PreferencesKeys.ANALYSIS_PROGRESS_TOTAL] = 0
+        }
     }
 }

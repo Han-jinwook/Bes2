@@ -9,8 +9,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.bes2.background.worker.ClusteringWorker
 import com.bes2.background.worker.MemoryEventWorker
-import com.bes2.background.worker.PhotoDiscoveryWorker
 import com.bes2.background.worker.PhotoAnalysisWorker
+import com.bes2.background.worker.PhotoDiscoveryWorker
 import com.bes2.data.dao.ImageClusterDao
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.dao.TrashItemDao
@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -51,7 +52,11 @@ data class HomeUiState(
     val memoryEvent: DateGroup? = null,
     val isMemoryPrepared: Boolean = false,
     val monthlyReport: ReportStats = ReportStats(),
-    val yearlyReport: ReportStats = ReportStats()
+    val yearlyReport: ReportStats = ReportStats(),
+    val isDiscoveryInProgress: Boolean = true, // [ADDED] Scan status
+    val isAnalysisInProgress: Boolean = true,  // AI Analysis status
+    val analysisProgressCurrent: Int = 0,
+    val analysisProgressTotal: Int = 0
 )
 
 @HiltViewModel
@@ -77,11 +82,75 @@ class HomeViewModel @Inject constructor(
         monitorDietCount()
         loadGalleryCounts()
         loadMemoryEvent()
+        
         startBackgroundAnalysis()
+        monitorAnalysisStatus() 
+        monitorProgress()
+        
         monitorStats() 
         monitorReports() 
         
         Timber.tag(TAG).d("init - END")
+    }
+    
+    private fun monitorProgress() {
+        viewModelScope.launch {
+            settingsRepository.analysisProgress.collectLatest { (current, total) ->
+                _uiState.update { 
+                    it.copy(
+                        analysisProgressCurrent = current,
+                        analysisProgressTotal = total
+                    ) 
+                }
+            }
+        }
+    }
+    
+    private fun monitorAnalysisStatus() {
+        viewModelScope.launch {
+            combine(
+                workManager.getWorkInfosForUniqueWorkFlow(PhotoDiscoveryWorker.WORK_NAME),
+                workManager.getWorkInfosForUniqueWorkFlow(PhotoAnalysisWorker.WORK_NAME),
+                workManager.getWorkInfosForUniqueWorkFlow(ClusteringWorker.WORK_NAME)
+            ) { discovery, analysis, clustering ->
+                val isDiscoveryRunning = isWorkRunning(discovery)
+                val isAnalysisRunning = isWorkRunning(analysis)
+                val isClusteringRunning = isWorkRunning(clustering)
+                
+                Triple(isDiscoveryRunning, isAnalysisRunning, isClusteringRunning)
+            }.collectLatest { (isDiscovery, isAnalysis, isClustering) ->
+                
+                // 1. Discovery Status (for Trash Card)
+                val discoveryInProgress = isDiscovery
+                
+                // 2. Analysis Status (for Diet Card) - includes Discovery time too
+                val analysisInProgress = isDiscovery || isAnalysis || isClustering
+                
+                _uiState.update { 
+                    it.copy(
+                        isDiscoveryInProgress = discoveryInProgress,
+                        isAnalysisInProgress = analysisInProgress
+                    ) 
+                }
+                
+                // Refresh counts when phases complete
+                if (!discoveryInProgress) {
+                    loadScreenshotCount() // Trash count ready!
+                }
+                
+                if (!analysisInProgress) {
+                    loadGalleryCounts()
+                }
+            }
+        }
+    }
+    
+    private fun isWorkRunning(workInfoList: List<WorkInfo>): Boolean {
+        return workInfoList.any { workInfo ->
+            workInfo.state == WorkInfo.State.ENQUEUED ||
+            workInfo.state == WorkInfo.State.RUNNING ||
+            workInfo.state == WorkInfo.State.BLOCKED
+        }
     }
 
     private fun monitorStats() {
@@ -207,7 +276,7 @@ class HomeViewModel @Inject constructor(
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
         workManager.enqueueUniqueWork(
             PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.KEEP, // [FIX] Changed from REPLACE to KEEP to avoid thrashing
+            ExistingWorkPolicy.REPLACE, 
             discoveryRequest
         )
     }
