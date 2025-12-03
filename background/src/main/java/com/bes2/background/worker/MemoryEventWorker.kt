@@ -7,6 +7,8 @@ import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.bes2.background.R
+import com.bes2.background.notification.NotificationHelper
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.model.ReviewItemEntity
 import com.bes2.data.repository.GalleryRepository
@@ -18,7 +20,6 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-import java.io.FileNotFoundException
 
 @HiltWorker
 class MemoryEventWorker @AssistedInject constructor(
@@ -28,6 +29,7 @@ class MemoryEventWorker @AssistedInject constructor(
     private val reviewItemDao: ReviewItemDao,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val smileDetector: SmileDetector
+    // [FIX] Removed NotificationHelper from constructor as it is an object
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -54,27 +56,27 @@ class MemoryEventWorker @AssistedInject constructor(
             val entities = imagesFromMediaStore.mapNotNull { mediaImage ->
                 val isProcessed = reviewItemDao.isUriProcessed(mediaImage.uri)
                 if (isProcessed) {
-                    return@mapNotNull null 
+                    return@mapNotNull null
                 }
 
                 try {
                     val bitmap = loadBitmap(mediaImage.uri) ?: return@mapNotNull null
-                    
+
                     val pHash = ImagePhashGenerator.generatePhash(bitmap)
                     val nimaScores = nimaAnalyzer.analyze(bitmap)
                     val nimaScore = nimaScores?.mapIndexed { i, s -> (i + 1) * s }?.sum()?.toDouble()
                     val smileProb = smileDetector.getSmilingProbability(bitmap)
-                    
+
                     bitmap.recycle()
 
                     ReviewItemEntity(
                         uri = mediaImage.uri,
                         filePath = mediaImage.filePath,
                         timestamp = mediaImage.timestamp,
-                        
+
                         source_type = "MEMORY",
-                        status = "EVENT_MEMORY", 
-                        
+                        status = "EVENT_MEMORY",
+
                         pHash = pHash,
                         nimaScore = nimaScore,
                         musiqScore = null,
@@ -83,7 +85,6 @@ class MemoryEventWorker @AssistedInject constructor(
                         areEyesClosed = false,
                         smilingProbability = smileProb,
                         cluster_id = null
-                        // [FIX] Removed 'category' as it's replaced by 'source_type'
                     )
                 } catch (e: Exception) {
                     Timber.e(e, "Failed to analyze ${mediaImage.uri}")
@@ -94,8 +95,18 @@ class MemoryEventWorker @AssistedInject constructor(
             if (entities.isNotEmpty()) {
                 reviewItemDao.insertAll(entities)
                 Timber.d("Saved ${entities.size} memory images for $targetDate")
+
+                // [FIX] Call NotificationHelper directly as static object
+                NotificationHelper.showReviewNotification(
+                    context = appContext,
+                    notificationIcon = R.drawable.ic_notification,
+                    clusterCount = 1, // A single memory event
+                    photoCount = entities.size,
+                    sourceType = "MEMORY",
+                    eventDate = targetDate
+                )
             }
-            
+
             return@withContext Result.success()
 
         } catch (e: Exception) {

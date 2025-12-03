@@ -51,5 +51,6 @@
 
 ### Key Components
 *   `SettingsRepository`: Daily stats counters, last scan timestamps.
+*   **`GalleryRepository`:** `findLargePhotoGroups(minCount: 20)` - 하루에 20장 이상 촬영된 날짜 그룹을 찾아 '추억'으로 제안.
 *   `ImageContentClassifier`: Safety-first classification logic.
 *   `EyeClosedDetector`: Small face rescue logic.

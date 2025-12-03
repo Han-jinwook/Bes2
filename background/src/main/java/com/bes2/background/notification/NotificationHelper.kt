@@ -90,12 +90,21 @@ object NotificationHelper {
         notificationManager.notify(LOGIN_NOTIFICATION_ID, builder.build())
     }
 
-    // UPDATED: Added sourceType parameter
-    fun showReviewNotification(context: Context, @DrawableRes notificationIcon: Int, clusterCount: Int, photoCount: Int, sourceType: String = "DIET") {
+    fun showReviewNotification(
+        context: Context,
+        @DrawableRes notificationIcon: Int,
+        clusterCount: Int,
+        photoCount: Int,
+        sourceType: String = "DIET",
+        eventDate: String? = null
+    ) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val intent = Intent(context, Class.forName("com.bes2.app.ui.review.ReviewActivity")).apply {
-            putExtra("source_type", sourceType) // Pass source type to Activity/ViewModel
+            putExtra("source_type", sourceType)
+            if (sourceType == "MEMORY") {
+                putExtra("date", eventDate)
+            }
         }
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
@@ -105,18 +114,37 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = if (sourceType == "INSTANT") "방금 찍은 사진 정리" else "사진 정리 알림"
-        val contentText = if (clusterCount > 0) {
-            "${clusterCount}개 묶음(${photoCount}장)의 정리가 준비되었습니다."
-        } else {
-            "새로운 사진 묶음이 준비되었습니다."
+        val title: String
+        val contentText: String
+
+        when (sourceType) {
+            "MEMORY" -> {
+                title = "추억 소환 🎉"
+                contentText = "${eventDate}의 추억 (${photoCount}장), 지금 정리해볼까요?"
+            }
+            "INSTANT" -> {
+                title = "방금 찍은 사진 정리"
+                contentText = if (clusterCount > 0) {
+                    "${clusterCount}개 묶음(${photoCount}장)의 정리가 준비되었습니다."
+                } else {
+                    "새로운 사진 묶음이 준비되었습니다."
+                }
+            }
+            else -> { // "DIET"
+                title = "사진 정리 알림"
+                contentText = if (clusterCount > 0) {
+                    "${clusterCount}개 묶음(${photoCount}장)의 정리가 준비되었습니다."
+                } else {
+                    "새로운 사진 묶음이 준비되었습니다."
+                }
+            }
         }
 
         val builder = NotificationCompat.Builder(context, USER_INTERACTION_CHANNEL_ID)
             .setSmallIcon(notificationIcon)
             .setContentTitle(title)
             .setContentText(contentText)
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Increased priority for visibility
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
@@ -170,7 +198,7 @@ object NotificationHelper {
             val userInteractionChannel = NotificationChannel(
                 USER_INTERACTION_CHANNEL_ID,
                 "새로운 사진 및 알림",
-                NotificationManager.IMPORTANCE_HIGH // Changed to HIGH
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "새로운 사진 묶음이나 권한 요청 등 사용자의 확인이 필요한 알림입니다."
             }
