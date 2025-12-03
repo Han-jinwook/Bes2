@@ -47,38 +47,39 @@ class ScreenshotViewModel @Inject constructor(
 
     fun loadScreenshots() {
         viewModelScope.launch(Dispatchers.IO) {
-            // [FIX] Ensure UI shows loading state immediately when called
             _uiState.update { it.copy(isLoading = true, showAd = false) }
 
-            val combinedList = mutableListOf<TrashItemEntity>()
-            val urisToCheck = mutableSetOf<String>()
+            val combinedMap = mutableMapOf<String, TrashItemEntity>()
 
+            // 1. Get ALL ready items from DB (using new DAO method or filter)
+            // Ideally we should use getAllReadyTrashItems() if added to DAO.
+            // Since DAO might be rolled back too, let's use existing getReadyTrashItems with large limit.
+            val dbTrashItems = trashItemDao.getReadyTrashItems(limit = 10000) 
+            for (item in dbTrashItems) {
+                combinedMap[item.uri] = item
+            }
+
+            // 2. Get real-time screenshots
             val realScreenshots = galleryRepository.getScreenshots()
             
             for (item in realScreenshots) {
-                if (trashItemDao.isUriProcessed(item.uri.toString())) continue
-                
-                val trashItem = TrashItemEntity(
-                    id = item.id,
-                    uri = item.uri.toString(),
-                    filePath = "",
-                    timestamp = item.dateTaken,
-                    status = "READY"
-                )
-                combinedList.add(trashItem)
-                urisToCheck.add(item.uri.toString())
-                
-                if (combinedList.size >= 30) break
-            }
-
-            if (combinedList.size < 30) {
-                val dbTrashItems = trashItemDao.getReadyTrashItems(limit = 30 - combinedList.size)
-                for (item in dbTrashItems) {
-                    if (!urisToCheck.contains(item.uri)) {
-                        combinedList.add(item)
-                    }
+                val uriString = item.uri.toString()
+                if (!combinedMap.containsKey(uriString)) {
+                    // Check if processed (deleted/kept)
+                    if (trashItemDao.isUriProcessed(uriString)) continue
+                    
+                    val trashItem = TrashItemEntity(
+                        id = item.id,
+                        uri = uriString,
+                        filePath = "",
+                        timestamp = item.dateTaken,
+                        status = "READY"
+                    )
+                    combinedMap[uriString] = trashItem
                 }
             }
+
+            val combinedList = combinedMap.values.sortedByDescending { it.timestamp }
 
             val allUris = combinedList.map { it.uri }.toSet()
             _uiState.update { 

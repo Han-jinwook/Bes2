@@ -1,48 +1,50 @@
-# Bes2 긴급 디버깅 및 해결 과제 (Session Transfer)
+# 내일 점검 리스트 (D-Day Checklist)
 
-**Date:** 2025-11-30 23:45
-**Status:** Critical Fixes Applied, Verification Needed
-
----
-
-## 1. 현재 해결되지 않은 문제 (Known Issues)
-
-### ① 감지 서비스 알림 (Foreground Notification) 미표시
-*   **현상:** 앱 실행 시 상단바에 "사진을 감지하고 있습니다" 알림이 뜨지 않음.
-*   **원인:** `InvalidForegroundServiceTypeException` (Android 14+) 크래시를 막기 위해 `PhotoDiscoveryWorker` 등에서 `setForeground()` 호출을 임시로 제거함.
-*   **해결 과제:** `AndroidManifest.xml`의 `foregroundServiceType="dataSync"` 설정이 병합 과정에서 누락되지 않도록 확실히 조치한 후, `setForeground()`를 다시 복구해야 함.
-
-### ② 다이어트(Diet) & 쓰레기(Trash) 기능 먹통
-*   **현상:** `PhotoDiscoveryWorker` 로그에 `No more images to scan`이 뜨며 아무 사진도 가져오지 못함.
-*   **원인:** `GalleryRepository.getRecentImages()`의 쿼리 조건(`BUCKET_DISPLAY_NAME NOT LIKE %Screenshot%`)이 예상보다 많은 사진을 필터링했을 가능성.
-*   **조치 완료:** 쿼리 조건(`selection`)을 제거하고 모든 사진을 가져오도록 수정함. (다음 빌드에서 검증 필요)
-
-### ③ 리뷰 화면 삭제 후 멈춤 (Freezing)
-*   **현상:** 마지막 사진 묶음을 정리(삭제/저장)한 후, 화면이 넘어가지 않고 멈추거나 빈 화면이 됨.
-*   **원인:** `ReviewViewModel.nextCluster()`에서 마지막 인덱스(`currentIndex == total - 1`)일 때 종료 로직(`finishReview`)이 누락됨.
-*   **조치 완료:** `nextCluster()`에 종료 로직 추가함. (다음 빌드에서 검증 필요)
+**작성일:** 2025-12-04
+**상태:** v7.2 안정화 버전 기준
 
 ---
 
-## 2. 최근 수정 사항 (Recent Fixes)
+## 1. 핵심 검증 사항 (순차 실행 흐름)
 
-### 🔹 4번 기능 (Instant Review) 로직 확정
-*   **기준점:** `MediaDetectionService` 시작 시간(`APP_START_TIME`) 이후에 촬영된 사진만 스캔.
-*   **동작:** `PhotoDiscoveryWorker`가 `INSTANT` 모드일 때, 위 기준점 이후의 사진만 `source_type='INSTANT'`로 저장.
-*   **결과:** "분류된 정리하기" 버튼 클릭 시, 엉뚱한 과거 사진이 섞이지 않고 **방금 찍은 사진들만** 깔끔하게 보임.
+앱을 새로 설치하거나 데이터를 삭제한 후(Clean Install), 다음 5단계가 **순서대로** 일어나는지 확인해주세요.
 
-### 🔹 Hilt 의존성 및 초기화 문제 해결
-*   **`Bes2Application`:** `WorkManager` 초기화 충돌(`IllegalStateException`) 해결. `onCreate` 내 동기 작업(`enqueueUniquePeriodicWork`)을 백그라운드 스레드로 이동하여 ANR 해결.
-*   **`DatabaseModule`:** 가짜 `ImageItemDao` 제거 및 정상 DAO 연결.
+*   **[Step 1] 앱 실행 직후:**
+    *   `PhotoDiscoveryWorker`가 돌면서 로그캣에 `Face detected...` 같은 분류 로그가 찍혀야 함.
+    *   이때 '다이어트', '쓰레기', '추억' 버튼은 모두 비활성(또는 준비 중) 상태여야 함.
+
+*   **[Step 2] 분류 완료 (약 5~10분 후):**
+    *   **알림:** "새로운 사진 묶음이 준비되었습니다" (쓰레기 알림) 도착 확인.
+    *   **UI:** '쓰레기 정리' 버튼에 숫자가 뜨며 활성화됨.
+
+*   **[Step 3] 정밀 분석:**
+    *   '다이어트' 카드에 "분석 중 (N / 전체)" 카운팅 숫자가 올라가는지 확인.
+
+*   **[Step 4] 다이어트 완료:**
+    *   분석이 다 끝나면 '다이어트' 버튼 활성화.
+
+*   **[Step 5] 추억 소환 (가장 중요):**
+    *   **모든 분석이 끝난 뒤에** 비로소 '추억 소환' 버튼이 짠! 하고 활성화되는지 확인.
+    *   버튼을 눌렀을 때 "사진 찾는 중..." 로딩 없이 바로 정리 화면으로 넘어가는지 확인.
 
 ---
 
-## 3. 다음 세션 목표 (Next Steps)
+## 2. 기능별 세부 점검
 
-1.  **빌드 및 기능 검증:**
-    *   `GalleryRepository` 쿼리 수정 후 다이어트/쓰레기 숫자가 올라가는지 확인.
-    *   리뷰 화면에서 마지막 묶음 처리 후 홈으로 잘 돌아오는지 확인.
-2.  **Foreground Service 복구:**
-    *   `app` 모듈 매니페스트 설정을 재점검하고, `PhotoDiscoveryWorker`에 `setForeground`를 다시 적용하여 **"감지 서비스 알림"**을 되살릴 것. (안드로이드 정책 준수)
-3.  **UI 디테일:** 
-    *   눈 감은 사진이 베스트로 선정되는 등의 AI 점수 로직 튜닝.
+*   **🗑️ 쓰레기 정리:**
+    *   들어가면 **30장 이상** (100장 있으면 100장) 전부 다 스크롤 되는지 확인. (30장 제한 해제 검증)
+    *   스크린샷과 문서 사진이 잘 섞여 있는지 확인.
+
+*   **🔥 발열 및 성능:**
+    *   분석 중에 폰이 지나치게 뜨거워지지 않는지 확인. (무한 루프 제거 검증)
+    *   분석이 다 끝난 후(`Full Scan Complete` 이후)에는 로그가 멈추고 조용해지는지 확인.
+
+---
+
+## 3. 코드 변경 사항 요약 (참고용)
+
+*   **`HomeViewModel.kt`:** 자동 리필 삭제, 순차 실행 로직 적용.
+*   **`ScreenshotViewModel.kt`:** 30장 로딩 제한 제거.
+*   **`PhotoDiscoveryWorker.kt`:** 쓰레기 알림 추가.
+*   **`PhotoAnalysisWorker.kt`:** 군복/야간 사진 구제 로직 추가.
+*   **`ImageContentClassifier.kt`:** 군복/야간 탐지 기능 추가.

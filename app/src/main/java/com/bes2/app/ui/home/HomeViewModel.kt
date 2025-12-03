@@ -53,8 +53,8 @@ data class HomeUiState(
     val isMemoryPrepared: Boolean = false,
     val monthlyReport: ReportStats = ReportStats(),
     val yearlyReport: ReportStats = ReportStats(),
-    val isDiscoveryInProgress: Boolean = true, // [ADDED] Scan status
-    val isAnalysisInProgress: Boolean = true,  // AI Analysis status
+    val isDiscoveryInProgress: Boolean = true,
+    val isAnalysisInProgress: Boolean = true,
     val analysisProgressCurrent: Int = 0,
     val analysisProgressTotal: Int = 0
 )
@@ -81,7 +81,6 @@ class HomeViewModel @Inject constructor(
         checkPendingReviews()
         monitorDietCount()
         loadGalleryCounts()
-        loadMemoryEvent()
         
         startBackgroundAnalysis()
         monitorAnalysisStatus() 
@@ -120,11 +119,14 @@ class HomeViewModel @Inject constructor(
                 Triple(isDiscoveryRunning, isAnalysisRunning, isClusteringRunning)
             }.collectLatest { (isDiscovery, isAnalysis, isClustering) ->
                 
-                // 1. Discovery Status (for Trash Card)
+                val wasAnalysisInProgress = _uiState.value.isAnalysisInProgress
                 val discoveryInProgress = isDiscovery
-                
-                // 2. Analysis Status (for Diet Card) - includes Discovery time too
                 val analysisInProgress = isDiscovery || isAnalysis || isClustering
+                
+                if (wasAnalysisInProgress && !analysisInProgress) {
+                    Timber.tag(TAG).d("Main analysis pipeline finished. Starting memory event search.")
+                    loadMemoryEvent()
+                }
                 
                 _uiState.update { 
                     it.copy(
@@ -133,9 +135,8 @@ class HomeViewModel @Inject constructor(
                     ) 
                 }
                 
-                // Refresh counts when phases complete
                 if (!discoveryInProgress) {
-                    loadScreenshotCount() // Trash count ready!
+                    loadScreenshotCount()
                 }
                 
                 if (!analysisInProgress) {
@@ -213,15 +214,6 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(readyToCleanCount = count) }
             }
         }
-        
-        viewModelScope.launch {
-            reviewItemDao.getActiveDietCountFlow().collectLatest { count ->
-                if (count < 5) {
-                    Timber.tag(TAG).d("Total Diet count low ($count). Triggering refill.")
-                    startBackgroundAnalysis()
-                }
-            }
-        }
     }
 
     private fun checkPendingReviews() {
@@ -276,7 +268,7 @@ class HomeViewModel @Inject constructor(
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
         workManager.enqueueUniqueWork(
             PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE, 
+            ExistingWorkPolicy.KEEP, 
             discoveryRequest
         )
     }

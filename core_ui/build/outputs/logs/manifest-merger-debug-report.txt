@@ -1,16 +1,16 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml:2:13-83
-INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml:2:13-83
+ADDED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml:2:13-83
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml:2:13-83
 	package
-		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml
+		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml
 	xmlns:android
-		ADDED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml:2:23-81
+		ADDED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml:2:23-81
 uses-sdk
-INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml reason: use-sdk injection requested
-INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml
-INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml reason: use-sdk injection requested
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml
+INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml
 	android:targetSdkVersion
-		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml
+		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml
 	android:minSdkVersion
-		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest10958610574990819148.xml
+		INJECTED from D:\Bes2\core_ui\build\intermediates\tmp\ProcessLibraryManifest\debug\tempAndroidManifest3668754947298325394.xml
