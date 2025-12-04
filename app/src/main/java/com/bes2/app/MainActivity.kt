@@ -32,8 +32,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.getStringExtra("NAVIGATE_TO") == "REVIEW_SCREEN") {
+        val navigateTo = intent?.getStringExtra("NAVIGATE_TO")
+        if (navigateTo == "REVIEW_SCREEN") {
             startActivity(Intent(this, ReviewActivity::class.java))
+        } else if (navigateTo == "SCREENSHOT_CLEAN") {
+            // This is a simplified way to handle navigation from notification.
+            // A more robust solution would use NavController deeplinking.
+            val navIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                putExtra("NAVIGATE_TO", "SCREENSHOT_CLEAN")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            startActivity(navIntent)
         }
     }
 

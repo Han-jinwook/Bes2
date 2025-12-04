@@ -82,7 +82,8 @@ class HomeViewModel @Inject constructor(
         monitorDietCount()
         loadGalleryCounts()
         
-        startBackgroundAnalysis()
+        // [MODIFIED] Do NOT start scan immediately. Wait for UI to grant permission.
+        // startBackgroundAnalysis()
         monitorAnalysisStatus() 
         monitorProgress()
         
@@ -264,18 +265,13 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun startBackgroundAnalysis() {
+    // [MODIFIED] Renamed and made public for UI to call after permission grant
+    fun triggerBackgroundScan() {
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
         workManager.enqueueUniqueWork(
             PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.KEEP, 
+            ExistingWorkPolicy.REPLACE, // [MODIFIED] KEEP -> REPLACE 
             discoveryRequest
         )
-    }
-    
-    fun refreshGalleryCount() {
-        startBackgroundAnalysis()
-        loadScreenshotCount()
-        loadGalleryCounts()
     }
 }

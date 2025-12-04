@@ -21,6 +21,8 @@ import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.bes2.background.R
+import com.bes2.background.notification.NotificationHelper
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.dao.TrashItemDao
 import com.bes2.data.model.ReviewItemEntity
@@ -31,6 +33,7 @@ import com.bes2.ml.ImageCategory
 import com.bes2.ml.ImageContentClassifier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -63,23 +66,39 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         
         if (!isInstantMode) {
             setForeground(createForegroundInfo())
-            // [ADDED] Reset progress for full scan
             settingsRepository.resetAnalysisProgress()
         }
         
         Timber.tag(WORK_NAME).d("--- PhotoDiscoveryWorker Started (Mode: $sourceType) ---")
 
-        if (isInstantMode) {
+        // [MODIFIED] Removed redundant initializer
+        val newTrashCount = if (isInstantMode) {
             processInstantScan(sourceType)
         } else {
             processGalleryScanStream(sourceType)
         }
         
-        triggerAnalysis()
+        // Send trash notification if new items were found
+        if (newTrashCount > 0 && !isInstantMode) {
+            if (settingsRepository.shouldShowNotification("TRASH")) {
+                NotificationHelper.showReviewNotification(
+                    appContext,
+                    R.drawable.ic_notification,
+                    0, // clusterCount is not relevant for trash
+                    newTrashCount,
+                    "TRASH"
+                )
+                settingsRepository.updateLastNotificationTime("TRASH")
+            }
+        }
+        
+        if (!isStopped) {
+            triggerAnalysis()
+        }
         return@withContext Result.success()
     }
     
-    private suspend fun processInstantScan(sourceType: String) {
+    private suspend fun processInstantScan(sourceType: String): Int {
         val appStartTime = settingsRepository.getAppStartTime()
         val candidates = galleryRepository.getImagesSince(appStartTime)
 
@@ -106,18 +125,21 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         
         if (newDietEntities.isNotEmpty()) reviewItemDao.insertAll(newDietEntities)
         if (newTrashEntities.isNotEmpty()) trashItemDao.insertAll(newTrashEntities)
+        
+        return newTrashEntities.size
     }
 
-    private suspend fun processGalleryScanStream(sourceType: String) {
+    private suspend fun processGalleryScanStream(sourceType: String): Int {
         Timber.tag(WORK_NAME).d("Starting Full Gallery Scan Stream...")
         
         val cursor = galleryRepository.getAllImagesCursor()
         if (cursor == null) {
             Timber.tag(WORK_NAME).e("Failed to open gallery cursor.")
-            return
+            return 0
         }
         
         var scanCountTotal = 0
+        var newTrashFound = 0
         val newDietBuffer = mutableListOf<ReviewItemEntity>()
         val newTrashBuffer = mutableListOf<TrashItemEntity>()
         
@@ -134,7 +156,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 val timestamp = cursor.getLong(dateColumn)
                 val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id).toString()
                 
-                // [LOGIC] Count ALL scanned items, even processed ones, to show total progress correctly
                 scanCountTotal++
                 
                 if (reviewItemDao.isUriProcessed(contentUri) || trashItemDao.isUriProcessed(contentUri)) {
@@ -176,24 +197,29 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                     newDietBuffer.clear()
                 }
                 if (newTrashBuffer.size >= INSERT_BATCH_SIZE) {
+                    newTrashFound += newTrashBuffer.size
                     trashItemDao.insertAll(newTrashBuffer)
                     newTrashBuffer.clear()
                 }
             }
             
             if (newDietBuffer.isNotEmpty()) reviewItemDao.insertAll(newDietBuffer)
-            if (newTrashBuffer.isNotEmpty()) trashItemDao.insertAll(newTrashBuffer)
+            if (newTrashBuffer.isNotEmpty()) {
+                newTrashFound += newTrashBuffer.size
+                trashItemDao.insertAll(newTrashBuffer)
+            }
             
-            // [ADDED] Save total count for progress UI
             settingsRepository.setTotalScanCount(scanCountTotal)
             
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Timber.tag(WORK_NAME).e(e, "Error during gallery scan stream")
         } finally {
             cursor.close()
         }
         
-        Timber.tag(WORK_NAME).d("Full Scan Complete. Scanned: $scanCountTotal items.")
+        Timber.tag(WORK_NAME).d("Full Scan Complete. Scanned: $scanCountTotal items. New trash: $newTrashFound")
+        return newTrashFound
     }
     
     private suspend fun triggerAnalysis() {

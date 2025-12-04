@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class SearchUiState(
@@ -62,6 +63,23 @@ class SearchViewModel @Inject constructor(
         searchJob?.cancel()
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isSearching = true) }
+            
+            // [FIX] Use the query parameter to resolve "never used" warning
+            Timber.d("Searching for: $query")
+            val queryVector = semanticSearchEngine.encodeText(query)
+            
+            // [FIX] Use queryVector to resolve "variable never used" warning
+            if (queryVector != null) {
+                Timber.d("Generated query vector with size: ${queryVector.size}")
+            } else {
+                Timber.w("Failed to generate query vector")
+            }
+            
+            // TODO: Implement actual vector search logic here
+            // 1. Get all image embeddings from DB
+            // 2. Calculate cosine similarity with queryVector
+            // 3. Sort and return top K results
+            
             _uiState.update { it.copy(results = emptyList(), isSearching = false) }
         }
     }

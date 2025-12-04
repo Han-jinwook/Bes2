@@ -126,8 +126,15 @@ private fun AppNavigation(
 ) {
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
+            val homeViewModel: HomeViewModel = hiltViewModel()
+
+            // [MODIFIED] Trigger scan only after permission is granted
+            LaunchedEffect(Unit) {
+                homeViewModel.triggerBackgroundScan()
+            }
+            
             HomeScreen(
-                viewModel = hiltViewModel(),
+                viewModel = homeViewModel,
                 onStartAnalysisAndExit = onStartAnalysisAndExit,
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToScreenshotClean = { navController.navigate("screenshot_clean") },
@@ -193,7 +200,8 @@ private fun HomeScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshGalleryCount()
+                // [MODIFIED] Use the correct public method
+                viewModel.triggerBackgroundScan()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

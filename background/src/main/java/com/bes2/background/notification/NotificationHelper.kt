@@ -100,7 +100,18 @@ object NotificationHelper {
     ) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        val intent = Intent(context, Class.forName("com.bes2.app.ui.review.ReviewActivity")).apply {
+        // [MODIFIED] Use MainActivity for TRASH notification
+        val targetActivityClass = if (sourceType == "TRASH") {
+            "com.bes2.app.MainActivity"
+        } else {
+            "com.bes2.app.ui.review.ReviewActivity"
+        }
+
+        val intent = Intent(context, Class.forName(targetActivityClass)).apply {
+            // [MODIFIED] Add flag to navigate to the correct screen
+            if (sourceType == "TRASH") {
+                putExtra("NAVIGATE_TO", "SCREENSHOT_CLEAN")
+            }
             putExtra("source_type", sourceType)
             if (sourceType == "MEMORY") {
                 putExtra("date", eventDate)
@@ -118,6 +129,10 @@ object NotificationHelper {
         val contentText: String
 
         when (sourceType) {
+            "TRASH" -> {
+                title = "불필요한 사진 정리"
+                contentText = "정리가 필요한 스크린샷 등 ${photoCount}장의 사진을 찾았어요."
+            }
             "MEMORY" -> {
                 title = "추억 소환 🎉"
                 contentText = "${eventDate}의 추억 (${photoCount}장), 지금 정리해볼까요?"
