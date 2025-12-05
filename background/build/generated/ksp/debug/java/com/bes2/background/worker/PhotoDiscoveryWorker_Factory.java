@@ -1,7 +1,6 @@
 package com.bes2.background.worker;
 
 import android.content.Context;
-import androidx.work.WorkManager;
 import androidx.work.WorkerParameters;
 import com.bes2.data.dao.ReviewItemDao;
 import com.bes2.data.dao.TrashItemDao;
@@ -35,42 +34,36 @@ public final class PhotoDiscoveryWorker_Factory {
 
   private final Provider<TrashItemDao> trashItemDaoProvider;
 
-  private final Provider<WorkManager> workManagerProvider;
-
   private final Provider<ImageContentClassifier> imageClassifierProvider;
 
   private final Provider<SettingsRepository> settingsRepositoryProvider;
 
   public PhotoDiscoveryWorker_Factory(Provider<GalleryRepository> galleryRepositoryProvider,
       Provider<ReviewItemDao> reviewItemDaoProvider, Provider<TrashItemDao> trashItemDaoProvider,
-      Provider<WorkManager> workManagerProvider,
       Provider<ImageContentClassifier> imageClassifierProvider,
       Provider<SettingsRepository> settingsRepositoryProvider) {
     this.galleryRepositoryProvider = galleryRepositoryProvider;
     this.reviewItemDaoProvider = reviewItemDaoProvider;
     this.trashItemDaoProvider = trashItemDaoProvider;
-    this.workManagerProvider = workManagerProvider;
     this.imageClassifierProvider = imageClassifierProvider;
     this.settingsRepositoryProvider = settingsRepositoryProvider;
   }
 
   public PhotoDiscoveryWorker get(Context appContext, WorkerParameters workerParams) {
-    return newInstance(appContext, workerParams, galleryRepositoryProvider.get(), reviewItemDaoProvider.get(), trashItemDaoProvider.get(), workManagerProvider.get(), imageClassifierProvider.get(), settingsRepositoryProvider.get());
+    return newInstance(appContext, workerParams, galleryRepositoryProvider.get(), reviewItemDaoProvider.get(), trashItemDaoProvider.get(), imageClassifierProvider.get(), settingsRepositoryProvider.get());
   }
 
   public static PhotoDiscoveryWorker_Factory create(
       Provider<GalleryRepository> galleryRepositoryProvider,
       Provider<ReviewItemDao> reviewItemDaoProvider, Provider<TrashItemDao> trashItemDaoProvider,
-      Provider<WorkManager> workManagerProvider,
       Provider<ImageContentClassifier> imageClassifierProvider,
       Provider<SettingsRepository> settingsRepositoryProvider) {
-    return new PhotoDiscoveryWorker_Factory(galleryRepositoryProvider, reviewItemDaoProvider, trashItemDaoProvider, workManagerProvider, imageClassifierProvider, settingsRepositoryProvider);
+    return new PhotoDiscoveryWorker_Factory(galleryRepositoryProvider, reviewItemDaoProvider, trashItemDaoProvider, imageClassifierProvider, settingsRepositoryProvider);
   }
 
   public static PhotoDiscoveryWorker newInstance(Context appContext, WorkerParameters workerParams,
       GalleryRepository galleryRepository, ReviewItemDao reviewItemDao, TrashItemDao trashItemDao,
-      WorkManager workManager, ImageContentClassifier imageClassifier,
-      SettingsRepository settingsRepository) {
-    return new PhotoDiscoveryWorker(appContext, workerParams, galleryRepository, reviewItemDao, trashItemDao, workManager, imageClassifier, settingsRepository);
+      ImageContentClassifier imageClassifier, SettingsRepository settingsRepository) {
+    return new PhotoDiscoveryWorker(appContext, workerParams, galleryRepository, reviewItemDao, trashItemDao, imageClassifier, settingsRepository);
   }
 }

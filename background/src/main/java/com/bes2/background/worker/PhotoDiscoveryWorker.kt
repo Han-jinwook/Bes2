@@ -1,25 +1,23 @@
 package com.bes2.background.worker
 
-import android.app.Notification
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentUris
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.bes2.background.R
 import com.bes2.background.notification.NotificationHelper
@@ -45,7 +43,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
     private val galleryRepository: GalleryRepository,
     private val reviewItemDao: ReviewItemDao,
     private val trashItemDao: TrashItemDao,
-    private val workManager: WorkManager,
     private val imageClassifier: ImageContentClassifier,
     private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
@@ -61,6 +58,17 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val requiredPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        if (ContextCompat.checkSelfPermission(appContext, requiredPermission) != PackageManager.PERMISSION_GRANTED) {
+            Timber.tag(WORK_NAME).e("Storage permission not granted. Worker cannot proceed.")
+            return@withContext Result.failure()
+        }
+
         val isInstantMode = inputData.getBoolean(KEY_IS_INSTANT_MODE, false)
         val sourceType = if (isInstantMode) "INSTANT" else "DIET"
         
@@ -71,34 +79,33 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         
         Timber.tag(WORK_NAME).d("--- PhotoDiscoveryWorker Started (Mode: $sourceType) ---")
 
-        // [MODIFIED] Removed redundant initializer
-        val newTrashCount = if (isInstantMode) {
+        val (newTrashCount, newDietCount) = if (isInstantMode) {
             processInstantScan(sourceType)
         } else {
             processGalleryScanStream(sourceType)
         }
         
-        // Send trash notification if new items were found
+        // [MODIFIED] Set total count for analysis progress UI
+        if (!isInstantMode) {
+            settingsRepository.setTotalScanCount(newDietCount)
+        }
+        
         if (newTrashCount > 0 && !isInstantMode) {
-            if (settingsRepository.shouldShowNotification("TRASH")) {
+            if (settingsRepository.shouldShowNotification()) {
                 NotificationHelper.showReviewNotification(
                     appContext,
                     R.drawable.ic_notification,
-                    0, // clusterCount is not relevant for trash
+                    0, 
                     newTrashCount,
                     "TRASH"
                 )
-                settingsRepository.updateLastNotificationTime("TRASH")
             }
         }
         
-        if (!isStopped) {
-            triggerAnalysis()
-        }
         return@withContext Result.success()
     }
     
-    private suspend fun processInstantScan(sourceType: String): Int {
+    private suspend fun processInstantScan(sourceType: String): Pair<Int, Int> {
         val appStartTime = settingsRepository.getAppStartTime()
         val candidates = galleryRepository.getImagesSince(appStartTime)
 
@@ -126,19 +133,20 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         if (newDietEntities.isNotEmpty()) reviewItemDao.insertAll(newDietEntities)
         if (newTrashEntities.isNotEmpty()) trashItemDao.insertAll(newTrashEntities)
         
-        return newTrashEntities.size
+        return Pair(newTrashEntities.size, newDietEntities.size)
     }
 
-    private suspend fun processGalleryScanStream(sourceType: String): Int {
+    private suspend fun processGalleryScanStream(sourceType: String): Pair<Int, Int> {
         Timber.tag(WORK_NAME).d("Starting Full Gallery Scan Stream...")
         
         val cursor = galleryRepository.getAllImagesCursor()
-        if (cursor == null) {
-            Timber.tag(WORK_NAME).e("Failed to open gallery cursor.")
-            return 0
+        if (cursor == null || cursor.count == 0) {
+            Timber.tag(WORK_NAME).w("Cursor is null or empty. Scan will not proceed.")
+            cursor?.close()
+            return Pair(0, 0)
         }
         
-        var scanCountTotal = 0
+        var newDietFound = 0
         var newTrashFound = 0
         val newDietBuffer = mutableListOf<ReviewItemEntity>()
         val newTrashBuffer = mutableListOf<TrashItemEntity>()
@@ -155,8 +163,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 val filePath = cursor.getString(dataColumn)
                 val timestamp = cursor.getLong(dateColumn)
                 val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id).toString()
-                
-                scanCountTotal++
                 
                 if (reviewItemDao.isUriProcessed(contentUri) || trashItemDao.isUriProcessed(contentUri)) {
                     continue
@@ -193,6 +199,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 }
                 
                 if (newDietBuffer.size >= INSERT_BATCH_SIZE) {
+                    newDietFound += newDietBuffer.size
                     reviewItemDao.insertAll(newDietBuffer)
                     newDietBuffer.clear()
                 }
@@ -203,13 +210,14 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                 }
             }
             
-            if (newDietBuffer.isNotEmpty()) reviewItemDao.insertAll(newDietBuffer)
+            if (newDietBuffer.isNotEmpty()) {
+                newDietFound += newDietBuffer.size
+                reviewItemDao.insertAll(newDietBuffer)
+            }
             if (newTrashBuffer.isNotEmpty()) {
                 newTrashFound += newTrashBuffer.size
                 trashItemDao.insertAll(newTrashBuffer)
             }
-            
-            settingsRepository.setTotalScanCount(scanCountTotal)
             
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -218,19 +226,10 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             cursor.close()
         }
         
-        Timber.tag(WORK_NAME).d("Full Scan Complete. Scanned: $scanCountTotal items. New trash: $newTrashFound")
-        return newTrashFound
+        Timber.tag(WORK_NAME).d("Full Scan Complete. New diet: $newDietFound, New trash: $newTrashFound")
+        return Pair(newTrashFound, newDietFound)
     }
     
-    private suspend fun triggerAnalysis() {
-        val analysisWorkRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
-        workManager.enqueueUniqueWork(
-            PhotoAnalysisWorker.WORK_NAME,
-            ExistingWorkPolicy.APPEND_OR_REPLACE, 
-            analysisWorkRequest
-        )
-    }
-
     private fun loadBitmap(uri: String): Bitmap? {
         return try {
             appContext.contentResolver.openInputStream(uri.toUri())?.use {

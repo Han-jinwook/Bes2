@@ -146,17 +146,30 @@ class GalleryRepository @Inject constructor(
         return imageList
     }
     
-    // [ADDED] Efficient Cursor-based scanning for Worker
-    // Returns a raw Cursor so the Worker can iterate one by one.
-    // Caller MUST close the cursor.
     fun getAllImagesCursor(): Cursor? {
         val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_TAKEN)
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DATA,
+            MediaStore.Images.Media.DATE_TAKEN
+        )
         val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC, ${MediaStore.Images.Media._ID} DESC"
-        
+
         return try {
-            context.contentResolver.query(uri, projection, null, null, sortOrder)
-        } catch (e: Exception) { null }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val bundle = android.os.Bundle().apply {
+                    putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, sortOrder)
+                }
+                // For Android 10 (Q) and above, use Bundle for querying to respect Scoped Storage.
+                context.contentResolver.query(uri, projection, bundle, null)
+            } else {
+                // For older versions, the direct query is sufficient.
+                context.contentResolver.query(uri, projection, null, null, sortOrder)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
     
     private fun processCursor(cursor: Cursor, list: MutableList<ImageItem>) {

@@ -16,10 +16,16 @@ object NotificationHelper {
     private const val USER_INTERACTION_CHANNEL_ID = "user_interaction_channel"
 
     private const val CONSENT_NOTIFICATION_ID = 101
-    private const val LOGIN_NOTIFICATION_ID = 103 
-    private const val REVIEW_NOTIFICATION_ID = 102
+    private const val LOGIN_NOTIFICATION_ID = 103
+    // [DELETED] private const val REVIEW_NOTIFICATION_ID = 102
     private const val SYNC_SUCCESS_NOTIFICATION_ID = 104
     const val APP_STATUS_NOTIFICATION_ID = 1
+
+    // [ADDED] Unique Notification IDs per type
+    private const val NOTIFICATION_ID_TRASH = 1001
+    private const val NOTIFICATION_ID_DIET = 1002
+    private const val NOTIFICATION_ID_MEMORY = 1003
+    private const val NOTIFICATION_ID_INSTANT = 1004
 
     fun createForegroundNotification(context: Context, @DrawableRes notificationIcon: Int): android.app.Notification {
         return NotificationCompat.Builder(context, FOREGROUND_CHANNEL_ID)
@@ -100,7 +106,6 @@ object NotificationHelper {
     ) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // [MODIFIED] Use MainActivity for TRASH notification
         val targetActivityClass = if (sourceType == "TRASH") {
             "com.bes2.app.MainActivity"
         } else {
@@ -108,7 +113,6 @@ object NotificationHelper {
         }
 
         val intent = Intent(context, Class.forName(targetActivityClass)).apply {
-            // [MODIFIED] Add flag to navigate to the correct screen
             if (sourceType == "TRASH") {
                 putExtra("NAVIGATE_TO", "SCREENSHOT_CLEAN")
             }
@@ -117,10 +121,18 @@ object NotificationHelper {
                 putExtra("date", eventDate)
             }
         }
+        
+        // [MODIFIED] Determine Notification ID based on sourceType
+        val notificationId = when (sourceType) {
+            "TRASH" -> NOTIFICATION_ID_TRASH
+            "MEMORY" -> NOTIFICATION_ID_MEMORY
+            "INSTANT" -> NOTIFICATION_ID_INSTANT
+            else -> NOTIFICATION_ID_DIET // DIET
+        }
 
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
             context,
-            REVIEW_NOTIFICATION_ID,
+            notificationId, // Use unique ID for the request code
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -163,7 +175,7 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        notificationManager.notify(REVIEW_NOTIFICATION_ID, builder.build())
+        notificationManager.notify(notificationId, builder.build())
     }
 
     fun showSyncSuccessNotification(context: Context, successCount: Int, clusterCount: Int) {

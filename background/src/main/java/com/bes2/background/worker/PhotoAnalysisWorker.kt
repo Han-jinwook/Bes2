@@ -13,10 +13,7 @@ import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data 
-import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.repository.SettingsRepository
@@ -40,7 +37,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val reviewItemDao: ReviewItemDao,
-    private val workManager: WorkManager,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val musiqAnalyzer: MusiqQualityAnalyzer,
     private val eyeClosedDetector: EyeClosedDetector,
@@ -143,7 +139,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     reviewItemDao.update(updatedItem)
                     totalAnalyzed++
                     
-                    // [MODIFIED] Update progress immediately for real-time UI feedback
                     settingsRepository.updateCurrentAnalysisProgress(totalAnalyzed)
                     
                 } catch (e: Exception) {
@@ -157,15 +152,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             if (isStopped) break
         }
         
-        if (totalAnalyzed > 0) {
-             Timber.tag(WORK_NAME).d("Analysis complete ($totalAnalyzed items). Triggering ClusteringWorker.")
-             val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
-             workManager.enqueueUniqueWork(
-                 ClusteringWorker.WORK_NAME,
-                 ExistingWorkPolicy.APPEND_OR_REPLACE,
-                 clusteringRequest
-             )
-        }
+        // [DELETED] No longer manually triggers the next worker.
         return@withContext Result.success()
     }
 

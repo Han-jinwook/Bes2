@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -82,8 +83,6 @@ class HomeViewModel @Inject constructor(
         monitorDietCount()
         loadGalleryCounts()
         
-        // [MODIFIED] Do NOT start scan immediately. Wait for UI to grant permission.
-        // startBackgroundAnalysis()
         monitorAnalysisStatus() 
         monitorProgress()
         
@@ -108,42 +107,41 @@ class HomeViewModel @Inject constructor(
     
     private fun monitorAnalysisStatus() {
         viewModelScope.launch {
-            combine(
-                workManager.getWorkInfosForUniqueWorkFlow(PhotoDiscoveryWorker.WORK_NAME),
-                workManager.getWorkInfosForUniqueWorkFlow(PhotoAnalysisWorker.WORK_NAME),
-                workManager.getWorkInfosForUniqueWorkFlow(ClusteringWorker.WORK_NAME)
-            ) { discovery, analysis, clustering ->
-                val isDiscoveryRunning = isWorkRunning(discovery)
-                val isAnalysisRunning = isWorkRunning(analysis)
-                val isClusteringRunning = isWorkRunning(clustering)
+            workManager.getWorkInfosForUniqueWorkFlow(PIPELINE_WORK_NAME)
+                .onStart { emit(emptyList()) }
+                .collectLatest { workInfos ->
+                    val discoveryInfo = workInfos.find { it.tags.contains(PhotoDiscoveryWorker::class.java.name) }
+                    val analysisInfo = workInfos.find { it.tags.contains(PhotoAnalysisWorker::class.java.name) }
+                    val clusteringInfo = workInfos.find { it.tags.contains(ClusteringWorker::class.java.name) }
                 
-                Triple(isDiscoveryRunning, isAnalysisRunning, isClusteringRunning)
-            }.collectLatest { (isDiscovery, isAnalysis, isClustering) ->
-                
-                val wasAnalysisInProgress = _uiState.value.isAnalysisInProgress
-                val discoveryInProgress = isDiscovery
-                val analysisInProgress = isDiscovery || isAnalysis || isClustering
-                
-                if (wasAnalysisInProgress && !analysisInProgress) {
-                    Timber.tag(TAG).d("Main analysis pipeline finished. Starting memory event search.")
-                    loadMemoryEvent()
+                    val isDiscoveryRunning = isWorkRunning(listOfNotNull(discoveryInfo))
+                    val isAnalysisRunning = isWorkRunning(listOfNotNull(analysisInfo))
+                    val isClusteringRunning = isWorkRunning(listOfNotNull(clusteringInfo))
+                    
+                    val wasAnalysisInProgress = _uiState.value.isAnalysisInProgress
+                    val discoveryInProgress = isDiscoveryRunning
+                    val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning
+
+                    if (wasAnalysisInProgress && !analysisInProgress) {
+                        Timber.tag(TAG).d("Main analysis pipeline finished. Starting memory event search.")
+                        loadMemoryEvent()
+                    }
+
+                    _uiState.update { 
+                        it.copy(
+                            isDiscoveryInProgress = discoveryInProgress,
+                            isAnalysisInProgress = analysisInProgress
+                        ) 
+                    }
+                    
+                    if (!discoveryInProgress) {
+                        loadScreenshotCount()
+                    }
+                    
+                    if (!analysisInProgress) {
+                        loadGalleryCounts()
+                    }
                 }
-                
-                _uiState.update { 
-                    it.copy(
-                        isDiscoveryInProgress = discoveryInProgress,
-                        isAnalysisInProgress = analysisInProgress
-                    ) 
-                }
-                
-                if (!discoveryInProgress) {
-                    loadScreenshotCount()
-                }
-                
-                if (!analysisInProgress) {
-                    loadGalleryCounts()
-                }
-            }
         }
     }
     
@@ -246,7 +244,8 @@ class HomeViewModel @Inject constructor(
             if (events.isNotEmpty()) {
                 val bestEvent = events.first()
                 _uiState.update { it.copy(memoryEvent = bestEvent, isMemoryPrepared = false) }
-                startMemoryAnalysis(bestEvent.date)
+                // [TEMP] Temporarily disabled to debug unexpected notification
+                // startMemoryAnalysis(bestEvent.date)
             }
         }
     }
@@ -265,13 +264,22 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // [MODIFIED] Renamed and made public for UI to call after permission grant
     fun triggerBackgroundScan() {
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
-        workManager.enqueueUniqueWork(
-            PhotoDiscoveryWorker.WORK_NAME,
-            ExistingWorkPolicy.REPLACE, // [MODIFIED] KEEP -> REPLACE 
+        val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+        val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
+
+        workManager.beginUniqueWork(
+            PIPELINE_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
             discoveryRequest
         )
+        .then(analysisRequest)
+        .then(clusteringRequest)
+        .enqueue()
+    }
+    
+    companion object {
+        private const val PIPELINE_WORK_NAME = "FullAnalysisPipeline"
     }
 }

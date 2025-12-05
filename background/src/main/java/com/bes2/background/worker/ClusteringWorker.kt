@@ -26,7 +26,7 @@ class ClusteringWorker @AssistedInject constructor(
     private val reviewItemDao: ReviewItemDao,
     private val imageClusterDao: ImageClusterDao,
     private val clusteringHelper: ImageClusteringHelper,
-    private val settingsRepository: SettingsRepository // [ADDED]
+    private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -87,9 +87,9 @@ class ClusteringWorker @AssistedInject constructor(
                     reviewItemDao.updateClusterIdOnly(targetClusterId, rejectedIds)
                 }
 
-                // [MODIFIED] Send Notification with Throttling
                 if (candidates.isNotEmpty()) {
-                    if (settingsRepository.shouldShowNotification(sourceType)) {
+                    // [MODIFIED] Simplified notification call, removing throttling.
+                    if (settingsRepository.shouldShowNotification()) {
                         val clusterCount = validClusters.size + (if (rejectedCandidates.isNotEmpty() && validClusters.isEmpty()) 1 else 0)
                         
                         NotificationHelper.showReviewNotification(
@@ -99,10 +99,8 @@ class ClusteringWorker @AssistedInject constructor(
                             candidates.size,
                             sourceType
                         )
-                        
-                        settingsRepository.updateLastNotificationTime(sourceType)
-                    } else {
-                        Timber.d("Notification throttled for $sourceType. Already shown today.")
+                        // [DELETED] No need to update notification time.
+                        // settingsRepository.updateLastNotificationTime(sourceType)
                     }
                 }
                 
