@@ -189,20 +189,30 @@ class ReviewViewModel @Inject constructor(
     private fun loadMemoryEvent(dateString: String) {
         viewModelScope.launch(Dispatchers.Default) {
             try {
+                Timber.tag("REVIEW_DEBUG").d("추억 이벤트 로드 시작: 날짜=%s", dateString)
+                
                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
                 val date = LocalDate.parse(dateString, formatter)
                 val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
                 
+                Timber.tag("REVIEW_DEBUG").d("조회 범위: %d ~ %d", startOfDay, endOfDay)
+                
                 val dbImages = reviewItemDao.getImagesByDateRange(startOfDay, endOfDay)
+                Timber.tag("REVIEW_DEBUG").d("DB에서 조회된 전체 이미지 개수: %d", dbImages.size)
+                
                 val validDbImages = dbImages.filter { 
                     it.status == "ANALYZED" || it.status == "KEPT" || it.status == "EVENT_MEMORY" 
                 }
+                Timber.tag("REVIEW_DEBUG").d("유효한(상태 필터링 후) 이미지 개수: %d", validDbImages.size)
                 
                 val imagesToCluster = if (validDbImages.size > 5) {
                     validDbImages
                 } else {
+                    Timber.tag("REVIEW_DEBUG").d("DB 이미지가 부족하여 MediaStore에서 직접 로드 시도")
                     val mediaImages = galleryRepository.getImagesForDateString(dateString)
+                    Timber.tag("REVIEW_DEBUG").d("MediaStore에서 찾은 이미지 개수: %d", mediaImages.size)
+                    
                     if (mediaImages.isEmpty()) {
                         finishReview()
                         return@launch
@@ -226,6 +236,7 @@ class ReviewViewModel @Inject constructor(
                 }
                 
                 if (imagesToCluster.isEmpty()) {
+                    Timber.tag("REVIEW_DEBUG").w("클러스터링할 이미지가 없음. 리뷰 종료.")
                     finishReview()
                     return@launch
                 }
@@ -241,11 +252,13 @@ class ReviewViewModel @Inject constructor(
                     }
                 }
                 
+                Timber.tag("REVIEW_DEBUG").d("생성된 메모리 클러스터 개수: %d", allMemoryClusters.size)
+                
                 currentIndex = 0
                 loadMemoryClusterAtIndex(0)
                 
             } catch (e: Exception) {
-                Timber.e(e, "Error loading memory event")
+                Timber.tag("REVIEW_DEBUG").e(e, "Error loading memory event")
                 _uiState.value = ReviewUiState.NoClustersToReview
             }
         }

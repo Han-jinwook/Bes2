@@ -88,6 +88,9 @@ class HomeViewModel @Inject constructor(
         monitorStats() 
         monitorReports() 
         
+        // [ADDED] Check for existing memory events on startup
+        loadMemoryEvent()
+        
         Timber.tag(TAG).d("init - END")
     }
     
@@ -112,27 +115,22 @@ class HomeViewModel @Inject constructor(
                     val discoveryInfo = workInfos.find { it.tags.contains(PhotoDiscoveryWorker::class.java.name) }
                     val analysisInfo = workInfos.find { it.tags.contains(PhotoAnalysisWorker::class.java.name) }
                     val clusteringInfo = workInfos.find { it.tags.contains(ClusteringWorker::class.java.name) }
+                    val memoryInfo = workInfos.find { it.tags.contains(MemoryEventWorker::class.java.name) }
                 
                     val isDiscoveryRunning = isWorkRunning(listOfNotNull(discoveryInfo))
                     val isAnalysisRunning = isWorkRunning(listOfNotNull(analysisInfo))
                     val isClusteringRunning = isWorkRunning(listOfNotNull(clusteringInfo))
+                    val isMemoryRunning = isWorkRunning(listOfNotNull(memoryInfo))
                     
-                    val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning
-                    
-                    // [MODIFIED] 4단계(Clustering)가 성공적으로 끝났는지 확인하는 조건 추가
-                    val isClusteringFinished = clusteringInfo?.state == WorkInfo.State.SUCCEEDED
-                    
-                    val needsMemoryEvent = _uiState.value.memoryEvent == null
+                    val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning || isMemoryRunning
 
-                    Timber.tag("MEMORY_DEBUG").d(
-                        "상태체크: 진행중=%s, 클러스터링완료=%s, 추억필요=%s", 
-                        analysisInProgress, isClusteringFinished, needsMemoryEvent
-                    )
-
-                    // [MODIFIED] 분석 중이 아니고 + 4단계(Clustering)가 끝났고 + 추억이 아직 없으면 -> 5단계 실행
-                    if (!analysisInProgress && isClusteringFinished && needsMemoryEvent) {
-                        Timber.tag("MEMORY_DEBUG").d("조건 만족! (4단계 완료됨) -> 5단계 추억 소환 시작")
-                        loadMemoryEvent()
+                    // [MODIFIED] Check if memory worker finished successfully
+                    if (memoryInfo?.state == WorkInfo.State.SUCCEEDED) {
+                         if (_uiState.value.memoryEvent == null) {
+                             loadMemoryEvent()
+                         } else {
+                             _uiState.update { it.copy(isMemoryPrepared = true) }
+                         }
                     }
 
                     _uiState.update { 
@@ -249,30 +247,13 @@ class HomeViewModel @Inject constructor(
     private fun loadMemoryEvent() {
         viewModelScope.launch(Dispatchers.IO) {
             val events = galleryRepository.findLargePhotoGroups(20)
-            Timber.tag("MEMORY_DEBUG").d("찾은 추억 그룹 개수: %d", events.size)
-
             if (events.isNotEmpty()) {
                 val bestEvent = events.first()
-                _uiState.update { it.copy(memoryEvent = bestEvent, isMemoryPrepared = false) }
+                // [MODIFIED] Corrected method name call
+                val count = reviewItemDao.getMemoryItemCount(bestEvent.date)
+                val isProcessed = count > 0
                 
-                Timber.tag("MEMORY_DEBUG").d("추억 분석 워커 시작 요청: %s", bestEvent.date)
-                startMemoryAnalysis(bestEvent.date)
-            } else {
-                Timber.tag("MEMORY_DEBUG").d("추억으로 만들 만한 사진 그룹이 없음.")
-            }
-        }
-    }
-    
-    private fun startMemoryAnalysis(date: String) {
-        val inputData = Data.Builder().putString(MemoryEventWorker.KEY_TARGET_DATE, date).build()
-        val workRequest = OneTimeWorkRequestBuilder<MemoryEventWorker>().setInputData(inputData).build()
-        workManager.enqueueUniqueWork(MemoryEventWorker.WORK_NAME + "_$date", ExistingWorkPolicy.KEEP, workRequest)
-        
-        viewModelScope.launch {
-            workManager.getWorkInfoByIdFlow(workRequest.id).collect { workInfo ->
-                if (workInfo != null && workInfo.state == WorkInfo.State.SUCCEEDED) {
-                    _uiState.update { it.copy(isMemoryPrepared = true) }
-                }
+                _uiState.update { it.copy(memoryEvent = bestEvent, isMemoryPrepared = isProcessed) }
             }
         }
     }
@@ -281,14 +262,16 @@ class HomeViewModel @Inject constructor(
         val discoveryRequest = OneTimeWorkRequestBuilder<PhotoDiscoveryWorker>().build()
         val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
         val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
+        val memoryRequest = OneTimeWorkRequestBuilder<MemoryEventWorker>().build()
 
         workManager.beginUniqueWork(
             PIPELINE_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP, 
             discoveryRequest
         )
         .then(analysisRequest)
         .then(clusteringRequest)
+        .then(memoryRequest)
         .enqueue()
     }
     

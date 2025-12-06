@@ -85,4 +85,9 @@ interface ReviewItemDao {
 
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :start AND timestamp <= :end")
     suspend fun getDeletedCountByDateRange(start: Long, end: Long): Int
+
+    // [ADDED] Check if memory items exist for a specific date (yyyy-MM-dd)
+    // Using SQLite strftime to convert timestamp to date string
+    @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'MEMORY' AND strftime('%Y-%m-%d', datetime(timestamp / 1000, 'unixepoch', 'localtime')) = :date")
+    suspend fun getMemoryItemCount(date: String): Int
 }

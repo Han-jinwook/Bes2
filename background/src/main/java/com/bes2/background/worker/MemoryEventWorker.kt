@@ -29,7 +29,6 @@ class MemoryEventWorker @AssistedInject constructor(
     private val reviewItemDao: ReviewItemDao,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val smileDetector: SmileDetector
-    // [FIX] Removed NotificationHelper from constructor as it is an object
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -38,10 +37,21 @@ class MemoryEventWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val targetDate = inputData.getString(KEY_TARGET_DATE)
+        // [MODIFIED] Try to get date from input, otherwise find it automatically
+        var targetDate = inputData.getString(KEY_TARGET_DATE)
+        
         if (targetDate == null) {
-            Timber.e("No target date provided for MemoryEventWorker")
-            return@withContext Result.failure()
+            Timber.d("No target date provided. Finding best memory event automatically...")
+            val events = galleryRepository.findLargePhotoGroups(20)
+            if (events.isNotEmpty()) {
+                targetDate = events.first().date
+                Timber.d("Auto-selected target date: $targetDate")
+            }
+        }
+
+        if (targetDate == null) {
+            Timber.w("No suitable memory event found to analyze.")
+            return@withContext Result.success() // Not a failure, just nothing to do
         }
 
         Timber.d("Starting Memory Analysis for date: $targetDate")
@@ -96,11 +106,10 @@ class MemoryEventWorker @AssistedInject constructor(
                 reviewItemDao.insertAll(entities)
                 Timber.d("Saved ${entities.size} memory images for $targetDate")
 
-                // [FIX] Call NotificationHelper directly as static object
                 NotificationHelper.showReviewNotification(
                     context = appContext,
                     notificationIcon = R.drawable.ic_notification,
-                    clusterCount = 1, // A single memory event
+                    clusterCount = 1, 
                     photoCount = entities.size,
                     sourceType = "MEMORY",
                     eventDate = targetDate

@@ -1638,6 +1638,37 @@ public final class ReviewItemDao_Impl implements ReviewItemDao {
   }
 
   @Override
+  public Object getMemoryItemCount(final String date,
+      final Continuation<? super Integer> $completion) {
+    final String _sql = "SELECT COUNT(*) FROM review_items WHERE source_type = 'MEMORY' AND strftime('%Y-%m-%d', datetime(timestamp / 1000, 'unixepoch', 'localtime')) = ?";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
+    int _argIndex = 1;
+    _statement.bindString(_argIndex, date);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<Integer>() {
+      @Override
+      @NonNull
+      public Integer call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final Integer _result;
+          if (_cursor.moveToFirst()) {
+            final int _tmp;
+            _tmp = _cursor.getInt(0);
+            _result = _tmp;
+          } else {
+            _result = 0;
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
   public Object updateStatusByIds(final List<Long> ids, final String newStatus,
       final Continuation<? super Unit> $completion) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
