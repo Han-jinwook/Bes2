@@ -17,7 +17,10 @@ import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.bes2.background.R
 import com.bes2.background.notification.NotificationHelper
@@ -44,7 +47,8 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
     private val reviewItemDao: ReviewItemDao,
     private val trashItemDao: TrashItemDao,
     private val imageClassifier: ImageContentClassifier,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val workManager: WorkManager // [ADDED] Need WorkManager to trigger next worker
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -85,7 +89,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             processGalleryScanStream(sourceType)
         }
         
-        // [MODIFIED] Set total count for analysis progress UI
         if (!isInstantMode) {
             settingsRepository.setTotalScanCount(newDietCount)
         }
@@ -102,7 +105,27 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             }
         }
         
+        // [ADDED] Trigger analysis for INSTANT mode manually because it's not part of the unique chain
+        if (isInstantMode) {
+            triggerAnalysis()
+        }
+        
         return@withContext Result.success()
+    }
+    
+    // [ADDED] Function to trigger the next worker manually
+    private fun triggerAnalysis() {
+        val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+        val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
+        
+        // Instant mode needs its own mini-chain
+        workManager.beginUniqueWork(
+            "InstantAnalysisChain",
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            analysisRequest
+        )
+        .then(clusteringRequest)
+        .enqueue()
     }
     
     private suspend fun processInstantScan(sourceType: String): Pair<Int, Int> {
@@ -159,54 +182,59 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             while (cursor.moveToNext()) {
                 if (isStopped) break
                 
-                val id = cursor.getLong(idColumn)
-                val filePath = cursor.getString(dataColumn)
-                val timestamp = cursor.getLong(dateColumn)
-                val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id).toString()
-                
-                if (reviewItemDao.isUriProcessed(contentUri) || trashItemDao.isUriProcessed(contentUri)) {
-                    continue
-                }
-                
-                var isTrash = false
-                val isScreenshotPath = filePath.contains("screenshot", ignoreCase = true) || 
-                                       filePath.contains("capture", ignoreCase = true)
-                
-                if (isScreenshotPath) {
-                    isTrash = true
-                } else {
-                    try {
+                try {
+                    val id = cursor.getLong(idColumn)
+                    val filePath = cursor.getString(dataColumn)
+                    val timestamp = cursor.getLong(dateColumn)
+                    val contentUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id).toString()
+                    
+                    if (reviewItemDao.isUriProcessed(contentUri) || trashItemDao.isUriProcessed(contentUri)) {
+                        continue
+                    }
+                    
+                    var isTrash = false
+                    val isScreenshotPath = filePath.contains("screenshot", ignoreCase = true) || 
+                                           filePath.contains("capture", ignoreCase = true)
+                    
+                    if (isScreenshotPath) {
+                        isTrash = true
+                    } else {
                         val bitmap = loadBitmap(contentUri)
                         if (bitmap != null) {
                             val result = imageClassifier.classify(bitmap)
+                            // [MODIFIED] Added log for debugging
+                            // Timber.tag("CLASSIFY_RESULT").d("사진: %s, AI 분류 결과: %s", filePath, result)
                             if (result == ImageCategory.DOCUMENT || result == ImageCategory.OBJECT) {
                                 isTrash = true
                             }
                             bitmap.recycle()
                         }
-                    } catch (e: Exception) { }
-                }
+                    }
 
-                if (isTrash) {
-                    newTrashBuffer.add(TrashItemEntity(
-                        uri = contentUri, filePath = filePath, timestamp = timestamp, status = "READY"
-                    ))
-                } else { 
-                    newDietBuffer.add(ReviewItemEntity(
-                        uri = contentUri, filePath = filePath, timestamp = timestamp,
-                        status = "NEW", source_type = sourceType 
-                    ))
-                }
-                
-                if (newDietBuffer.size >= INSERT_BATCH_SIZE) {
-                    newDietFound += newDietBuffer.size
-                    reviewItemDao.insertAll(newDietBuffer)
-                    newDietBuffer.clear()
-                }
-                if (newTrashBuffer.size >= INSERT_BATCH_SIZE) {
-                    newTrashFound += newTrashBuffer.size
-                    trashItemDao.insertAll(newTrashBuffer)
-                    newTrashBuffer.clear()
+                    if (isTrash) {
+                        newTrashBuffer.add(TrashItemEntity(
+                            uri = contentUri, filePath = filePath, timestamp = timestamp, status = "READY"
+                        ))
+                    } else { 
+                        newDietBuffer.add(ReviewItemEntity(
+                            uri = contentUri, filePath = filePath, timestamp = timestamp,
+                            status = "NEW", source_type = sourceType 
+                        ))
+                    }
+                    
+                    if (newDietBuffer.size >= INSERT_BATCH_SIZE) {
+                        newDietFound += newDietBuffer.size
+                        reviewItemDao.insertAll(newDietBuffer)
+                        newDietBuffer.clear()
+                    }
+                    if (newTrashBuffer.size >= INSERT_BATCH_SIZE) {
+                        newTrashFound += newTrashBuffer.size
+                        trashItemDao.insertAll(newTrashBuffer)
+                        newTrashBuffer.clear()
+                    }
+                } catch (e: Exception) {
+                    val filePathForError = try { cursor.getString(dataColumn) } catch (_: Exception) { "N/A" }
+                    Timber.tag(WORK_NAME).e(e, "Skipping one photo due to error: %s", filePathForError)
                 }
             }
             
