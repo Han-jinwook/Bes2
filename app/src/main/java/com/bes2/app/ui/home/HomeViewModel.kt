@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -118,23 +117,32 @@ class HomeViewModel @Inject constructor(
                     val isAnalysisRunning = isWorkRunning(listOfNotNull(analysisInfo))
                     val isClusteringRunning = isWorkRunning(listOfNotNull(clusteringInfo))
                     
-                    val wasAnalysisInProgress = _uiState.value.isAnalysisInProgress
-                    val discoveryInProgress = isDiscoveryRunning
                     val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning
+                    
+                    // [MODIFIED] 4단계(Clustering)가 성공적으로 끝났는지 확인하는 조건 추가
+                    val isClusteringFinished = clusteringInfo?.state == WorkInfo.State.SUCCEEDED
+                    
+                    val needsMemoryEvent = _uiState.value.memoryEvent == null
 
-                    if (wasAnalysisInProgress && !analysisInProgress) {
-                        Timber.tag(TAG).d("Main analysis pipeline finished. Starting memory event search.")
+                    Timber.tag("MEMORY_DEBUG").d(
+                        "상태체크: 진행중=%s, 클러스터링완료=%s, 추억필요=%s", 
+                        analysisInProgress, isClusteringFinished, needsMemoryEvent
+                    )
+
+                    // [MODIFIED] 분석 중이 아니고 + 4단계(Clustering)가 끝났고 + 추억이 아직 없으면 -> 5단계 실행
+                    if (!analysisInProgress && isClusteringFinished && needsMemoryEvent) {
+                        Timber.tag("MEMORY_DEBUG").d("조건 만족! (4단계 완료됨) -> 5단계 추억 소환 시작")
                         loadMemoryEvent()
                     }
 
                     _uiState.update { 
                         it.copy(
-                            isDiscoveryInProgress = discoveryInProgress,
+                            isDiscoveryInProgress = isDiscoveryRunning,
                             isAnalysisInProgress = analysisInProgress
                         ) 
                     }
                     
-                    if (!discoveryInProgress) {
+                    if (!isDiscoveryRunning) {
                         loadScreenshotCount()
                     }
                     
@@ -241,11 +249,16 @@ class HomeViewModel @Inject constructor(
     private fun loadMemoryEvent() {
         viewModelScope.launch(Dispatchers.IO) {
             val events = galleryRepository.findLargePhotoGroups(20)
+            Timber.tag("MEMORY_DEBUG").d("찾은 추억 그룹 개수: %d", events.size)
+
             if (events.isNotEmpty()) {
                 val bestEvent = events.first()
                 _uiState.update { it.copy(memoryEvent = bestEvent, isMemoryPrepared = false) }
-                // [TEMP] Temporarily disabled to debug unexpected notification
-                // startMemoryAnalysis(bestEvent.date)
+                
+                Timber.tag("MEMORY_DEBUG").d("추억 분석 워커 시작 요청: %s", bestEvent.date)
+                startMemoryAnalysis(bestEvent.date)
+            } else {
+                Timber.tag("MEMORY_DEBUG").d("추억으로 만들 만한 사진 그룹이 없음.")
             }
         }
     }

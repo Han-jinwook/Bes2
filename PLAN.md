@@ -1,53 +1,41 @@
-# Bes2 개발 계획서 (v7.2 - Stability & Sequential Pipeline)
+# Bes2 개발 계획서 (v7.4 - Final Pipeline Stabilization)
 
-**Date:** 2025-12-04
-**Status:** Core Logic Stabilized & Pipeline Sequentialized
+**Date:** 2025-12-06
+**Status:** Pipeline Fully Stabilized & Core Bugs Fixed
 **Author:** Han-jinwook
 
 ---
 
 ## 📅 Development Log
 
-### ✅ v7.2: Stability & Sequential Execution (2025-12-04)
-*   **Pipeline Re-architecture (순차 실행):**
-    *   **기존:** 병렬 실행 (스캔, 분석, 추억 찾기가 동시에 돌아 서로 간섭).
-    *   **변경:** **[1. 분류] -> [2. 쓰레기 알림] -> [3. 정밀 분석] -> [4. 다이어트 알림] -> [5. 추억 소환]** 의 완벽한 순차 구조 확립.
-    *   **이점:** 발열 제거, 작업 충돌 방지, 사용자 경험(UX) 흐름 개선.
+### ✅ v7.4: Final Stabilization (2025-12-06)
+*   **Pipeline Logic Finalized (5단계 순차 실행 완성):**
+    *   **엄격한 순서 보장:** [1. 분류] -> [2. 쓰레기 알림] -> [3. 정밀 분석] -> [4. 클러스터링/다이어트 알림] -> **[5. 추억 소환]**
+    *   **안전장치 강화:** 5단계(추억 소환)는 반드시 **4단계(`ClusteringWorker`)가 성공(`SUCCEEDED`)한 것을 확인한 후**에만 실행되도록 `HomeViewModel` 로직 수정. (앱 시작 시 오작동 및 중간 실행 방지)
 *   **Critical Bug Fixes:**
-    *   **무한 루프 제거:** `HomeViewModel`의 '자동 리필' 로직이 `REPLACE` 정책과 충돌하여 워커를 무한 재시작하던 문제 해결.
-    *   **30장 제한 해제:** '쓰레기 정리' 화면에서 30장까지만 보이던 하드코딩 제한을 제거 (전체 보기 가능).
-    *   **안전 장치 강화:** AI 분석 시 '군복/야간' 사진은 흐리더라도 무조건 `MEMORY`로 분류하는 안전 장치 코드 적용 (`ImageContentClassifier`).
+    *   **사물 사진 미분류 해결:** AI가 애매하다고 판단한 사진(`Uncertain`)을 기존 `MEMORY`에서 **`OBJECT` (쓰레기)**로 분류하도록 정책 변경. (`ImageContentClassifier`) -> 책상, 의자 등 사물 사진이 정상적으로 쓰레기통으로 이동.
+    *   **쓰레기 목록 30장 제한 해제:** `TrashItemDao`에서 쿼리 `LIMIT` 제거 및 `ScreenshotViewModel` 로직 수정으로 모든 쓰레기 사진 표시.
+    *   **스캔 중단 문제 해결:** `PhotoDiscoveryWorker`에서 손상된 이미지 파일 처리 시 전체 스캔이 멈추지 않도록 `try-catch` 범위를 개별 파일 단위로 적용.
+
+### ✅ v7.3: Notification Fixes & Scan Optimization (2025-12-04)
+*   **Notification Overwrite Fix:** 알림 ID 분리 (`TRASH`: 1001, `DIET`: 1002, `MEMORY`: 1003).
+*   **Scan Logic Refinement:** 앱 최초 실행 시 즉시 스캔 트리거.
 
 ---
 
-## 🚀 Next Steps (Tomorrow)
+## 🏗️ Architecture Overview (Final)
 
-### 1. 최종 검증 (순차 실행 테스트)
-*   **Step 1:** 앱 실행 시 `PhotoDiscoveryWorker`가 먼저 돌고 '쓰레기 정리' 버튼이 활성화되는지 확인.
-*   **Step 2:** 이어서 `PhotoAnalysisWorker`가 돌며 '다이어트' 카운팅이 올라가는지 확인.
-*   **Step 3:** 모든 분석이 끝난 **맨 마지막에** '추억 소환' 버튼이 켜지는지 확인.
-*   **UI:** '쓰레기 정리' 화면에 들어갔을 때, 제한 없이 모든 사진(100장 이상)이 뜨는지 확인.
-
-### 2. 출시 준비
-*   `proguard-rules.pro` 최종 점검.
-*   버전 코드 업데이트 (v7.2 기준).
-
----
-
-## 🏗️ Architecture Overview (Updated)
-
-### Sequential Data Pipeline
-1.  **Scanner (`PhotoDiscoveryWorker`):** 갤러리 스캔 & 1차 분류 (Trash vs Diet).
-    *   *Finish:* '쓰레기 정리' 알림 발송 & 버튼 활성화.
-    *   *Trigger:* `PhotoAnalysisWorker` 자동 실행.
-2.  **Analyzer (`PhotoAnalysisWorker`):** 정밀 AI 분석 (눈 감음, 흔들림 등).
-    *   *Update:* 1장마다 진행률 저장 -> UI 실시간 카운팅.
-3.  **Clusterer (`ClusteringWorker`):** 유사 사진 그룹핑.
-    *   *Finish:* '다이어트' 알림 발송 & 버튼 활성화.
-4.  **Memory Recall (`HomeViewModel`):**
-    *   *Trigger:* 모든 분석(`monitorAnalysisStatus`)이 완료된 순간 감지.
-    *   *Action:* `loadMemoryEvent()` 호출 -> '추억 소환' 버튼 활성화.
+### 5-Step Sequential Data Pipeline
+1.  **Scanner (`PhotoDiscoveryWorker`):** 갤러리 스캔 & 1차 분류.
+    *   *AI Policy:* 확실한 사물/문서 -> Trash. 애매한 것 -> **Trash (Object)**. 확실한 인물/음식 -> Diet.
+2.  **Trash Notification:** 스캔 완료 직후 쓰레기 알림 발송.
+3.  **Analyzer (`PhotoAnalysisWorker`):** Diet 대상 사진 정밀 분석 (흔들림, 눈 감음 등).
+4.  **Clusterer (`ClusteringWorker`):** 유사 사진 그룹핑 & 다이어트 알림 발송.
+    *   *Finish Condition:* 이 단계가 `SUCCEEDED` 상태가 되어야만 다음 단계로 넘어감.
+5.  **Memory Recall (`HomeViewModel` -> `MemoryEventWorker`):**
+    *   *Trigger:* **4단계(Clusterer) 완료가 확인되면** `startMemoryAnalysis` 호출.
+    *   *Action:* 하루 20장 이상 촬영된 날짜 분석 -> '추억 소환' 버튼 활성화 & 알림.
 
 ### Key Components
-*   **`ScreenshotViewModel`:** 실시간 스크린샷 + DB 쓰레기 아이템 합산 표시 (Limit 해제됨).
-*   **`NotificationHelper`:** 단계별(쓰레기, 다이어트, 추억) 알림 관리.
+*   **`HomeViewModel`:** 파이프라인 상태 모니터링 및 5단계 트리거 담당. (`monitorAnalysisStatus`)
+*   **`ImageContentClassifier`:** `Defaulting to OBJECT` 정책으로 사물 인식률 개선.
