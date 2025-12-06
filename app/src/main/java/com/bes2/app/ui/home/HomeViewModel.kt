@@ -115,22 +115,27 @@ class HomeViewModel @Inject constructor(
                     val discoveryInfo = workInfos.find { it.tags.contains(PhotoDiscoveryWorker::class.java.name) }
                     val analysisInfo = workInfos.find { it.tags.contains(PhotoAnalysisWorker::class.java.name) }
                     val clusteringInfo = workInfos.find { it.tags.contains(ClusteringWorker::class.java.name) }
-                    val memoryInfo = workInfos.find { it.tags.contains(MemoryEventWorker::class.java.name) }
                 
                     val isDiscoveryRunning = isWorkRunning(listOfNotNull(discoveryInfo))
                     val isAnalysisRunning = isWorkRunning(listOfNotNull(analysisInfo))
                     val isClusteringRunning = isWorkRunning(listOfNotNull(clusteringInfo))
-                    val isMemoryRunning = isWorkRunning(listOfNotNull(memoryInfo))
                     
-                    val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning || isMemoryRunning
+                    val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning
+                    
+                    // [MODIFIED] 4단계(Clustering)가 성공적으로 끝났는지 확인하는 조건 추가
+                    val isClusteringFinished = clusteringInfo?.state == WorkInfo.State.SUCCEEDED
+                    
+                    val needsMemoryEvent = _uiState.value.memoryEvent == null
 
-                    // [MODIFIED] Check if memory worker finished successfully
-                    if (memoryInfo?.state == WorkInfo.State.SUCCEEDED) {
-                         if (_uiState.value.memoryEvent == null) {
-                             loadMemoryEvent()
-                         } else {
-                             _uiState.update { it.copy(isMemoryPrepared = true) }
-                         }
+                    Timber.tag("MEMORY_DEBUG").d(
+                        "상태체크: 진행중=%s, 클러스터링완료=%s, 추억필요=%s", 
+                        analysisInProgress, isClusteringFinished, needsMemoryEvent
+                    )
+
+                    // [MODIFIED] 분석 중이 아니고 + 4단계(Clustering)가 끝났고 + 추억이 아직 없으면 -> 5단계 실행
+                    if (!analysisInProgress && isClusteringFinished && needsMemoryEvent) {
+                        Timber.tag("MEMORY_DEBUG").d("조건 만족! (4단계 완료됨) -> 5단계 추억 소환 시작")
+                        loadMemoryEvent()
                     }
 
                     _uiState.update { 
@@ -208,8 +213,22 @@ class HomeViewModel @Inject constructor(
 
     private fun loadScreenshotCount() {
         viewModelScope.launch(Dispatchers.IO) {
-            val count = galleryRepository.getScreenshotCount()
-            _uiState.update { it.copy(screenshotCount = count) }
+            // [MODIFIED] Calculate total count by merging DB items and MediaStore items
+            val dbTrashItems = trashItemDao.getAllReadyTrashItems()
+            val mediaStoreScreenshots = galleryRepository.getScreenshots()
+            
+            val allUris = mutableSetOf<String>()
+            allUris.addAll(dbTrashItems.map { it.uri })
+            allUris.addAll(mediaStoreScreenshots.map { it.uri.toString() })
+            
+            val totalCount = allUris.size
+            
+            Timber.tag("COUNT_DEBUG").d(
+                "DB아이템: %d, 미디어스토어: %d, 합계(중복제거): %d", 
+                dbTrashItems.size, mediaStoreScreenshots.size, totalCount
+            )
+            
+            _uiState.update { it.copy(screenshotCount = totalCount) }
         }
     }
 

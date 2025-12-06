@@ -28,6 +28,10 @@ interface TrashItemDao {
     @Query("SELECT * FROM trash_items WHERE status = 'READY' ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getReadyTrashItems(limit: Int): List<TrashItemEntity>
 
+    // [ADDED] Fetches all items that are ready for review without any limit
+    @Query("SELECT * FROM trash_items WHERE status = 'READY' ORDER BY timestamp DESC")
+    suspend fun getAllReadyTrashItems(): List<TrashItemEntity>
+
     @Query("UPDATE trash_items SET status = :status WHERE uri IN (:uris)")
     suspend fun updateStatusByUris(uris: List<String>, status: String)
 
