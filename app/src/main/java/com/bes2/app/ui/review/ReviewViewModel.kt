@@ -201,10 +201,12 @@ class ReviewViewModel @Inject constructor(
                 val dbImages = reviewItemDao.getImagesByDateRange(startOfDay, endOfDay)
                 Timber.tag("REVIEW_DEBUG").d("DB에서 조회된 전체 이미지 개수: %d", dbImages.size)
                 
-                val validDbImages = dbImages.filter { 
-                    it.status == "ANALYZED" || it.status == "KEPT" || it.status == "EVENT_MEMORY" 
-                }
-                Timber.tag("REVIEW_DEBUG").d("유효한(상태 필터링 후) 이미지 개수: %d", validDbImages.size)
+                // [MODIFIED] Do NOT filter by status for Memory Event. 
+                // MemoryEventWorker already saved them, and we should use them regardless of status.
+                // This prevents re-triggering slow MediaStore scan.
+                val validDbImages = dbImages 
+                
+                Timber.tag("REVIEW_DEBUG").d("유효한(필터링 해제됨) 이미지 개수: %d", validDbImages.size)
                 
                 val imagesToCluster = if (validDbImages.size > 5) {
                     validDbImages
