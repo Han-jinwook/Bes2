@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +27,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -57,7 +59,7 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.bes2.app.R
 import com.bes2.background.worker.PhotoAnalysisWorker
-import com.bes2.data.model.ReviewItemEntity // [FIX] Updated Import
+import com.bes2.data.model.ReviewItemEntity 
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
@@ -78,6 +80,11 @@ fun ReviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+
+    // [ADDED] Handle System Back Button
+    BackHandler {
+        viewModel.onExitClicked()
+    }
 
     var interstitialAd by remember { mutableStateOf<InterstitialAd?>(null) }
     LaunchedEffect(Unit) {
@@ -103,9 +110,15 @@ fun ReviewScreen(
 
     LaunchedEffect(key1 = viewModel.navigationEvent) {
         viewModel.navigationEvent.collectLatest { event ->
-            if (event is NavigationEvent.NavigateToHome) {
-                Toast.makeText(context, "${event.clusterCount}개 묶음 중 베스트 ${event.savedCount}장을 정리했습니다.", Toast.LENGTH_LONG).show()
-                if (event.showAd) { delay(4000); showInterstitialAndNavigate() } else { delay(2000); onNavigateBack() }
+            when (event) {
+                is NavigationEvent.NavigateToHome -> {
+                    Toast.makeText(context, "${event.clusterCount}개 묶음 중 베스트 ${event.savedCount}장을 정리했습니다.", Toast.LENGTH_LONG).show()
+                    if (event.showAd) { delay(4000); showInterstitialAndNavigate() } else { delay(2000); onNavigateBack() }
+                }
+                is NavigationEvent.PopBackStack -> {
+                    onNavigateBack()
+                }
+                else -> {}
             }
         }
     }
@@ -157,12 +170,23 @@ fun ReviewScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
+                                // [MODIFIED] Use viewModel.onExitClicked()
+                                IconButton(onClick = { viewModel.onExitClicked() }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.width(4.dp))
+                                
                                 Image(
                                     painter = painterResource(id = R.drawable.ic_logo),
                                     contentDescription = "App Logo",
-                                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp))
+                                    modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "AI 사진비서", 
                                     style = MaterialTheme.typography.titleMedium, 
@@ -251,7 +275,7 @@ fun ReviewScreen(
                     }
                 }
             }
-
+// ... [Remaining UI components same as before]
             zoomedImageState?.let {
                 ZoomedImageDialogV2(
                     state = it,
@@ -547,8 +571,6 @@ fun ZoomedImageDialogV2(state: ZoomedImageState, onDismiss: () -> Unit, onRestor
         }
     }
 }
-
-// Deleted getPraiseText
 
 @Composable
 fun CoachMark(text: String, onDismiss: () -> Unit) {

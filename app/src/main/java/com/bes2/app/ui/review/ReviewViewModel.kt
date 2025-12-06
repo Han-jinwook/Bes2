@@ -65,6 +65,7 @@ sealed interface ReviewUiState {
 sealed interface NavigationEvent {
     data class NavigateToHome(val clusterCount: Int, val savedCount: Int, val showAd: Boolean) : NavigationEvent
     object NavigateToSettings : NavigationEvent
+    object PopBackStack : NavigationEvent 
 }
 
 @HiltViewModel
@@ -101,7 +102,6 @@ class ReviewViewModel @Inject constructor(
     private var sessionSavedImageCount = 0
     private var manualSelectionIds: List<Long>? = null
 
-    // [MODIFIED] Threshold 20 -> 30 for Review Flow
     private val PREF_KEY_REVIEW_COUNT = "pref_review_accumulated_count"
     private val AD_THRESHOLD = 30 
 
@@ -118,6 +118,13 @@ class ReviewViewModel @Inject constructor(
             reviewSourceType = sourceArg ?: "DIET"
             Timber.d("Review Mode Initialized: $reviewSourceType")
             loadPendingClusters()
+        }
+    }
+    
+    fun onExitClicked() {
+        viewModelScope.launch {
+            schedulePostReviewSync()
+            _navigationEvent.emit(NavigationEvent.PopBackStack)
         }
     }
     
@@ -201,9 +208,6 @@ class ReviewViewModel @Inject constructor(
                 val dbImages = reviewItemDao.getImagesByDateRange(startOfDay, endOfDay)
                 Timber.tag("REVIEW_DEBUG").d("DB에서 조회된 전체 이미지 개수: %d", dbImages.size)
                 
-                // [MODIFIED] Do NOT filter by status for Memory Event. 
-                // MemoryEventWorker already saved them, and we should use them regardless of status.
-                // This prevents re-triggering slow MediaStore scan.
                 val validDbImages = dbImages 
                 
                 Timber.tag("REVIEW_DEBUG").d("유효한(필터링 해제됨) 이미지 개수: %d", validDbImages.size)
@@ -326,13 +330,21 @@ class ReviewViewModel @Inject constructor(
         val musiqScore = musiqRaw * 10
         val smileProb = image.smilingProbability ?: 0f
         val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
-        return (nimaScore.toFloat() * 0.3f) + (musiqScore * 0.5f) + smileBonus
+        
+        // [ADDED] Give KEPT items a huge bonus to ensure they stay as Best
+        val keptBonus = if (image.status == "KEPT") 1000f else 0f
+        
+        return (nimaScore.toFloat() * 0.3f) + (musiqScore * 0.5f) + smileBonus + keptBonus
     }
 
     private fun calculateReadyState(cluster: ImageClusterEntity, items: List<ReviewItemEntity>, total: Int, index: Int): ReviewUiState.Ready {
-        val (analyzedImages, rejectedImages) = items.partition { it.status != "STATUS_REJECTED" }
+        // [MODIFIED] Only filter out DELETED items. Show KEPT items.
+        val activeItems = items.filter { it.status != "DELETED" }
+        
+        val (analyzedImages, rejectedImages) = activeItems.partition { it.status != "STATUS_REJECTED" }
 
         val (finalBest, finalSecond) = if (manualSelectionIds == null) {
+            // Because KEPT items have huge bonus score, they will naturally come to top
             val sortedCandidates = analyzedImages.sortedByDescending { calculateFinalScore(it) }
             Pair(sortedCandidates.getOrNull(0), sortedCandidates.getOrNull(1))
         } else {
@@ -349,7 +361,7 @@ class ReviewViewModel @Inject constructor(
 
         return ReviewUiState.Ready(
             cluster = cluster,
-            allImages = items,
+            allImages = activeItems,
             otherImages = otherImages,
             rejectedImages = rejectedImages,
             selectedBestImage = finalBest,
@@ -387,16 +399,18 @@ class ReviewViewModel @Inject constructor(
             if (currentState is ReviewUiState.Ready) {
                 _uiState.value = currentState.copy(pendingDeleteRequest = null)
 
-                withContext(NonCancellable) {
-                    if (successfullyDeleted) {
+                if (successfullyDeleted) {
+                    withContext(NonCancellable) {
                         val imageIdsToDelete = (currentState.otherImages + currentState.rejectedImages).map { it.id }
                         if (imageIdsToDelete.isNotEmpty()) {
                             reviewItemDao.updateStatusByIds(imageIdsToDelete, "DELETED")
                             settingsRepository.incrementDailyStats(keptDelta = 0, deletedDelta = imageIdsToDelete.size)
                         }
+                        markClusterCompleted(currentState)
+                        nextCluster()
                     }
-                    markClusterCompleted(currentState)
-                    nextCluster()
+                } else {
+                    Timber.d("Deletion denied by user. Staying on current cluster.")
                 }
             }
         }

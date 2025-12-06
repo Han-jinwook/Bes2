@@ -88,7 +88,6 @@ class HomeViewModel @Inject constructor(
         monitorStats() 
         monitorReports() 
         
-        // [ADDED] Check for existing memory events on startup
         loadMemoryEvent()
         
         Timber.tag(TAG).d("init - END")
@@ -124,7 +123,6 @@ class HomeViewModel @Inject constructor(
                     
                     val analysisInProgress = isDiscoveryRunning || isAnalysisRunning || isClusteringRunning || isMemoryRunning
 
-                    // [MODIFIED] Check if memory worker finished successfully
                     if (memoryInfo?.state == WorkInfo.State.SUCCEEDED) {
                          if (_uiState.value.memoryEvent == null) {
                              loadMemoryEvent()
@@ -208,19 +206,34 @@ class HomeViewModel @Inject constructor(
 
     private fun loadScreenshotCount() {
         viewModelScope.launch(Dispatchers.IO) {
-            // [MODIFIED] Calculate total count by merging DB items and MediaStore items
+            // [MODIFIED] Calculate total count by checking both tables
             val dbTrashItems = trashItemDao.getAllReadyTrashItems()
             val mediaStoreScreenshots = galleryRepository.getScreenshots()
             
+            // Get all URIs that have been processed (KEPT, DELETED, etc) in Review table
+            val processedUris = reviewItemDao.getAllProcessedUris().toSet()
+            
             val allUris = mutableSetOf<String>()
             allUris.addAll(dbTrashItems.map { it.uri })
-            allUris.addAll(mediaStoreScreenshots.map { it.uri.toString() })
+            
+            // Filter MediaStore items: Exclude if already processed in Review table or exists in Trash DB
+            for (item in mediaStoreScreenshots) {
+                val uri = item.uri.toString()
+                if (!processedUris.contains(uri) && !allUris.contains(uri)) {
+                    // Check if deleted in TrashItemDao? TrashItemDao only keeps READY or KEPT(temp).
+                    // If it was deleted via TrashItemDao, it shouldn't be in DB, but MediaStore file might still exist if delete failed?
+                    // But we trust our DB state.
+                    if (!trashItemDao.isUriProcessed(uri)) {
+                         allUris.add(uri)
+                    }
+                }
+            }
             
             val totalCount = allUris.size
             
             Timber.tag("COUNT_DEBUG").d(
-                "DB아이템: %d, 미디어스토어: %d, 합계(중복제거): %d", 
-                dbTrashItems.size, mediaStoreScreenshots.size, totalCount
+                "DB(Trash): %d, MediaStore: %d, Processed(Review): %d, Final: %d", 
+                dbTrashItems.size, mediaStoreScreenshots.size, processedUris.size, totalCount
             )
             
             _uiState.update { it.copy(screenshotCount = totalCount) }
@@ -263,7 +276,6 @@ class HomeViewModel @Inject constructor(
             val events = galleryRepository.findLargePhotoGroups(20)
             if (events.isNotEmpty()) {
                 val bestEvent = events.first()
-                // [MODIFIED] Corrected method name call
                 val count = reviewItemDao.getMemoryItemCount(bestEvent.date)
                 val isProcessed = count > 0
                 

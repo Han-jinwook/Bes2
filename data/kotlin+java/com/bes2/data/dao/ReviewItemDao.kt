@@ -90,4 +90,14 @@ interface ReviewItemDao {
     // Using SQLite strftime to convert timestamp to date string
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'MEMORY' AND strftime('%Y-%m-%d', datetime(timestamp / 1000, 'unixepoch', 'localtime')) = :date")
     suspend fun getMemoryItemCount(date: String): Int
+
+    @Query("SELECT * FROM review_items WHERE status = 'KEPT' AND isUploaded = 0")
+    suspend fun getKeptUnsyncedItems(): List<ReviewItemEntity>
+
+    @Query("UPDATE review_items SET isUploaded = 1 WHERE id IN (:ids)")
+    suspend fun markAsUploaded(ids: List<Long>)
+
+    // [ADDED] Get ALL URIs to exclude processed items from Home screen count
+    @Query("SELECT uri FROM review_items")
+    suspend fun getAllProcessedUris(): List<String>
 }

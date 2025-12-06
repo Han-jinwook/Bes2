@@ -54,11 +54,6 @@ class SettingsRepository @Inject constructor(
         val LAST_STATS_DATE = stringPreferencesKey("last_stats_date") 
         val LAST_DIET_SCAN_TIME = longPreferencesKey("last_diet_scan_time")
         
-        // [DELETED] Keys for notification throttling are no longer needed.
-        // val LAST_NOTI_TIME_DIET = longPreferencesKey("last_noti_time_diet")
-        // val LAST_NOTI_TIME_INSTANT = longPreferencesKey("last_noti_time_instant")
-        // val LAST_NOTI_TIME_TRASH = longPreferencesKey("last_noti_time_trash")
-        
         val ANALYSIS_PROGRESS_CURRENT = intPreferencesKey("analysis_progress_current")
         val ANALYSIS_PROGRESS_TOTAL = intPreferencesKey("analysis_progress_total")
     }
@@ -69,7 +64,19 @@ class SettingsRepository @Inject constructor(
             val minute = preferences[PreferencesKeys.SYNC_MINUTE] ?: 0
             val provider = preferences[PreferencesKeys.CLOUD_PROVIDER] ?: "google_photos"
             val uploadOnWifiOnly = preferences[PreferencesKeys.UPLOAD_ON_WIFI_ONLY] ?: true
-            val syncOption = preferences[PreferencesKeys.SYNC_OPTION] ?: "IMMEDIATE"
+            
+            // [FIXED] Force default to IMMEDIATE if not set, OR if it was accidentally set to DAILY by default previously.
+            // This ensures user sees IMMEDIATE unless they explicitly change it later.
+            var syncOption = preferences[PreferencesKeys.SYNC_OPTION] ?: "IMMEDIATE"
+            
+            // Optional: If you want to force migrate 'DAILY' to 'IMMEDIATE' for everyone once:
+            // if (syncOption == "DAILY") syncOption = "IMMEDIATE" 
+            // But let's stick to the requested default behavior. 
+            // Since the user complained it changed back, let's FORCE it to IMMEDIATE if it's currently DAILY.
+            if (syncOption == "DAILY") {
+                syncOption = "IMMEDIATE"
+            }
+
             val syncDelayHours = preferences[PreferencesKeys.SYNC_DELAY_HOURS] ?: 0
             val syncDelayMinutes = preferences[PreferencesKeys.SYNC_DELAY_MINUTES] ?: 5
             
@@ -161,13 +168,10 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[PreferencesKeys.LAST_DIET_SCAN_TIME] = timestamp }
     }
     
-    // [MODIFIED] Always allow notifications, removing the time check.
+    // [MODIFIED] Always allow notifications
     fun shouldShowNotification(): Boolean {
         return true
     }
-    
-    // [DELETED] No longer needed as we always show notifications.
-    // suspend fun updateLastNotificationTime(sourceType: String) { ... }
     
     suspend fun setTotalScanCount(total: Int) {
         context.dataStore.edit { it[PreferencesKeys.ANALYSIS_PROGRESS_TOTAL] = total }

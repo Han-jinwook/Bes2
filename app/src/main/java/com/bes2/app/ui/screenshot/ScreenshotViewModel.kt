@@ -4,7 +4,15 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.Data
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.bes2.background.worker.DailyCloudSyncWorker
+import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.dao.TrashItemDao
+import com.bes2.data.model.ReviewItemEntity
 import com.bes2.data.model.TrashItemEntity
 import com.bes2.data.repository.GalleryRepository
 import com.bes2.data.repository.SettingsRepository
@@ -14,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -31,7 +40,9 @@ data class ScreenshotUiState(
 class ScreenshotViewModel @Inject constructor(
     private val galleryRepository: GalleryRepository,
     private val trashItemDao: TrashItemDao,
-    private val settingsRepository: SettingsRepository, 
+    private val reviewItemDao: ReviewItemDao, // [ADDED] To move kept trash to review_items
+    private val settingsRepository: SettingsRepository,
+    private val workManager: WorkManager, // [ADDED] For Sync Trigger
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -51,9 +62,7 @@ class ScreenshotViewModel @Inject constructor(
 
             val combinedMap = mutableMapOf<String, TrashItemEntity>()
 
-            // 1. Get ALL ready items from DB (using new DAO method or filter)
-            // Ideally we should use getAllReadyTrashItems() if added to DAO.
-            // Since DAO might be rolled back too, let's use existing getReadyTrashItems with large limit.
+            // 1. Get ALL ready items from DB 
             val dbTrashItems = trashItemDao.getReadyTrashItems(limit = 10000) 
             for (item in dbTrashItems) {
                 combinedMap[item.uri] = item
@@ -67,6 +76,7 @@ class ScreenshotViewModel @Inject constructor(
                 if (!combinedMap.containsKey(uriString)) {
                     // Check if processed (deleted/kept)
                     if (trashItemDao.isUriProcessed(uriString)) continue
+                    if (reviewItemDao.isUriProcessed(uriString)) continue // [ADDED] Check Review table too
                     
                     val trashItem = TrashItemEntity(
                         id = item.id,
@@ -131,32 +141,46 @@ class ScreenshotViewModel @Inject constructor(
             val currentList = _uiState.value.screenshots
             val selectedItems = currentList.filter { selected.contains(it.uri) }
             
-            val itemsToSave = selectedItems.map { it.copy(status = "KEPT") }
-            
-            for (item in itemsToSave) {
-                val id = trashItemDao.insert(item)
-                if (id == -1L) { 
-                    trashItemDao.updateStatusByUris(listOf(item.uri), "KEPT")
-                }
+            // [MODIFIED] Move KEPT items to ReviewItemDao so SyncWorker can see them
+            val reviewItems = selectedItems.map { 
+                ReviewItemEntity(
+                    uri = it.uri,
+                    filePath = it.filePath,
+                    timestamp = it.timestamp,
+                    status = "KEPT", // Important for SyncWorker
+                    source_type = "TRASH" // Or maybe DIET? TRASH is fine if ReviewItemDao supports it.
+                )
             }
+            
+            reviewItemDao.insertAll(reviewItems)
+            
+            // [MODIFIED] Delete from TrashItemDao so they don't count in Home screen
+            val urisToRemove = selectedItems.map { it.uri }
+            trashItemDao.deleteByUris(urisToRemove)
             
             settingsRepository.incrementDailyStats(keptDelta = selectedItems.size, deletedDelta = 0)
             updateAccumulatedCount(selectedItems.size)
             
-            onDeleteCompleted(true)
+            // Trigger sync if immediate
+            triggerSyncIfNeeded()
+            
+            // UI Update (Reuse delete logic for refresh)
+            onDeleteCompleted(true, isKeepAction = true)
         }
     }
 
-    fun onDeleteCompleted(success: Boolean) {
+    fun onDeleteCompleted(success: Boolean, isKeepAction: Boolean = false) {
         if (success) {
             viewModelScope.launch(Dispatchers.IO) {
-                val deletedCount = _uiState.value.pendingDeleteUris?.size ?: 0
-                if (deletedCount > 0) {
-                    settingsRepository.incrementDailyStats(keptDelta = 0, deletedDelta = deletedCount)
-                    updateAccumulatedCount(deletedCount)
-                    
-                    val pendingUris = _uiState.value.pendingDeleteUris?.map { it.toString() } ?: emptyList()
-                    trashItemDao.deleteByUris(pendingUris)
+                if (!isKeepAction) {
+                    val deletedCount = _uiState.value.pendingDeleteUris?.size ?: 0
+                    if (deletedCount > 0) {
+                        settingsRepository.incrementDailyStats(keptDelta = 0, deletedDelta = deletedCount)
+                        updateAccumulatedCount(deletedCount)
+                        
+                        val pendingUris = _uiState.value.pendingDeleteUris?.map { it.toString() } ?: emptyList()
+                        trashItemDao.deleteByUris(pendingUris)
+                    }
                 }
                 
                 val showAd = checkAdCondition()
@@ -166,7 +190,6 @@ class ScreenshotViewModel @Inject constructor(
                         pendingDeleteUris = null, 
                         resultMessage = "처리되었습니다.",
                         showAd = showAd,
-                        // [FIX] Clear list and show loading immediately to prevent "frozen" UI
                         screenshots = emptyList(),
                         isLoading = true 
                     ) 
@@ -178,6 +201,16 @@ class ScreenshotViewModel @Inject constructor(
             }
         } else {
              _uiState.update { it.copy(pendingDeleteUris = null) }
+        }
+    }
+    
+    private suspend fun triggerSyncIfNeeded() {
+        val settings = settingsRepository.storedSettings.first()
+        if (settings.syncOption == "IMMEDIATE") {
+            val constraints = if (settings.uploadOnWifiOnly) Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build() else Constraints.NONE
+            val inputData = Data.Builder().putBoolean(DailyCloudSyncWorker.KEY_IS_ONE_TIME_SYNC, true).build()
+            val syncWorkRequest = OneTimeWorkRequestBuilder<DailyCloudSyncWorker>().setConstraints(constraints).setInputData(inputData).build()
+            workManager.enqueue(syncWorkRequest)
         }
     }
     

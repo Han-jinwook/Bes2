@@ -48,7 +48,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
     private val trashItemDao: TrashItemDao,
     private val imageClassifier: ImageContentClassifier,
     private val settingsRepository: SettingsRepository,
-    private val workManager: WorkManager // [ADDED] Need WorkManager to trigger next worker
+    private val workManager: WorkManager 
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -59,6 +59,9 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         private const val INSERT_BATCH_SIZE = 100 
         private const val NOTIFICATION_ID = 2023
         private const val CHANNEL_ID = "bes2_analysis_channel"
+        
+        // Name of the slow background pipeline
+        private const val PIPELINE_WORK_NAME = "FullAnalysisPipeline"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -76,7 +79,11 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         val isInstantMode = inputData.getBoolean(KEY_IS_INSTANT_MODE, false)
         val sourceType = if (isInstantMode) "INSTANT" else "DIET"
         
-        if (!isInstantMode) {
+        // If Instant Mode, CANCEL the slow background analysis immediately!
+        if (isInstantMode) {
+            Timber.tag(WORK_NAME).w("Instant Mode detected! Cancelling slow background tasks.")
+            workManager.cancelUniqueWork(PIPELINE_WORK_NAME)
+        } else {
             setForeground(createForegroundInfo())
             settingsRepository.resetAnalysisProgress()
         }
@@ -90,7 +97,9 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         }
         
         if (!isInstantMode) {
-            settingsRepository.setTotalScanCount(newDietCount)
+            // [FIXED] Removed unused variable and set Total Count correctly
+            val totalToAnalyze = reviewItemDao.getItemsBySourceAndStatus("DIET", "NEW").size
+            settingsRepository.setTotalScanCount(totalToAnalyze)
         }
         
         if (newTrashCount > 0 && !isInstantMode) {
@@ -105,23 +114,29 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             }
         }
         
-        // [ADDED] Trigger analysis for INSTANT mode manually because it's not part of the unique chain
-        if (isInstantMode) {
+        if (isInstantMode && newDietCount > 0) {
             triggerAnalysis()
         }
         
         return@withContext Result.success()
     }
     
-    // [ADDED] Function to trigger the next worker manually
     private fun triggerAnalysis() {
-        val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+        val inputData = Data.Builder()
+            .putBoolean(PhotoAnalysisWorker.KEY_IS_BACKGROUND_DIET, true) // Keep foreground
+            .putBoolean(PhotoAnalysisWorker.KEY_IS_INSTANT_PRIORITY, true) // High Priority
+            .build()
+            
+        val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>()
+            .setInputData(inputData)
+            .build()
+            
         val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
         
-        // Instant mode needs its own mini-chain
+        // Use REPLACE to kill any existing Instant chain and start NEW immediately
         workManager.beginUniqueWork(
             "InstantAnalysisChain",
-            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            ExistingWorkPolicy.REPLACE, 
             analysisRequest
         )
         .then(clusteringRequest)
@@ -202,8 +217,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                         val bitmap = loadBitmap(contentUri)
                         if (bitmap != null) {
                             val result = imageClassifier.classify(bitmap)
-                            // [MODIFIED] Added log for debugging
-                            // Timber.tag("CLASSIFY_RESULT").d("사진: %s, AI 분류 결과: %s", filePath, result)
                             if (result == ImageCategory.DOCUMENT || result == ImageCategory.OBJECT) {
                                 isTrash = true
                             }

@@ -33,7 +33,7 @@ sealed class SettingsEvent {
 }
 
 data class SettingsUiState(
-    val syncOption: String = "WIFI_ONLY",
+    val syncOption: String = "IMMEDIATE", // [FIXED] Default should be IMMEDIATE
     val uploadOnWifiOnly: Boolean = true,
     val syncDelayHours: Int = 2,
     val syncDelayMinutes: Int = 0,
@@ -48,7 +48,7 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val workManager: WorkManager,
-    private val googlePhotosAuthManager: GooglePhotosAuthManager, // [FIX] Inject AuthManager
+    private val googlePhotosAuthManager: GooglePhotosAuthManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -79,7 +79,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    // [FIX] Observe login status from AuthManager
     private fun checkLoginStatus() {
         viewModelScope.launch {
             googlePhotosAuthManager.account.collectLatest { account ->
@@ -117,19 +116,16 @@ class SettingsViewModel @Inject constructor(
         workManager.enqueueUniqueWork(DailyCloudSyncWorker.WORK_NAME, ExistingWorkPolicy.KEEP, workRequest)
     }
     
-    // [FIX] Delegate to AuthManager
     suspend fun beginGoogleSignIn(): IntentSender? {
         return googlePhotosAuthManager.beginSignIn()
     }
     
-    // [FIX] Delegate to AuthManager
     fun handleGoogleSignInResult(result: ActivityResult) {
         viewModelScope.launch {
             googlePhotosAuthManager.handleSignInResult(result)
         }
     }
     
-    // [FIX] Delegate to AuthManager
     fun onLogoutClicked() {
         viewModelScope.launch {
             googlePhotosAuthManager.signOut()

@@ -6,6 +6,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.bes2.app.ui.Bes2App
 import com.bes2.app.ui.review.ReviewActivity
 import com.bes2.background.service.MediaDetectionService
@@ -14,16 +17,26 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    
+    // [ADDED] Hold pending navigation event
+    private var pendingNavigationEvent by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        handleIntent(intent)
+        
         setContent {
             Bes2Theme {
-                Bes2App(onStartAnalysisAndExit = { moveTaskToBack(true) })
+                // [MODIFIED] Pass pending event to Bes2App
+                Bes2App(
+                    onStartAnalysisAndExit = { moveTaskToBack(true) },
+                    pendingNavigationEvent = pendingNavigationEvent
+                )
             }
         }
         startMediaDetectionService()
-        handleIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -33,16 +46,13 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         val navigateTo = intent?.getStringExtra("NAVIGATE_TO")
+        
         if (navigateTo == "REVIEW_SCREEN") {
+            // ReviewActivity is separate, so we still start activity
             startActivity(Intent(this, ReviewActivity::class.java))
         } else if (navigateTo == "SCREENSHOT_CLEAN") {
-            // This is a simplified way to handle navigation from notification.
-            // A more robust solution would use NavController deeplinking.
-            val navIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                putExtra("NAVIGATE_TO", "SCREENSHOT_CLEAN")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            }
-            startActivity(navIntent)
+            // [MODIFIED] Update state instead of restarting activity
+            pendingNavigationEvent = "SCREENSHOT_CLEAN"
         }
     }
 

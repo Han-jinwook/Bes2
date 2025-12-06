@@ -1669,6 +1669,159 @@ public final class ReviewItemDao_Impl implements ReviewItemDao {
   }
 
   @Override
+  public Object getKeptUnsyncedItems(
+      final Continuation<? super List<ReviewItemEntity>> $completion) {
+    final String _sql = "SELECT * FROM review_items WHERE status = 'KEPT' AND isUploaded = 0";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 0);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<List<ReviewItemEntity>>() {
+      @Override
+      @NonNull
+      public List<ReviewItemEntity> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = CursorUtil.getColumnIndexOrThrow(_cursor, "id");
+          final int _cursorIndexOfUri = CursorUtil.getColumnIndexOrThrow(_cursor, "uri");
+          final int _cursorIndexOfFilePath = CursorUtil.getColumnIndexOrThrow(_cursor, "filePath");
+          final int _cursorIndexOfTimestamp = CursorUtil.getColumnIndexOrThrow(_cursor, "timestamp");
+          final int _cursorIndexOfStatus = CursorUtil.getColumnIndexOrThrow(_cursor, "status");
+          final int _cursorIndexOfSourceType = CursorUtil.getColumnIndexOrThrow(_cursor, "source_type");
+          final int _cursorIndexOfPHash = CursorUtil.getColumnIndexOrThrow(_cursor, "pHash");
+          final int _cursorIndexOfNimaScore = CursorUtil.getColumnIndexOrThrow(_cursor, "nimaScore");
+          final int _cursorIndexOfMusiqScore = CursorUtil.getColumnIndexOrThrow(_cursor, "musiqScore");
+          final int _cursorIndexOfBlurScore = CursorUtil.getColumnIndexOrThrow(_cursor, "blurScore");
+          final int _cursorIndexOfExposureScore = CursorUtil.getColumnIndexOrThrow(_cursor, "exposureScore");
+          final int _cursorIndexOfAreEyesClosed = CursorUtil.getColumnIndexOrThrow(_cursor, "areEyesClosed");
+          final int _cursorIndexOfSmilingProbability = CursorUtil.getColumnIndexOrThrow(_cursor, "smilingProbability");
+          final int _cursorIndexOfFaceEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "faceEmbedding");
+          final int _cursorIndexOfEmbedding = CursorUtil.getColumnIndexOrThrow(_cursor, "embedding");
+          final int _cursorIndexOfClusterId = CursorUtil.getColumnIndexOrThrow(_cursor, "cluster_id");
+          final int _cursorIndexOfIsUploaded = CursorUtil.getColumnIndexOrThrow(_cursor, "isUploaded");
+          final int _cursorIndexOfIsSelectedByUser = CursorUtil.getColumnIndexOrThrow(_cursor, "isSelectedByUser");
+          final List<ReviewItemEntity> _result = new ArrayList<ReviewItemEntity>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final ReviewItemEntity _item;
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final String _tmpUri;
+            _tmpUri = _cursor.getString(_cursorIndexOfUri);
+            final String _tmpFilePath;
+            _tmpFilePath = _cursor.getString(_cursorIndexOfFilePath);
+            final long _tmpTimestamp;
+            _tmpTimestamp = _cursor.getLong(_cursorIndexOfTimestamp);
+            final String _tmpStatus;
+            _tmpStatus = _cursor.getString(_cursorIndexOfStatus);
+            final String _tmpSource_type;
+            _tmpSource_type = _cursor.getString(_cursorIndexOfSourceType);
+            final String _tmpPHash;
+            if (_cursor.isNull(_cursorIndexOfPHash)) {
+              _tmpPHash = null;
+            } else {
+              _tmpPHash = _cursor.getString(_cursorIndexOfPHash);
+            }
+            final Double _tmpNimaScore;
+            if (_cursor.isNull(_cursorIndexOfNimaScore)) {
+              _tmpNimaScore = null;
+            } else {
+              _tmpNimaScore = _cursor.getDouble(_cursorIndexOfNimaScore);
+            }
+            final Float _tmpMusiqScore;
+            if (_cursor.isNull(_cursorIndexOfMusiqScore)) {
+              _tmpMusiqScore = null;
+            } else {
+              _tmpMusiqScore = _cursor.getFloat(_cursorIndexOfMusiqScore);
+            }
+            final Float _tmpBlurScore;
+            if (_cursor.isNull(_cursorIndexOfBlurScore)) {
+              _tmpBlurScore = null;
+            } else {
+              _tmpBlurScore = _cursor.getFloat(_cursorIndexOfBlurScore);
+            }
+            final Float _tmpExposureScore;
+            if (_cursor.isNull(_cursorIndexOfExposureScore)) {
+              _tmpExposureScore = null;
+            } else {
+              _tmpExposureScore = _cursor.getFloat(_cursorIndexOfExposureScore);
+            }
+            final Boolean _tmpAreEyesClosed;
+            final Integer _tmp;
+            if (_cursor.isNull(_cursorIndexOfAreEyesClosed)) {
+              _tmp = null;
+            } else {
+              _tmp = _cursor.getInt(_cursorIndexOfAreEyesClosed);
+            }
+            _tmpAreEyesClosed = _tmp == null ? null : _tmp != 0;
+            final Float _tmpSmilingProbability;
+            if (_cursor.isNull(_cursorIndexOfSmilingProbability)) {
+              _tmpSmilingProbability = null;
+            } else {
+              _tmpSmilingProbability = _cursor.getFloat(_cursorIndexOfSmilingProbability);
+            }
+            final byte[] _tmpFaceEmbedding;
+            if (_cursor.isNull(_cursorIndexOfFaceEmbedding)) {
+              _tmpFaceEmbedding = null;
+            } else {
+              _tmpFaceEmbedding = _cursor.getBlob(_cursorIndexOfFaceEmbedding);
+            }
+            final byte[] _tmpEmbedding;
+            if (_cursor.isNull(_cursorIndexOfEmbedding)) {
+              _tmpEmbedding = null;
+            } else {
+              _tmpEmbedding = _cursor.getBlob(_cursorIndexOfEmbedding);
+            }
+            final String _tmpCluster_id;
+            if (_cursor.isNull(_cursorIndexOfClusterId)) {
+              _tmpCluster_id = null;
+            } else {
+              _tmpCluster_id = _cursor.getString(_cursorIndexOfClusterId);
+            }
+            final boolean _tmpIsUploaded;
+            final int _tmp_1;
+            _tmp_1 = _cursor.getInt(_cursorIndexOfIsUploaded);
+            _tmpIsUploaded = _tmp_1 != 0;
+            final boolean _tmpIsSelectedByUser;
+            final int _tmp_2;
+            _tmp_2 = _cursor.getInt(_cursorIndexOfIsSelectedByUser);
+            _tmpIsSelectedByUser = _tmp_2 != 0;
+            _item = new ReviewItemEntity(_tmpId,_tmpUri,_tmpFilePath,_tmpTimestamp,_tmpStatus,_tmpSource_type,_tmpPHash,_tmpNimaScore,_tmpMusiqScore,_tmpBlurScore,_tmpExposureScore,_tmpAreEyesClosed,_tmpSmilingProbability,_tmpFaceEmbedding,_tmpEmbedding,_tmpCluster_id,_tmpIsUploaded,_tmpIsSelectedByUser);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object getAllProcessedUris(final Continuation<? super List<String>> $completion) {
+    final String _sql = "SELECT uri FROM review_items";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 0);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<List<String>>() {
+      @Override
+      @NonNull
+      public List<String> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final List<String> _result = new ArrayList<String>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final String _item;
+            _item = _cursor.getString(0);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
   public Object updateStatusByIds(final List<Long> ids, final String newStatus,
       final Continuation<? super Unit> $completion) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
@@ -1757,6 +1910,36 @@ public final class ReviewItemDao_Impl implements ReviewItemDao {
         int _argIndex = 1;
         _stmt.bindString(_argIndex, clusterId);
         _argIndex = 2;
+        for (long _item : ids) {
+          _stmt.bindLong(_argIndex, _item);
+          _argIndex++;
+        }
+        __db.beginTransaction();
+        try {
+          _stmt.executeUpdateDelete();
+          __db.setTransactionSuccessful();
+          return Unit.INSTANCE;
+        } finally {
+          __db.endTransaction();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object markAsUploaded(final List<Long> ids, final Continuation<? super Unit> $completion) {
+    return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
+      @Override
+      @NonNull
+      public Unit call() throws Exception {
+        final StringBuilder _stringBuilder = StringUtil.newStringBuilder();
+        _stringBuilder.append("UPDATE review_items SET isUploaded = 1 WHERE id IN (");
+        final int _inputSize = ids.size();
+        StringUtil.appendPlaceholders(_stringBuilder, _inputSize);
+        _stringBuilder.append(")");
+        final String _sql = _stringBuilder.toString();
+        final SupportSQLiteStatement _stmt = __db.compileStatement(_sql);
+        int _argIndex = 1;
         for (long _item : ids) {
           _stmt.bindLong(_argIndex, _item);
           _argIndex++;
