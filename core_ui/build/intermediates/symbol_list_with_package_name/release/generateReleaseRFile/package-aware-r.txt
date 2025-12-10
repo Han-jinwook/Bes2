@@ -1,0 +1,2 @@
+com.bes2.core_ui
+drawable ic_notification
