@@ -9,10 +9,14 @@ local.properties
 # Build files
 /build
 /app/build
+build/
+**/build/
+.transforms/
 
 # APK files
 *.apk
 *.ap_
+*.aab
 
 # Keystore files
 *.jks

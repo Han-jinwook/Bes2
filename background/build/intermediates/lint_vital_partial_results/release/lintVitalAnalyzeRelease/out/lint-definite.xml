@@ -7,12 +7,12 @@
         message="Missing dataSync foregroundServiceType in the AndroidManifest.xml">
         <location
             file="${:background*release*MAIN*sourceProvider*0*javaDir*0}/com/bes2/background/worker/PhotoAnalysisWorker.kt"
-            line="194"
+            line="211"
             column="13"
-            startOffset="7932"
-            endLine="194"
+            startOffset="8994"
+            endLine="211"
             endColumn="105"
-            endOffset="8024"/>
+            endOffset="9086"/>
     </incident>
 
     <incident
@@ -21,12 +21,12 @@
         message="Missing dataSync foregroundServiceType in the AndroidManifest.xml">
         <location
             file="${:background*release*MAIN*sourceProvider*0*javaDir*0}/com/bes2/background/worker/PhotoDiscoveryWorker.kt"
-            line="262"
+            line="303"
             column="13"
-            startOffset="10730"
-            endLine="262"
+            startOffset="12690"
+            endLine="303"
             endColumn="105"
-            endOffset="10822"/>
+            endOffset="12782"/>
     </incident>
 
 </incidents>

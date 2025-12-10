@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.bes2.app.BuildConfig
 import com.bes2.app.ui.settings.SettingsEvent
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -192,6 +193,19 @@ fun SettingsScreen(
                 } else {
                     Text("지금 바로 동기화")
                 }
+            }
+
+            // --- VERSION INFO ---
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME} (code ${BuildConfig.VERSION_CODE})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.LightGray
+                )
             }
         }
     }

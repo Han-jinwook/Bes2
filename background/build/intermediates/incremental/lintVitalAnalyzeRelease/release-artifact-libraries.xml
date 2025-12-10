@@ -48,9 +48,9 @@
       resolved="::"/>
   <library
       name=":@@:data::release"
-      jars="C:\Users\chichi\.gradle\caches\8.13\transforms\015037a4fa3521b8a540350f0d8bbf0a\transformed\out\jars\classes.jar;C:\Users\chichi\.gradle\caches\8.13\transforms\015037a4fa3521b8a540350f0d8bbf0a\transformed\out\jars\libs\R.jar"
+      jars="C:\Users\chichi\.gradle\caches\8.13\transforms\d80adc1cb0dab695bbf9b5b87c9dd276\transformed\out\jars\classes.jar;C:\Users\chichi\.gradle\caches\8.13\transforms\d80adc1cb0dab695bbf9b5b87c9dd276\transformed\out\jars\libs\R.jar"
       resolved="Bes2:data:unspecified"
-      folder="C:\Users\chichi\.gradle\caches\8.13\transforms\015037a4fa3521b8a540350f0d8bbf0a\transformed\out"
+      folder="C:\Users\chichi\.gradle\caches\8.13\transforms\d80adc1cb0dab695bbf9b5b87c9dd276\transformed\out"
       manifest="AndroidManifest.xml"
       resFolder="res"
       assetsFolder="assets"
