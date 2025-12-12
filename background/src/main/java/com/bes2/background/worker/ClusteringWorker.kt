@@ -41,16 +41,31 @@ class ClusteringWorker @AssistedInject constructor(
 
         for (sourceType in sourceTypes) {
             try {
+                // [DEBUG LOG]
+                Timber.tag(WORK_NAME).d("Querying items for sourceType: $sourceType")
+                
                 val candidates = reviewItemDao.getAnalyzedItemsWithoutCluster(sourceType)
                 Timber.tag(WORK_NAME).d("[$sourceType] Query result: ${candidates.size} items found.")
                 
-                if (candidates.isEmpty()) continue
+                if (candidates.isEmpty()) {
+                    Timber.tag(WORK_NAME).d("[$sourceType] No items to cluster. Skipping.")
+                    continue
+                }
 
                 val validCandidates = candidates.filter { it.status == "ANALYZED" }
                 val rejectedCandidates = candidates.filter { it.status == "STATUS_REJECTED" }
+                
+                Timber.tag(WORK_NAME).d("[$sourceType] Valid candidates: ${validCandidates.size}, Rejected: ${rejectedCandidates.size}")
 
-                val validMapped = validCandidates.map { ImageItemEntity(id = it.id, uri = it.uri, timestamp = it.timestamp, filePath = it.filePath) }
+                val validMapped = validCandidates.map { ImageItemEntity(id = it.id, uri = it.uri, timestamp = it.timestamp, filePath = it.filePath, pHash = it.pHash, faceEmbedding = it.faceEmbedding) }
+                
+                // [DEBUG LOG] Check pHash existence
+                validMapped.forEach { 
+                    if (it.pHash == null) Timber.tag(WORK_NAME).w("Item [${it.id}] has NULL pHash!")
+                }
+
                 val validClusters = clusteringHelper.clusterImages(validMapped)
+                Timber.tag(WORK_NAME).d("[$sourceType] Clustering finished. Created ${validClusters.size} clusters.")
 
                 val createdClusterIds = mutableListOf<String>()
 
@@ -88,7 +103,6 @@ class ClusteringWorker @AssistedInject constructor(
                 }
 
                 if (candidates.isNotEmpty()) {
-                    // [MODIFIED] Simplified notification call, removing throttling.
                     if (settingsRepository.shouldShowNotification()) {
                         val clusterCount = validClusters.size + (if (rejectedCandidates.isNotEmpty() && validClusters.isEmpty()) 1 else 0)
                         
@@ -99,8 +113,6 @@ class ClusteringWorker @AssistedInject constructor(
                             candidates.size,
                             sourceType
                         )
-                        // [DELETED] No need to update notification time.
-                        // settingsRepository.updateLastNotificationTime(sourceType)
                     }
                 }
                 
@@ -110,7 +122,7 @@ class ClusteringWorker @AssistedInject constructor(
             }
         }
         
-        Timber.tag(WORK_NAME).d("Clustering finished.")
+        Timber.tag(WORK_NAME).d("ClusteringWorker finished.")
         return@withContext if (hasError) Result.failure() else Result.success()
     }
 }

@@ -69,10 +69,7 @@ import com.bes2.app.ui.settings.SettingsScreen
 import java.time.LocalDate
 
 @Composable
-fun Bes2App(
-    onStartAnalysisAndExit: () -> Unit,
-    pendingNavigationEvent: String? = null
-) {
+fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
     val context = LocalContext.current
 
     val storagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -82,9 +79,7 @@ fun Bes2App(
     }
 
     var hasStoragePermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED
-        )
+        mutableStateOf(ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED)
     }
 
     val permissionsToRequest = remember {
@@ -99,9 +94,8 @@ fun Bes2App(
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ ->
-        // [FIXED] Force re-check permission from system instead of relying on map result
-        hasStoragePermission = ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED
+    ) { permissionsMap ->
+        hasStoragePermission = permissionsMap[storagePermission] ?: hasStoragePermission
     }
 
     LaunchedEffect(Unit) {
@@ -113,32 +107,18 @@ fun Bes2App(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (hasStoragePermission) {
             val navController = rememberNavController()
-            
-            LaunchedEffect(pendingNavigationEvent) {
-                if (pendingNavigationEvent == "SCREENSHOT_CLEAN") {
-                    navController.navigate("screenshot_clean")
-                }
-            }
-            
             AppNavigation(navController = navController, onStartAnalysisAndExit = onStartAnalysisAndExit)
         } else {
             Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "앱을 사용하려면 저장 공간 접근 권한을 허용해야 합니다.",
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { permissionLauncher.launch(permissionsToRequest) }) {
-                        Text("권한 허용하기")
-                    }
-                }
+                Text(
+                    text = "앱을 사용하려면 저장 공간 접근 권한을 허용해야 합니다. 앱 설정에서 권한을 허용해주세요.",
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
 }
 
-// ... [Rest of the file remains exactly the same]
 @Composable
 private fun AppNavigation(
     navController: NavHostController, 
@@ -771,6 +751,7 @@ private fun HomeScreen(
     }
 }
 
+// ... [Dialog Composables unchanged]
 @Composable
 fun GuideDialog(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {

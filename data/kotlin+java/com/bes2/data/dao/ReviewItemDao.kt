@@ -34,8 +34,7 @@ interface ReviewItemDao {
     @Query("SELECT * FROM review_items WHERE status = 'NEW' AND source_type = 'DIET'")
     suspend fun getNewDietItems(): List<ReviewItemEntity>
     
-    // [ADDED] Batch query for Analysis Worker
-    @Query("SELECT * FROM review_items WHERE status = 'NEW' AND source_type = 'DIET' LIMIT :limit")
+    @Query("SELECT * FROM review_items WHERE status = 'NEW' AND source_type = 'DIET' ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getNewDietItemsBatch(limit: Int): List<ReviewItemEntity>
     
     @Query("SELECT EXISTS(SELECT 1 FROM review_items WHERE uri = :uri LIMIT 1)")
@@ -86,8 +85,11 @@ interface ReviewItemDao {
     @Query("SELECT COUNT(*) FROM review_items WHERE status = 'DELETED' AND timestamp >= :start AND timestamp <= :end")
     suspend fun getDeletedCountByDateRange(start: Long, end: Long): Int
 
+<<<<<<< HEAD
+=======
     // [ADDED] Check if memory items exist for a specific date (yyyy-MM-dd)
     // Using SQLite strftime to convert timestamp to date string
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
     @Query("SELECT COUNT(*) FROM review_items WHERE source_type = 'MEMORY' AND strftime('%Y-%m-%d', datetime(timestamp / 1000, 'unixepoch', 'localtime')) = :date")
     suspend fun getMemoryItemCount(date: String): Int
 
@@ -97,7 +99,15 @@ interface ReviewItemDao {
     @Query("UPDATE review_items SET isUploaded = 1 WHERE id IN (:ids)")
     suspend fun markAsUploaded(ids: List<Long>)
 
+<<<<<<< HEAD
+    @Query("SELECT uri FROM review_items")
+    suspend fun getAllProcessedUris(): List<String>
+
+    @Query("SELECT COUNT(*) FROM review_items")
+    suspend fun count(): Int
+=======
     // [ADDED] Get ALL URIs to exclude processed items from Home screen count
     @Query("SELECT uri FROM review_items")
     suspend fun getAllProcessedUris(): List<String>
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
 }

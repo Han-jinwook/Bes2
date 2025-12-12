@@ -11,7 +11,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+<<<<<<< HEAD
+import androidx.work.ExistingWorkPolicy
+=======
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
 import androidx.work.ForegroundInfo
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.bes2.data.dao.ReviewItemDao
 import com.bes2.data.repository.SettingsRepository
@@ -19,6 +25,7 @@ import com.bes2.ml.BacklightingDetector
 import com.bes2.ml.EyeClosedDetector
 import com.bes2.ml.FaceEmbedder
 import com.bes2.ml.ImageContentClassifier
+import com.bes2.ml.ImagePhashGenerator
 import com.bes2.ml.ImageQualityAssessor
 import com.bes2.ml.MusiqQualityAnalyzer
 import com.bes2.ml.NimaQualityAnalyzer
@@ -35,6 +42,7 @@ import timber.log.Timber
 class PhotoAnalysisWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
+    private val workManager: WorkManager,
     private val reviewItemDao: ReviewItemDao,
     private val nimaAnalyzer: NimaQualityAnalyzer,
     private val musiqAnalyzer: MusiqQualityAnalyzer,
@@ -50,7 +58,11 @@ class PhotoAnalysisWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "PhotoAnalysisWorker"
         const val BLUR_THRESHOLD = 20.0f
+<<<<<<< HEAD
+        const val KEY_IS_BACKGROUND_DIET = "is_background_diet"
+=======
         const val KEY_IS_BACKGROUND_DIET = "is_background_diet" 
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
         const val KEY_IS_INSTANT_PRIORITY = "is_instant_priority"
         private const val BATCH_SIZE = 50
         private const val NOTIFICATION_ID = 2024
@@ -68,6 +80,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
         Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker Started (Priority: $isInstantPriority) ---")
 
         var totalAnalyzed = 0
+        var newItemsFound = false
         
         try {
             while (true) {
@@ -82,9 +95,17 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                 val itemsToAnalyze = instantItems + newItems
                 
                 if (itemsToAnalyze.isEmpty()) {
+<<<<<<< HEAD
+                    Timber.tag(WORK_NAME).d("No new items to analyze.")
                     break
                 }
                 
+                newItemsFound = true
+=======
+                    break
+                }
+                
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
                 Timber.tag(WORK_NAME).d("Analyzing batch of ${itemsToAnalyze.size} images.")
 
                 for (imageItem in itemsToAnalyze) {
@@ -92,6 +113,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     try {
                         bitmap = loadBitmapSimple(imageItem.uri)
                         if (bitmap == null) {
+<<<<<<< HEAD
+                            Timber.tag(WORK_NAME).e("Failed to load bitmap for URI: ${imageItem.uri}. Skipping analysis.")
+=======
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
                             reviewItemDao.updateStatusByIds(listOf(imageItem.id), "ERROR_LOAD")
                             continue
                         }
@@ -107,7 +132,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
 
                         val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
                         val isBacklit = backlightingDetector.isBacklit(bitmap)
+<<<<<<< HEAD
+=======
 
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
                         val isBlurry = blurScore < BLUR_THRESHOLD
                         
                         val nextStatus = if (areEyesClosed || isBlurry) {
@@ -121,6 +149,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         var smilingProbability: Float? = null
                         var embedding: ByteArray? = null
                         var faceEmbedding: ByteArray? = null
+<<<<<<< HEAD
+                        val pHash = ImagePhashGenerator.generatePhash(bitmap)
+=======
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
 
                         if (nextStatus == "ANALYZED") {
                             embedding = semanticSearchEngine.encodeImage(bitmap)?.let { floatArrayToByteArray(it) }
@@ -134,6 +166,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
 
                         val updatedItem = imageItem.copy(
                             status = nextStatus,
+<<<<<<< HEAD
+                            pHash = pHash,
+=======
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
                             nimaScore = nimaMeanScore,
                             musiqScore = musiqScore,
                             blurScore = blurScore,
@@ -153,7 +189,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                         }
                         
                     } catch (e: Exception) {
+<<<<<<< HEAD
+=======
                         // [FIXED] Rethrow CancellationException to allow worker to stop gracefully
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
                         if (e is CancellationException) throw e
                         Timber.tag(WORK_NAME).e(e, "Error analyzing image: ${imageItem.uri}")
                         reviewItemDao.updateStatusByIds(listOf(imageItem.id), "ERROR_ANALYSIS")
@@ -166,10 +205,25 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             }
         } catch (e: CancellationException) {
             Timber.tag(WORK_NAME).w("Worker cancelled gracefully.")
+<<<<<<< HEAD
+            throw e
+        }
+        
+        // If we analyzed new items, explicitly trigger the clustering worker
+        if (newItemsFound) {
+            Timber.tag(WORK_NAME).d("Analysis finished. Triggering ClusteringWorker explicitly.")
+            val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
+            workManager
+                .beginWith(clusteringRequest) // Use beginWith instead of chaining
+                .enqueue()
+        }
+
+=======
             // Don't return failure, just let it end or rethrow if needed by WorkManager
             throw e
         }
         
+>>>>>>> cf90f718a77eba7f1db63ec598fbb17274d3c886
         return@withContext Result.success()
     }
 
@@ -184,7 +238,10 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             appContext.contentResolver.openInputStream(uri.toUri())?.use {
                 BitmapFactory.decodeStream(it)
             }
-        } catch (e: Exception) { return null }
+        } catch (e: Exception) {
+            Timber.tag(WORK_NAME).e(e, "Exception while loading bitmap for URI: $uri")
+            return null
+        }
     }
     
     private fun createForegroundInfo(): ForegroundInfo {
