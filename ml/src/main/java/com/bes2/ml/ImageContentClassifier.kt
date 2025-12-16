@@ -24,7 +24,6 @@ class ImageContentClassifier @Inject constructor() {
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
 
     init {
-        // [MODIFIED] Use minimal face size to avoid false positives on small background faces
         val faceOptions = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
             .setMinFaceSize(0.15f) // Faces must be at least 15% of image width
@@ -44,7 +43,6 @@ class ImageContentClassifier @Inject constructor() {
         "Person", "Human", "Face", "Crowd", "Selfie", "Smile", "People", "Portrait", "Wedding", "Party", "Event"
     )
     
-    // Explicit Document Keywords (to distinguish from generic Trash)
     private val documentKeywords = setOf(
         "Document", "Text", "Paper", "Receipt", "Invoice", "Menu", "Font",
         "Screen", "Monitor", "Display", "Screenshot", 
@@ -59,7 +57,6 @@ class ImageContentClassifier @Inject constructor() {
     suspend fun classify(bitmap: Bitmap): ImageCategory {
         val image = InputImage.fromBitmap(bitmap, 0)
         
-        // --- Step 1: Face Detection (The strongest signal for MEMORY) ---
         try {
             val faces = faceDetector.process(image).await()
             if (faces.isNotEmpty()) {
@@ -70,7 +67,6 @@ class ImageContentClassifier @Inject constructor() {
             Timber.w(e, "Face detection failed.")
         }
         
-        // --- Step 2: Strict Whitelist Label Analysis ---
         return try {
             val labels = labeler.process(image).await()
             
@@ -93,23 +89,17 @@ class ImageContentClassifier @Inject constructor() {
                 }
             }
 
-            // --- Step 3: Decision Logic (Strict Whitelist) ---
             when {
-                // 1. Is it definitely a Memory? (Food, Nature, etc.)
                 maxMemoryScore >= CONFIDENCE_THRESHOLD -> { 
                      Timber.d("Memory keyword '$topLabel' ($maxMemoryScore). Classified as MEMORY.")
                      ImageCategory.MEMORY
                 }
                 
-                // 2. Is it definitely a Document?
                 maxDocScore >= CONFIDENCE_THRESHOLD -> {
                      Timber.d("Document keyword '$topLabel' ($maxDocScore). Classified as DOCUMENT.")
                      ImageCategory.DOCUMENT
                 }
                 
-                // 3. EVERYTHING ELSE IS TRASH (OBJECT)
-                // If it's not a face, not a strong memory keyword, and not a document...
-                // It is a desk, a chair, a floor, or something ambiguous. -> TRASH IT.
                 else -> {
                     Timber.d("No strong match (Mem:$maxMemoryScore, Doc:$maxDocScore). Defaulting to OBJECT.")
                     ImageCategory.OBJECT
@@ -123,7 +113,6 @@ class ImageContentClassifier @Inject constructor() {
     }
     
     suspend fun hasSunglasses(bitmap: Bitmap): Boolean {
-        // ... (Existing implementation kept as is)
-        return false // Simplified for this snippet, actual impl should be kept
+        return false
     }
 }

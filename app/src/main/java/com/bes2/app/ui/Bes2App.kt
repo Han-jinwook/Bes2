@@ -60,6 +60,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.compose.AsyncImage
+import com.bes2.app.BuildConfig
 import com.bes2.app.R
 import com.bes2.app.ui.home.HomeUiState
 import com.bes2.app.ui.home.HomeViewModel
@@ -69,7 +70,10 @@ import com.bes2.app.ui.settings.SettingsScreen
 import java.time.LocalDate
 
 @Composable
-fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
+fun Bes2App(
+    onStartAnalysisAndExit: () -> Unit,
+    pendingNavigationEvent: String? = null
+) {
     val context = LocalContext.current
 
     val storagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -79,7 +83,9 @@ fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
     }
 
     var hasStoragePermission by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED)
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED
+        )
     }
 
     val permissionsToRequest = remember {
@@ -94,8 +100,8 @@ fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissionsMap ->
-        hasStoragePermission = permissionsMap[storagePermission] ?: hasStoragePermission
+    ) { _ ->
+        hasStoragePermission = ContextCompat.checkSelfPermission(context, storagePermission) == PackageManager.PERMISSION_GRANTED
     }
 
     LaunchedEffect(Unit) {
@@ -107,13 +113,26 @@ fun Bes2App(onStartAnalysisAndExit: () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (hasStoragePermission) {
             val navController = rememberNavController()
+            
+            LaunchedEffect(pendingNavigationEvent) {
+                if (pendingNavigationEvent == "SCREENSHOT_CLEAN") {
+                    navController.navigate("screenshot_clean")
+                }
+            }
+            
             AppNavigation(navController = navController, onStartAnalysisAndExit = onStartAnalysisAndExit)
         } else {
             Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "앱을 사용하려면 저장 공간 접근 권한을 허용해야 합니다. 앱 설정에서 권한을 허용해주세요.",
-                    textAlign = TextAlign.Center
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "앱을 사용하려면 저장 공간 접근 권한을 허용해야 합니다.",
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { permissionLauncher.launch(permissionsToRequest) }) {
+                        Text("권한 허용하기")
+                    }
+                }
             }
         }
     }
@@ -128,7 +147,6 @@ private fun AppNavigation(
         composable("home") {
             val homeViewModel: HomeViewModel = hiltViewModel()
 
-            // [MODIFIED] Trigger scan only after permission is granted
             LaunchedEffect(Unit) {
                 homeViewModel.triggerBackgroundScan()
             }
@@ -200,7 +218,6 @@ private fun HomeScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                // [MODIFIED] Use the correct public method
                 viewModel.triggerBackgroundScan()
             }
         }
@@ -256,466 +273,484 @@ private fun HomeScreen(
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 28.dp, end = 4.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { onNavigateToSettings() }
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings",
-                modifier = Modifier.size(28.dp),
-                tint = Color.Gray
-            )
-            Text(
-                text = "동기화", 
-                color = Color.Gray, 
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(48.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_logo), 
-                    contentDescription = "App Logo",
-                    modifier = Modifier
-                        .size(100.dp) 
-                        .clip(RoundedCornerShape(16.dp))
-                )
-                
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                Column(
-                    verticalArrangement = Arrangement.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.Start
                 ) {
-                    Text(
-                        text = "AI 사진비서",
-                        style = MaterialTheme.typography.headlineSmall, 
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 28.sp
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_logo),
+                        contentDescription = "App Logo",
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(16.dp))
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Text(
-                        text = "복잡한 갤러리,\nBest 2장으로 완성",
-                        style = MaterialTheme.typography.titleMedium, 
-                        color = Color(0xFFFF7043), 
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 22.sp
-                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "AI 사진비서",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 28.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "복잡한 갤러리,\nBest 2장으로 완성",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFFFF7043),
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 22.sp
+                        )
+                    }
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "오늘의 정리 리포트",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { showReportDialog = true }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "📊 상세 리포트",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "Show Report",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "${uiState.dailyTotal}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                Text(text = "촬영", style = MaterialTheme.typography.labelSmall)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(32.dp)
+                                    .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                                    .align(Alignment.CenterVertically)
+                            )
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${uiState.dailyKept}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF7043)
+                                )
+                                Text(text = "저장", style = MaterialTheme.typography.labelSmall)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(32.dp)
+                                    .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+                                    .align(Alignment.CenterVertically)
+                            )
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${uiState.dailyDeleted}",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(text = "삭제", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                val memoryEvent = uiState.memoryEvent
+                val isMemoryActive = memoryEvent != null && uiState.isMemoryPrepared
+                val eventCardColor = if (isMemoryActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant
+                val eventContentColor = if (isMemoryActive) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+                val eventFontWeight = if (isMemoryActive) FontWeight.Bold else FontWeight.Normal
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = eventCardColor,
+                        contentColor = eventContentColor
+                    ),
                     modifier = Modifier
-                        .padding(16.dp)
                         .fillMaxWidth()
+                        .scale(if (isMemoryActive) pulseScale else 1f)
+                        .clickable(enabled = isMemoryActive) {
+                            if (memoryEvent != null) {
+                                onNavigateToReview(memoryEvent.date, "MEMORY")
+                            }
+                        },
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isMemoryActive && memoryEvent != null) {
+                            AsyncImage(
+                                model = memoryEvent.representativeUri,
+                                contentDescription = "Memory Thumbnail",
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "추억 소환 🎉",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = eventFontWeight,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "${memoryEvent.date}의 추억 (${memoryEvent.count}장) 정리하기",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = eventFontWeight,
+                                    color = Color.White
+                                )
+                            }
+                        } else {
+                            val memoryText = when {
+                                memoryEvent != null -> "추억을 분석하고 있습니다..."
+                                uiState.isAnalysisInProgress -> "숨어있는 추억을 찾는 중..."
+                                else -> "발견된 추억이 없습니다"
+                            }
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Memory",
+                                modifier = Modifier.size(24.dp),
+                                tint = LocalContentColor.current.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = memoryText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = eventFontWeight,
+                                color = LocalContentColor.current.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val isDietActive = !uiState.isAnalysisInProgress && uiState.readyToCleanCount > 0
+                val dietCardColor = if (isDietActive) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                val dietContentColor = if (isDietActive) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                val dietFontWeight = if (isDietActive) FontWeight.Bold else FontWeight.Normal
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = dietCardColor,
+                        contentColor = dietContentColor
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .scale(if (isDietActive) pulseScale else 1f)
+                        .clickable(enabled = isDietActive) {
+                            if (isDietActive) {
+                                onNavigateToReview(null, "DIET")
+                            }
+                        },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "오늘의 정리 리포트",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { showReportDialog = true }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "📊 상세 리포트",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isDietActive) Icons.Default.CleaningServices else Icons.Default.PhotoLibrary,
+                                contentDescription = "Gallery Diet",
+                                modifier = Modifier.size(24.dp)
                             )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "갤러리 다이어트",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = dietFontWeight
+                                )
+                                if (uiState.isAnalysisInProgress) {
+                                    val progressText = if (uiState.analysisProgressTotal > 0) {
+                                        "AI 심층 분석 중... (${uiState.analysisProgressCurrent} / ${uiState.analysisProgressTotal})"
+                                    } else {
+                                        "전체 갤러리 분석 중... (준비 중)"
+                                    }
+                                    Text(
+                                        text = progressText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = dietFontWeight
+                                    )
+                                } else if (isDietActive) {
+                                    Text(
+                                        text = "전체 ${uiState.galleryTotalCount}장 중 ${uiState.readyToCleanCount}장 준비됨",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = dietFontWeight
+                                    )
+                                } else {
+                                    Text(
+                                        text = "현재 갤러리 ${uiState.galleryTotalCount}장",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                        if (isDietActive) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Show Report",
-                                modifier = Modifier.size(14.dp),
-                                tint = Color.White
+                                contentDescription = "Go"
                             )
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
+                val hasScreenshots = uiState.screenshotCount > 0
+                val isDiscoveryActive = !uiState.isDiscoveryInProgress
+                val isTrashActive = isDiscoveryActive && hasScreenshots
+                val screenshotCardColor = if (isTrashActive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant
+                val screenshotContentColor = if (isTrashActive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                val screenshotFontWeight = if (isTrashActive) FontWeight.Bold else FontWeight.Normal
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = screenshotCardColor,
+                        contentColor = screenshotContentColor
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .scale(if (isTrashActive) pulseScale else 1f)
+                        .clickable(enabled = isTrashActive) { onNavigateToScreenshotClean() },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "${uiState.dailyTotal}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text(text = "촬영", style = MaterialTheme.typography.labelSmall)
-                        }
-                        
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(32.dp)
-                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-                                .align(Alignment.CenterVertically)
-                        )
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${uiState.dailyKept}", 
-                                style = MaterialTheme.typography.headlineMedium, 
-                                fontWeight = FontWeight.Bold, 
-                                color = Color(0xFFFF7043)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteSweep,
+                                contentDescription = "Clean Screenshots",
+                                modifier = Modifier.size(24.dp)
                             )
-                            Text(text = "저장", style = MaterialTheme.typography.labelSmall)
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(32.dp)
-                                .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-                                .align(Alignment.CenterVertically)
-                        )
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${uiState.dailyDeleted}", 
-                                style = MaterialTheme.typography.headlineMedium, 
-                                fontWeight = FontWeight.Bold 
-                            )
-                            Text(text = "삭제", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // [Memory Event Card]
-            val memoryEvent = uiState.memoryEvent
-            val isMemoryActive = memoryEvent != null && uiState.isMemoryPrepared
-            val eventCardColor = if (isMemoryActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant
-            val eventContentColor = if (isMemoryActive) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
-            val eventFontWeight = if (isMemoryActive) FontWeight.Bold else FontWeight.Normal
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = eventCardColor,
-                    contentColor = eventContentColor
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scale(if (isMemoryActive) pulseScale else 1f)
-                    .clickable(enabled = isMemoryActive) {
-                        if (memoryEvent != null) {
-                            onNavigateToReview(memoryEvent.date, "MEMORY")
-                        }
-                    },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isMemoryActive && memoryEvent != null) {
-                        AsyncImage(
-                            model = memoryEvent.representativeUri,
-                            contentDescription = "Memory Thumbnail",
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "추억 소환 🎉",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = eventFontWeight,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "${memoryEvent.date}의 추억 (${memoryEvent.count}장) 정리하기",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = eventFontWeight,
-                                color = Color.White
-                            )
-                        }
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Memory",
-                            modifier = Modifier.size(24.dp),
-                            tint = LocalContentColor.current.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = if (memoryEvent != null) "추억을 분석하고 있습니다..." else "숨어있는 추억을 찾는 중...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = eventFontWeight,
-                            color = LocalContentColor.current.copy(alpha = 0.5f)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // [Gallery Diet Card]
-            val isDietActive = !uiState.isAnalysisInProgress && uiState.readyToCleanCount > 0
-            val dietCardColor = if (isDietActive) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant
-            val dietContentColor = if (isDietActive) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-            val dietFontWeight = if (isDietActive) FontWeight.Bold else FontWeight.Normal
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = dietCardColor,
-                    contentColor = dietContentColor
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scale(if (isDietActive) pulseScale else 1f)
-                    .clickable(enabled = isDietActive) {
-                        if (isDietActive) {
-                            onNavigateToReview(null, "DIET")
-                        }
-                    },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (isDietActive) Icons.Default.CleaningServices else Icons.Default.PhotoLibrary,
-                            contentDescription = "Gallery Diet",
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "갤러리 다이어트",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = dietFontWeight
-                            )
-                            if (uiState.isAnalysisInProgress) {
-                                // [MODIFIED] Show progress numbers
-                                val progressText = if (uiState.analysisProgressTotal > 0) {
-                                    "AI 심층 분석 중... (${uiState.analysisProgressCurrent} / ${uiState.analysisProgressTotal})"
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "스크린샷/불필요 사진 비우기",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = screenshotFontWeight
+                                )
+                                if (uiState.isDiscoveryInProgress) {
+                                    Text(
+                                        text = "전체 갤러리 분류 중... (잠시만요)",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 } else {
-                                    "전체 갤러리 분석 중... (준비 중)"
+                                    Text(
+                                        text = if (hasScreenshots) "정리할 사진 ${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 사진 0장",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
-                                Text(
-                                    text = progressText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = dietFontWeight
-                                )
-                            } else if (isDietActive) {
-                                Text(
-                                    text = "전체 ${uiState.galleryTotalCount}장 중 ${uiState.readyToCleanCount}장 준비됨",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = dietFontWeight
-                                )
-                            } else {
-                                Text(
-                                    text = "현재 갤러리 ${uiState.galleryTotalCount}장", 
-                                    style = MaterialTheme.typography.bodySmall
-                                )
                             }
                         }
-                    }
-                    if (isDietActive) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Go"
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // [Trash Cleaning Card] - [MODIFIED] Activated as soon as Discovery finishes
-            val hasScreenshots = uiState.screenshotCount > 0
-            val isDiscoveryActive = !uiState.isDiscoveryInProgress // Can click if scan is done
-            val isTrashActive = isDiscoveryActive && hasScreenshots
-            val screenshotCardColor = if (isTrashActive) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant
-            val screenshotContentColor = if (isTrashActive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
-            val screenshotFontWeight = if (isTrashActive) FontWeight.Bold else FontWeight.Normal
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = screenshotCardColor,
-                    contentColor = screenshotContentColor
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scale(if (isTrashActive) pulseScale else 1f)
-                    .clickable(enabled = isTrashActive) { onNavigateToScreenshotClean() },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteSweep,
-                            contentDescription = "Clean Screenshots",
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "스크린샷/불필요 사진 비우기",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = screenshotFontWeight
+                        if (isTrashActive) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Go"
                             )
-                            if (uiState.isDiscoveryInProgress) {
-                                Text(
-                                    text = "전체 갤러리 분류 중... (잠시만요)",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            } else {
-                                Text(
-                                    text = if (hasScreenshots) "정리할 사진 ${uiState.screenshotCount}장 발견 (지금 바로 비우기)" else "정리할 사진 0장", 
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
                         }
                     }
-                    if (isTrashActive) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Go"
-                        )
-                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // ... [Remaining UI components unchanged]
-            val hasPending = uiState.hasPendingReview
-            
-            OutlinedButton(
-                onClick = {
-                    if (hasPending) {
-                        onNavigateToReview(null, "INSTANT")
-                    } else {
-                        onStartAnalysisAndExit()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .scale(if (hasPending) pulseScale else 1f),
-                border = BorderStroke(1.dp, Color.Blue),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Blue)
-            ) {
-                Text(
-                    text = if (hasPending) "분석된 사진묶음 정리하기" 
-                           else "정리 끝! 이제 사진 찍으러 가자",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+                val hasPending = uiState.hasPendingReview
+                OutlinedButton(
+                    onClick = {
+                        if (hasPending) {
+                            onNavigateToReview(null, "INSTANT")
+                        } else {
+                            onStartAnalysisAndExit()
+                        }
+                    },
                     modifier = Modifier
-                        .weight(1f)
-                        .height(IntrinsicSize.Max),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .scale(if (hasPending) pulseScale else 1f),
+                    border = BorderStroke(1.dp, Color.Blue),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Blue)
                 ) {
                     Text(
-                        text = "꿀\nTip",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 32.sp
+                        text = if (hasPending) "분석된 사진묶음 정리하기"
+                               else "정리 끝! 이제 사진 찍으러 가자",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
 
-                Column(
-                    modifier = Modifier.width(IntrinsicSize.Max),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    OutlinedButton(
-                        onClick = { showGuideDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Bes2 100% 활용법", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.weight(1f, fill = true))
 
-                    OutlinedButton(
-                        onClick = { showTipsDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(IntrinsicSize.Max),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.TipsAndUpdates, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("꿀 클라우드/PC 정리 꿀팁", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "꿀\nTip",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 32.sp
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.width(IntrinsicSize.Max),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        OutlinedButton(
+                            onClick = { showGuideDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Bes2 100% 활용법", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = { showTipsDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.TipsAndUpdates, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("꿀 클라우드/PC 정리 꿀팁", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                // Version Name
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
             }
-            
-            Spacer(modifier = Modifier.height(32.dp))
+        }
+        
+        // Settings button is now drawn last to be on top
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 28.dp, end = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onNavigateToSettings() }
+                    .padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    modifier = Modifier.size(28.dp),
+                    tint = Color.Gray
+                )
+                Text(
+                    text = "동기화",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
         
         if (showGuideDialog) {
@@ -751,7 +786,6 @@ private fun HomeScreen(
     }
 }
 
-// ... [Dialog Composables unchanged]
 @Composable
 fun GuideDialog(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {

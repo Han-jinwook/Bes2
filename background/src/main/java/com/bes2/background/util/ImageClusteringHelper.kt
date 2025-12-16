@@ -14,13 +14,10 @@ class ImageClusteringHelper @Inject constructor(
 ) {
 
     companion object {
-        // [MODIFIED] Stricter threshold. 15 was too loose. 
-        private const val HAMMING_DISTANCE_THRESHOLD = 12 // Adjusted to 12 (compromise)
+        private const val HAMMING_DISTANCE_THRESHOLD = 12
         private const val TIME_THRESHOLD_MS = 3 * 60 * 1000 // 3 Minutes
         private const val FACE_SIMILARITY_THRESHOLD = 0.85f
-        
         private const val TAG = "Bes2Clustering"
-
         private const val ORPHAN_MERGE_TIME_THRESHOLD_MS = 3 * 60 * 1000
     }
     
@@ -50,10 +47,8 @@ class ImageClusteringHelper @Inject constructor(
             val timeDiff = abs(prevImage.timestamp - currentImage.timestamp)
 
             if (timeDiff <= TIME_THRESHOLD_MS && areVisuallySimilar(prevImage, currentImage)) {
-                // If similar to the previous image, add to the current cluster
                 currentCluster.images.add(currentImage)
             } else {
-                // Otherwise, start a new cluster
                 Timber.tag(TAG).d("New cluster created. Previous cluster size: ${currentCluster.images.size}")
                 currentCluster = Cluster(mutableListOf(currentImage))
                 clusters.add(currentCluster)
@@ -81,8 +76,6 @@ class ImageClusteringHelper @Inject constructor(
             val isCurrentSmall = currentBase.images.size < 3
             val isNextSmall = nextCluster.images.size < 3
             
-            // For merging orphans, we ONLY look at time, but we should be careful not to merge completely different things if possible.
-            // But here, we assume small orphan clusters close in time are likely related events.
             val timeGap = abs(currentBase.images.last().timestamp - nextCluster.images.first().timestamp)
 
             if ((isCurrentSmall || isNextSmall) && timeGap <= ORPHAN_MERGE_TIME_THRESHOLD_MS) {
@@ -100,30 +93,24 @@ class ImageClusteringHelper @Inject constructor(
     }
 
     private fun areVisuallySimilar(image1: ImageItemEntity, image2: ImageItemEntity): Boolean {
-        // [CRITICAL FIX] Check content type mismatch first!
         val hasFace1 = image1.faceEmbedding != null
         val hasFace2 = image2.faceEmbedding != null
         
-        // If one has a face and the other doesn't, they are DIFFERENT categories (Person vs Object/Scenery).
-        // Do NOT cluster them together.
         if (hasFace1 != hasFace2) {
             Timber.tag(TAG).d("Content Mismatch: Face vs No-Face. [${image1.id}] vs [${image2.id}] -> Not similar")
             return false
         }
 
-        // If both have faces, compare faces first.
         if (hasFace1 && hasFace2) {
             val faceSimilarity = areFacesSimilar(image1, image2)
             if (faceSimilarity) {
                 Timber.tag(TAG).i("Similar by Face: [${image1.id}] vs [${image2.id}]")
                 return true
             }
-            // If faces are different, they are different people. Do not fallback to pHash.
             Timber.tag(TAG).d("Different Faces: [${image1.id}] vs [${image2.id}] -> Not similar")
             return false
         }
 
-        // If neither has a face (Scenery/Objects), use pHash.
         val pHashSimilarity = arePhashSimilar(image1, image2)
         if (pHashSimilarity) {
             Timber.tag(TAG).i("Similar by pHash: [${image1.id}] vs [${image2.id}]")

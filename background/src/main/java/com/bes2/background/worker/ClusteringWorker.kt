@@ -41,7 +41,6 @@ class ClusteringWorker @AssistedInject constructor(
 
         for (sourceType in sourceTypes) {
             try {
-                // [DEBUG LOG]
                 Timber.tag(WORK_NAME).d("Querying items for sourceType: $sourceType")
                 
                 val candidates = reviewItemDao.getAnalyzedItemsWithoutCluster(sourceType)
@@ -59,7 +58,6 @@ class ClusteringWorker @AssistedInject constructor(
 
                 val validMapped = validCandidates.map { ImageItemEntity(id = it.id, uri = it.uri, timestamp = it.timestamp, filePath = it.filePath, pHash = it.pHash, faceEmbedding = it.faceEmbedding) }
                 
-                // [DEBUG LOG] Check pHash existence
                 validMapped.forEach { 
                     if (it.pHash == null) Timber.tag(WORK_NAME).w("Item [${it.id}] has NULL pHash!")
                 }

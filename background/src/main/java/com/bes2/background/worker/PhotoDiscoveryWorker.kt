@@ -43,12 +43,12 @@ import timber.log.Timber
 class PhotoDiscoveryWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
+    private val workManager: WorkManager,
     private val galleryRepository: GalleryRepository,
     private val reviewItemDao: ReviewItemDao,
     private val trashItemDao: TrashItemDao,
     private val imageClassifier: ImageContentClassifier,
-    private val settingsRepository: SettingsRepository,
-    private val workManager: WorkManager 
+    private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -59,9 +59,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         private const val INSERT_BATCH_SIZE = 100 
         private const val NOTIFICATION_ID = 2023
         private const val CHANNEL_ID = "bes2_analysis_channel"
-        
-        // Name of the slow background pipeline
-        private const val PIPELINE_WORK_NAME = "FullAnalysisPipeline"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -79,11 +76,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         val isInstantMode = inputData.getBoolean(KEY_IS_INSTANT_MODE, false)
         val sourceType = if (isInstantMode) "INSTANT" else "DIET"
         
-        // If Instant Mode, CANCEL the slow background analysis immediately!
-        if (isInstantMode) {
-            Timber.tag(WORK_NAME).w("Instant Mode detected! Cancelling slow background tasks.")
-            workManager.cancelUniqueWork(PIPELINE_WORK_NAME)
-        } else {
+        if (!isInstantMode) {
             setForeground(createForegroundInfo())
             settingsRepository.resetAnalysisProgress()
         }
@@ -96,10 +89,11 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             processGalleryScanStream(sourceType)
         }
         
-        if (!isInstantMode) {
-            // [FIXED] Removed unused variable and set Total Count correctly
-            val totalToAnalyze = reviewItemDao.getItemsBySourceAndStatus("DIET", "NEW").size
-            settingsRepository.setTotalScanCount(totalToAnalyze)
+        if (!isInstantMode && newDietCount > 0) {
+            settingsRepository.setTotalScanCount(newDietCount)
+            Timber.tag(WORK_NAME).d("Found $newDietCount new items. Triggering analysis.")
+            val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>().build()
+            workManager.beginUniqueWork("PhotoAnalysisChain", ExistingWorkPolicy.REPLACE, analysisRequest).enqueue()
         }
         
         if (newTrashCount > 0 && !isInstantMode) {
@@ -114,33 +108,7 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
             }
         }
         
-        if (isInstantMode && newDietCount > 0) {
-            triggerAnalysis()
-        }
-        
         return@withContext Result.success()
-    }
-    
-    private fun triggerAnalysis() {
-        val inputData = Data.Builder()
-            .putBoolean(PhotoAnalysisWorker.KEY_IS_BACKGROUND_DIET, true) // Keep foreground
-            .putBoolean(PhotoAnalysisWorker.KEY_IS_INSTANT_PRIORITY, true) // High Priority
-            .build()
-            
-        val analysisRequest = OneTimeWorkRequestBuilder<PhotoAnalysisWorker>()
-            .setInputData(inputData)
-            .build()
-            
-        val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
-        
-        // Use REPLACE to kill any existing Instant chain and start NEW immediately
-        workManager.beginUniqueWork(
-            "InstantAnalysisChain",
-            ExistingWorkPolicy.REPLACE, 
-            analysisRequest
-        )
-        .then(clusteringRequest)
-        .enqueue()
     }
     
     private suspend fun processInstantScan(sourceType: String): Pair<Int, Int> {
@@ -216,9 +184,9 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                     } else {
                         val bitmap = loadBitmap(contentUri)
                         if (bitmap != null) {
-                            val result = imageClassifier.classify(bitmap)
-                            if (result == ImageCategory.DOCUMENT || result == ImageCategory.OBJECT) {
-                                isTrash = true
+                            when (imageClassifier.classify(bitmap)) {
+                                ImageCategory.DOCUMENT, ImageCategory.OBJECT -> isTrash = true
+                                else -> { /* It's a MEMORY, do nothing */ }
                             }
                             bitmap.recycle()
                         }
