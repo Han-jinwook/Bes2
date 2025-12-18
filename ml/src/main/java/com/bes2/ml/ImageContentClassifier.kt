@@ -18,6 +18,11 @@ enum class ImageCategory {
     IGNORE    // Fallback
 }
 
+data class ClassificationResult(
+    val category: ImageCategory,
+    val isPerson: Boolean = false // [NEW] Explicitly track if the photo is of a person
+)
+
 class ImageContentClassifier @Inject constructor() {
 
     private val faceDetector: FaceDetector
@@ -26,42 +31,41 @@ class ImageContentClassifier @Inject constructor() {
     init {
         val faceOptions = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-            .setMinFaceSize(0.15f) // Faces must be at least 15% of image width
+            .setMinFaceSize(0.15f)
             .build()
         faceDetector = FaceDetection.getClient(faceOptions)
     }
 
-    // Whitelist Keywords: ONLY these are kept. Everything else is trash.
     private val memoryKeywords = setOf(
-        // Food
-        "Food", "Meal", "Dish", "Cuisine", "Dessert", "Drink", "Beverage", "Cake", "Bread", "Fruit", "Vegetable", "Meat",
-        // Nature & Landscape
-        "Nature", "Landscape", "Sky", "Cloud", "Sunset", "Sunrise", "Beach", "Mountain", "Forest", "Tree", "Flower", "Plant", "Garden", "Sea", "Ocean", "River",
-        // Living beings
-        "Pet", "Dog", "Cat", "Animal", "Bird", "Wildlife",
-        // People context
+        "Food", "Meal", "Dish", "Cuisine", "Dessert", "Drink",
+        "Nature", "Landscape", "Sky", "Cloud", "Sunset", "Sunrise", "Beach", "Mountain", "Forest", "Tree", "Flower", "Plant", "Garden", "Sea",
+        "Pet", "Dog", "Cat", "Animal", "Bird", "Wildlife"
+    )
+
+    private val personKeywords = setOf(
         "Person", "Human", "Face", "Crowd", "Selfie", "Smile", "People", "Portrait", "Wedding", "Party", "Event"
     )
     
     private val documentKeywords = setOf(
         "Document", "Text", "Paper", "Receipt", "Invoice", "Menu", "Font",
-        "Screen", "Monitor", "Display", "Screenshot", 
+        "Screen", "Monitor", "Display", "Screenshot",
         "Whiteboard", "Blackboard", "Poster", "Sign",
         "Handwriting", "Drawing", "Sketch", "Diagram"
     )
+    
+    private val sunglassesKeywords = setOf("Sunglasses", "Glasses", "Eyewear", "Goggles", "Shades")
 
     companion object {
-        private const val CONFIDENCE_THRESHOLD = 0.65f // Strict threshold for keywords
+        private const val CONFIDENCE_THRESHOLD = 0.65f
     }
 
-    suspend fun classify(bitmap: Bitmap): ImageCategory {
+    suspend fun classify(bitmap: Bitmap): ClassificationResult {
         val image = InputImage.fromBitmap(bitmap, 0)
         
         try {
             val faces = faceDetector.process(image).await()
             if (faces.isNotEmpty()) {
-                Timber.d("Valid Face detected. Classified as MEMORY.")
-                return ImageCategory.MEMORY
+                return ClassificationResult(ImageCategory.MEMORY, isPerson = true)
             }
         } catch (e: Exception) {
             Timber.w(e, "Face detection failed.")
@@ -70,49 +74,62 @@ class ImageContentClassifier @Inject constructor() {
         return try {
             val labels = labeler.process(image).await()
             
+            var isPersonPhoto = false
             var maxMemoryScore = 0f
             var maxDocScore = 0f
             var topLabel = ""
             
             labels.forEach { label ->
-                if (memoryKeywords.any { label.text.contains(it, ignoreCase = true) }) {
+                if (personKeywords.any { label.text.contains(it, ignoreCase = true) }) {
+                     if (label.confidence > maxMemoryScore) {
+                        maxMemoryScore = label.confidence
+                        isPersonPhoto = true
+                        topLabel = label.text
+                    }
+                } else if (memoryKeywords.any { label.text.contains(it, ignoreCase = true) }) {
                     if (label.confidence > maxMemoryScore) {
                         maxMemoryScore = label.confidence
-                        if (maxMemoryScore >= maxDocScore) topLabel = label.text
+                        isPersonPhoto = false // It's nature/food, not person
+                        topLabel = label.text
                     }
                 }
+                
                 if (documentKeywords.any { label.text.contains(it, ignoreCase = true) }) {
                     if (label.confidence > maxDocScore) {
                         maxDocScore = label.confidence
-                        if (maxDocScore > maxMemoryScore) topLabel = label.text
                     }
                 }
             }
 
-            when {
-                maxMemoryScore >= CONFIDENCE_THRESHOLD -> { 
-                     Timber.d("Memory keyword '$topLabel' ($maxMemoryScore). Classified as MEMORY.")
-                     ImageCategory.MEMORY
-                }
-                
-                maxDocScore >= CONFIDENCE_THRESHOLD -> {
-                     Timber.d("Document keyword '$topLabel' ($maxDocScore). Classified as DOCUMENT.")
-                     ImageCategory.DOCUMENT
-                }
-                
-                else -> {
-                    Timber.d("No strong match (Mem:$maxMemoryScore, Doc:$maxDocScore). Defaulting to OBJECT.")
-                    ImageCategory.OBJECT
-                }
+            val finalCategory = when {
+                maxMemoryScore >= CONFIDENCE_THRESHOLD -> ImageCategory.MEMORY
+                maxDocScore >= CONFIDENCE_THRESHOLD -> ImageCategory.DOCUMENT
+                else -> ImageCategory.OBJECT
+            }
+
+            // If the final category is MEMORY, also return if it was identified as a person
+            if (finalCategory == ImageCategory.MEMORY) {
+                ClassificationResult(finalCategory, isPerson = isPersonPhoto)
+            } else {
+                ClassificationResult(finalCategory)
             }
 
         } catch (e: Exception) {
-            Timber.e(e, "Error classifying. Defaulting to OBJECT.")
-            ImageCategory.OBJECT 
+            ClassificationResult(ImageCategory.OBJECT) // Default to trash on error
         }
     }
     
     suspend fun hasSunglasses(bitmap: Bitmap): Boolean {
-        return false
+        return try {
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val labels = labeler.process(image).await()
+            labels.any { label ->
+                sunglassesKeywords.any { keyword -> 
+                    label.text.contains(keyword, ignoreCase = true) && label.confidence > 0.6f
+                }
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 }

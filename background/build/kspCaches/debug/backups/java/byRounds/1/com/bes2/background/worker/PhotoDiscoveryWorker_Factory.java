@@ -29,6 +29,8 @@ import javax.inject.Provider;
     "cast"
 })
 public final class PhotoDiscoveryWorker_Factory {
+  private final Provider<WorkManager> workManagerProvider;
+
   private final Provider<GalleryRepository> galleryRepositoryProvider;
 
   private final Provider<ReviewItemDao> reviewItemDaoProvider;
@@ -39,38 +41,35 @@ public final class PhotoDiscoveryWorker_Factory {
 
   private final Provider<SettingsRepository> settingsRepositoryProvider;
 
-  private final Provider<WorkManager> workManagerProvider;
-
-  public PhotoDiscoveryWorker_Factory(Provider<GalleryRepository> galleryRepositoryProvider,
+  public PhotoDiscoveryWorker_Factory(Provider<WorkManager> workManagerProvider,
+      Provider<GalleryRepository> galleryRepositoryProvider,
       Provider<ReviewItemDao> reviewItemDaoProvider, Provider<TrashItemDao> trashItemDaoProvider,
       Provider<ImageContentClassifier> imageClassifierProvider,
-      Provider<SettingsRepository> settingsRepositoryProvider,
-      Provider<WorkManager> workManagerProvider) {
+      Provider<SettingsRepository> settingsRepositoryProvider) {
+    this.workManagerProvider = workManagerProvider;
     this.galleryRepositoryProvider = galleryRepositoryProvider;
     this.reviewItemDaoProvider = reviewItemDaoProvider;
     this.trashItemDaoProvider = trashItemDaoProvider;
     this.imageClassifierProvider = imageClassifierProvider;
     this.settingsRepositoryProvider = settingsRepositoryProvider;
-    this.workManagerProvider = workManagerProvider;
   }
 
   public PhotoDiscoveryWorker get(Context appContext, WorkerParameters workerParams) {
-    return newInstance(appContext, workerParams, galleryRepositoryProvider.get(), reviewItemDaoProvider.get(), trashItemDaoProvider.get(), imageClassifierProvider.get(), settingsRepositoryProvider.get(), workManagerProvider.get());
+    return newInstance(appContext, workerParams, workManagerProvider.get(), galleryRepositoryProvider.get(), reviewItemDaoProvider.get(), trashItemDaoProvider.get(), imageClassifierProvider.get(), settingsRepositoryProvider.get());
   }
 
-  public static PhotoDiscoveryWorker_Factory create(
+  public static PhotoDiscoveryWorker_Factory create(Provider<WorkManager> workManagerProvider,
       Provider<GalleryRepository> galleryRepositoryProvider,
       Provider<ReviewItemDao> reviewItemDaoProvider, Provider<TrashItemDao> trashItemDaoProvider,
       Provider<ImageContentClassifier> imageClassifierProvider,
-      Provider<SettingsRepository> settingsRepositoryProvider,
-      Provider<WorkManager> workManagerProvider) {
-    return new PhotoDiscoveryWorker_Factory(galleryRepositoryProvider, reviewItemDaoProvider, trashItemDaoProvider, imageClassifierProvider, settingsRepositoryProvider, workManagerProvider);
+      Provider<SettingsRepository> settingsRepositoryProvider) {
+    return new PhotoDiscoveryWorker_Factory(workManagerProvider, galleryRepositoryProvider, reviewItemDaoProvider, trashItemDaoProvider, imageClassifierProvider, settingsRepositoryProvider);
   }
 
   public static PhotoDiscoveryWorker newInstance(Context appContext, WorkerParameters workerParams,
-      GalleryRepository galleryRepository, ReviewItemDao reviewItemDao, TrashItemDao trashItemDao,
-      ImageContentClassifier imageClassifier, SettingsRepository settingsRepository,
-      WorkManager workManager) {
-    return new PhotoDiscoveryWorker(appContext, workerParams, galleryRepository, reviewItemDao, trashItemDao, imageClassifier, settingsRepository, workManager);
+      WorkManager workManager, GalleryRepository galleryRepository, ReviewItemDao reviewItemDao,
+      TrashItemDao trashItemDao, ImageContentClassifier imageClassifier,
+      SettingsRepository settingsRepository) {
+    return new PhotoDiscoveryWorker(appContext, workerParams, workManager, galleryRepository, reviewItemDao, trashItemDao, imageClassifier, settingsRepository);
   }
 }

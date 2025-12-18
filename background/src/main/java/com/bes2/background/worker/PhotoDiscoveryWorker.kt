@@ -184,7 +184,8 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                     } else {
                         val bitmap = loadBitmap(contentUri)
                         if (bitmap != null) {
-                            when (imageClassifier.classify(bitmap)) {
+                            val result = imageClassifier.classify(bitmap)
+                            when (result.category) {
                                 ImageCategory.DOCUMENT, ImageCategory.OBJECT -> isTrash = true
                                 else -> { /* It's a MEMORY, do nothing */ }
                             }

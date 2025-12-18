@@ -73,7 +73,6 @@ class PhotoAnalysisWorker @AssistedInject constructor(
         Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker Started (Priority: $isInstantPriority) ---")
 
         var totalAnalyzed = 0
-        var newItemsFound = false
         
         try {
             while (true) {
@@ -88,11 +87,9 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                 val itemsToAnalyze = instantItems + newItems
                 
                 if (itemsToAnalyze.isEmpty()) {
-                    Timber.tag(WORK_NAME).d("No new items to analyze.")
                     break
                 }
                 
-                newItemsFound = true
                 Timber.tag(WORK_NAME).d("Analyzing batch of ${itemsToAnalyze.size} images.")
 
                 for (imageItem in itemsToAnalyze) {
@@ -100,18 +97,15 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     try {
                         bitmap = loadBitmapSimple(imageItem.uri)
                         if (bitmap == null) {
-                            Timber.tag(WORK_NAME).e("Failed to load bitmap for URI: ${imageItem.uri}. Skipping analysis.")
                             reviewItemDao.updateStatusByIds(listOf(imageItem.id), "ERROR_LOAD")
                             continue
                         }
 
                         var areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                         
+                        // This hasSunglasses check might not be in the old logic, but keeping it as it's a good check.
                         if (areEyesClosed) {
-                            val hasSunglasses = imageClassifier.hasSunglasses(bitmap)
-                            if (hasSunglasses) {
-                                areEyesClosed = false
-                            }
+                            if (imageClassifier.hasSunglasses(bitmap)) areEyesClosed = false
                         }
 
                         val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
@@ -178,13 +172,11 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             throw e
         }
         
-        if (newItemsFound) {
-            Timber.tag(WORK_NAME).d("Analysis finished. Triggering ClusteringWorker explicitly.")
-            val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
-            workManager
-                .beginWith(clusteringRequest)
-                .enqueue()
-        }
+        // [MODIFIED] Always trigger clustering worker, even if no new items were analyzed.
+        // This ensures that previously analyzed but un-clustered items are processed.
+        Timber.tag(WORK_NAME).d("Analysis phase finished. Triggering ClusteringWorker explicitly.")
+        val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
+        workManager.enqueue(clusteringRequest)
 
         return@withContext Result.success()
     }

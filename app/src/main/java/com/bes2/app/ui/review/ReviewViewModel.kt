@@ -160,6 +160,10 @@ class ReviewViewModel @Inject constructor(
     private fun loadPendingClusters() {
         viewModelScope.launch {
             val clusters = imageClusterDao.getImageClustersByReviewStatus("PENDING_REVIEW").first()
+            if (clusters.isEmpty()) {
+                _uiState.value = ReviewUiState.NoClustersToReview
+                return@launch
+            }
             
             val validItems = reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "CLUSTERED") +
                              reviewItemDao.getItemsBySourceAndStatus(reviewSourceType, "STATUS_REJECTED")
@@ -331,20 +335,17 @@ class ReviewViewModel @Inject constructor(
         val smileProb = image.smilingProbability ?: 0f
         val smileBonus = if (smileProb < 0.1f) -10f else smileProb * 30f
         
-        // [ADDED] Give KEPT items a huge bonus to ensure they stay as Best
         val keptBonus = if (image.status == "KEPT") 1000f else 0f
         
         return (nimaScore.toFloat() * 0.3f) + (musiqScore * 0.5f) + smileBonus + keptBonus
     }
 
     private fun calculateReadyState(cluster: ImageClusterEntity, items: List<ReviewItemEntity>, total: Int, index: Int): ReviewUiState.Ready {
-        // [MODIFIED] Only filter out DELETED items. Show KEPT items.
         val activeItems = items.filter { it.status != "DELETED" }
         
         val (analyzedImages, rejectedImages) = activeItems.partition { it.status != "STATUS_REJECTED" }
 
         val (finalBest, finalSecond) = if (manualSelectionIds == null) {
-            // Because KEPT items have huge bonus score, they will naturally come to top
             val sortedCandidates = analyzedImages.sortedByDescending { calculateFinalScore(it) }
             Pair(sortedCandidates.getOrNull(0), sortedCandidates.getOrNull(1))
         } else {
