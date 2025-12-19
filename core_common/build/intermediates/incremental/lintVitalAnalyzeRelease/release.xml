@@ -4,10 +4,10 @@
     minSdkVersion="24"
     targetSdkVersion="24"
     mergedManifest="build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml"
-    proguardFiles="build\intermediates\default_proguard_files\global\proguard-android-optimize.txt-8.13.1;proguard-rules.pro"
+    proguardFiles="build\intermediates\default_proguard_files\global\proguard-android-optimize.txt-8.13.2;proguard-rules.pro"
     consumerProguardFiles="consumer-rules.pro"
     partialResultsDir="build\intermediates\lint_vital_partial_results\release\lintVitalAnalyzeRelease\out"
-    desugaredMethodsFiles="C:\Users\chichi\.gradle\caches\8.13\transforms\3132b96c41c40865698e3cf31fc42632\transformed\D8BackportedDesugaredMethods.txt">
+    desugaredMethodsFiles="C:\Users\chichi\.gradle\caches\8.13\transforms\12e239fc1a61e1b1dde4492c179175a1\transformed\D8BackportedDesugaredMethods.txt">
   <buildFeatures
       namespacing="REQUIRED"/>
   <sourceProviders>
@@ -27,6 +27,6 @@
       applicationId="com.bes2.core_common"
       generatedSourceFolders="build\generated\ksp\release\java;build\generated\ksp\release\kotlin;build\generated\ap_generated_sources\release\out"
       generatedResourceFolders="build\generated\res\resValues\release"
-      desugaredMethodsFiles="C:\Users\chichi\.gradle\caches\8.13\transforms\3132b96c41c40865698e3cf31fc42632\transformed\D8BackportedDesugaredMethods.txt">
+      desugaredMethodsFiles="C:\Users\chichi\.gradle\caches\8.13\transforms\12e239fc1a61e1b1dde4492c179175a1\transformed\D8BackportedDesugaredMethods.txt">
   </artifact>
 </variant>

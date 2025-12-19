@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<incidents format="6" by="lint 8.13.1" type="incidents">
+<incidents format="6" by="lint 8.13.2" type="incidents">
 
     <incident
         id="SpecifyForegroundServiceType"
@@ -7,12 +7,12 @@
         message="Missing dataSync foregroundServiceType in the AndroidManifest.xml">
         <location
             file="${:background*release*MAIN*sourceProvider*0*javaDir*0}/com/bes2/background/worker/PhotoAnalysisWorker.kt"
-            line="211"
+            line="222"
             column="13"
-            startOffset="8994"
-            endLine="211"
+            startOffset="9639"
+            endLine="222"
             endColumn="105"
-            endOffset="9086"/>
+            endOffset="9731"/>
     </incident>
 
     <incident
@@ -21,12 +21,12 @@
         message="Missing dataSync foregroundServiceType in the AndroidManifest.xml">
         <location
             file="${:background*release*MAIN*sourceProvider*0*javaDir*0}/com/bes2/background/worker/PhotoDiscoveryWorker.kt"
-            line="303"
+            line="272"
             column="13"
-            startOffset="12690"
-            endLine="303"
+            startOffset="11598"
+            endLine="272"
             endColumn="105"
-            endOffset="12782"/>
+            endOffset="11690"/>
     </incident>
 
 </incidents>

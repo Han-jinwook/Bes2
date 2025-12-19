@@ -20,7 +20,7 @@ enum class ImageCategory {
 
 data class ClassificationResult(
     val category: ImageCategory,
-    val isPerson: Boolean = false // [NEW] Explicitly track if the photo is of a person
+    val isPerson: Boolean = false
 )
 
 class ImageContentClassifier @Inject constructor() {
@@ -77,20 +77,17 @@ class ImageContentClassifier @Inject constructor() {
             var isPersonPhoto = false
             var maxMemoryScore = 0f
             var maxDocScore = 0f
-            var topLabel = ""
             
             labels.forEach { label ->
                 if (personKeywords.any { label.text.contains(it, ignoreCase = true) }) {
                      if (label.confidence > maxMemoryScore) {
                         maxMemoryScore = label.confidence
                         isPersonPhoto = true
-                        topLabel = label.text
                     }
                 } else if (memoryKeywords.any { label.text.contains(it, ignoreCase = true) }) {
                     if (label.confidence > maxMemoryScore) {
                         maxMemoryScore = label.confidence
-                        isPersonPhoto = false // It's nature/food, not person
-                        topLabel = label.text
+                        isPersonPhoto = false
                     }
                 }
                 
@@ -107,7 +104,6 @@ class ImageContentClassifier @Inject constructor() {
                 else -> ImageCategory.OBJECT
             }
 
-            // If the final category is MEMORY, also return if it was identified as a person
             if (finalCategory == ImageCategory.MEMORY) {
                 ClassificationResult(finalCategory, isPerson = isPersonPhoto)
             } else {
@@ -115,7 +111,7 @@ class ImageContentClassifier @Inject constructor() {
             }
 
         } catch (e: Exception) {
-            ClassificationResult(ImageCategory.OBJECT) // Default to trash on error
+            ClassificationResult(ImageCategory.OBJECT)
         }
     }
     

@@ -13,8 +13,8 @@ android {
         applicationId = "com.bes2.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.5"
+        versionCode = 6
+        versionName = "1.2.6"
 
         testInstrumentationRunner = "com.bes2.app.HiltTestRunner"
         vectorDrawables {
