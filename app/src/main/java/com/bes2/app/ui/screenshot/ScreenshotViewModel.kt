@@ -25,12 +25,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 data class ScreenshotUiState(
     val screenshots: List<TrashItemEntity> = emptyList(),
     val selectedUris: Set<String> = emptySet(), 
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
     val pendingDeleteUris: List<Uri>? = null,
     val resultMessage: String? = null,
     val showAd: Boolean = false 
@@ -40,9 +41,9 @@ data class ScreenshotUiState(
 class ScreenshotViewModel @Inject constructor(
     private val galleryRepository: GalleryRepository,
     private val trashItemDao: TrashItemDao,
-    private val reviewItemDao: ReviewItemDao, // [ADDED] To move kept trash to review_items
+    private val reviewItemDao: ReviewItemDao,
     private val settingsRepository: SettingsRepository,
-    private val workManager: WorkManager, // [ADDED] For Sync Trigger
+    private val workManager: WorkManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -58,46 +59,48 @@ class ScreenshotViewModel @Inject constructor(
 
     fun loadScreenshots() {
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(isLoading = true, showAd = false) }
+            // [FIX] Removed faulty guard that caused infinite loading
+            _uiState.update { it.copy(isLoading = true) }
+            Timber.d("ScreenshotViewModel: Starting to load screenshots...")
 
-            val combinedMap = mutableMapOf<String, TrashItemEntity>()
+            try {
+                val combinedMap = mutableMapOf<String, TrashItemEntity>()
 
-            // 1. Get ALL ready items from DB 
-            val dbTrashItems = trashItemDao.getReadyTrashItems(limit = 10000) 
-            for (item in dbTrashItems) {
-                combinedMap[item.uri] = item
-            }
-
-            // 2. Get real-time screenshots
-            val realScreenshots = galleryRepository.getScreenshots()
-            
-            for (item in realScreenshots) {
-                val uriString = item.uri.toString()
-                if (!combinedMap.containsKey(uriString)) {
-                    // Check if processed (deleted/kept)
-                    if (trashItemDao.isUriProcessed(uriString)) continue
-                    if (reviewItemDao.isUriProcessed(uriString)) continue // [ADDED] Check Review table too
-                    
-                    val trashItem = TrashItemEntity(
-                        id = item.id,
-                        uri = uriString,
-                        filePath = "",
-                        timestamp = item.dateTaken,
-                        status = "READY"
-                    )
-                    combinedMap[uriString] = trashItem
+                // 1. Get ready items from DB
+                val dbTrashItems = trashItemDao.getReadyTrashItems(limit = 5000) 
+                for (item in dbTrashItems) {
+                    combinedMap[item.uri] = item
                 }
-            }
 
-            val combinedList = combinedMap.values.sortedByDescending { it.timestamp }
+                // 2. Get real-time screenshots
+                val realScreenshots = galleryRepository.getScreenshots()
+                for (item in realScreenshots) {
+                    val uriString = item.uri.toString()
+                    if (!combinedMap.containsKey(uriString)) {
+                        if (trashItemDao.isUriProcessed(uriString)) continue
+                        if (reviewItemDao.isUriProcessed(uriString)) continue
+                        
+                        combinedMap[uriString] = TrashItemEntity(
+                            id = item.id, uri = uriString, filePath = "",
+                            timestamp = item.dateTaken, status = "READY"
+                        )
+                    }
+                }
 
-            val allUris = combinedList.map { it.uri }.toSet()
-            _uiState.update { 
-                it.copy(
-                    screenshots = combinedList, 
-                    selectedUris = allUris,
-                    isLoading = false
-                ) 
+                val combinedList = combinedMap.values.sortedByDescending { it.timestamp }
+                val allUris = combinedList.map { it.uri }.toSet()
+                
+                _uiState.update { 
+                    it.copy(
+                        screenshots = combinedList, 
+                        selectedUris = allUris,
+                        isLoading = false
+                    ) 
+                }
+                Timber.d("ScreenshotViewModel: Loaded ${combinedList.size} items.")
+            } catch (e: Exception) {
+                Timber.e(e, "ScreenshotViewModel: Error loading screenshots")
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -141,44 +144,34 @@ class ScreenshotViewModel @Inject constructor(
             val currentList = _uiState.value.screenshots
             val selectedItems = currentList.filter { selected.contains(it.uri) }
             
-            // [MODIFIED] Move KEPT items to ReviewItemDao so SyncWorker can see them
             val reviewItems = selectedItems.map { 
                 ReviewItemEntity(
-                    uri = it.uri,
-                    filePath = it.filePath,
-                    timestamp = it.timestamp,
-                    status = "KEPT", // Important for SyncWorker
-                    source_type = "TRASH" // Or maybe DIET? TRASH is fine if ReviewItemDao supports it.
+                    uri = it.uri, filePath = it.filePath, timestamp = it.timestamp,
+                    status = "KEPT", source_type = "TRASH"
                 )
             }
             
             reviewItemDao.insertAll(reviewItems)
             
-            // [MODIFIED] Delete from TrashItemDao so they don't count in Home screen
             val urisToRemove = selectedItems.map { it.uri }
             trashItemDao.deleteByUris(urisToRemove)
             
             settingsRepository.incrementDailyStats(keptDelta = selectedItems.size, deletedDelta = 0)
             updateAccumulatedCount(selectedItems.size)
             
-            // Trigger sync if immediate
             triggerSyncIfNeeded()
-            
-            // UI Update (Reuse delete logic for refresh)
             onDeleteCompleted(true, isKeepAction = true)
         }
     }
 
     fun onDeleteCompleted(success: Boolean, isKeepAction: Boolean = false) {
-        if (success) {
-            viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (success) {
                 if (!isKeepAction) {
-                    val deletedCount = _uiState.value.pendingDeleteUris?.size ?: 0
-                    if (deletedCount > 0) {
-                        settingsRepository.incrementDailyStats(keptDelta = 0, deletedDelta = deletedCount)
-                        updateAccumulatedCount(deletedCount)
-                        
-                        val pendingUris = _uiState.value.pendingDeleteUris?.map { it.toString() } ?: emptyList()
+                    val pendingUris = _uiState.value.pendingDeleteUris?.map { it.toString() } ?: emptyList()
+                    if (pendingUris.isNotEmpty()) {
+                        settingsRepository.incrementDailyStats(keptDelta = 0, deletedDelta = pendingUris.size)
+                        updateAccumulatedCount(pendingUris.size)
                         trashItemDao.deleteByUris(pendingUris)
                     }
                 }
@@ -188,19 +181,19 @@ class ScreenshotViewModel @Inject constructor(
                 _uiState.update { 
                     it.copy(
                         pendingDeleteUris = null, 
-                        resultMessage = "처리되었습니다.",
+                        resultMessage = if (isKeepAction) "보관되었습니다." else "정리되었습니다.",
                         showAd = showAd,
-                        screenshots = emptyList(),
-                        isLoading = true 
+                        selectedUris = emptySet(),
+                        isLoading = !showAd // Set loading and immediately refresh if no ad
                     ) 
                 }
                 
                 if (!showAd) {
                     loadScreenshots()
                 }
+            } else {
+                 _uiState.update { it.copy(pendingDeleteUris = null, isLoading = false) }
             }
-        } else {
-             _uiState.update { it.copy(pendingDeleteUris = null) }
         }
     }
     
