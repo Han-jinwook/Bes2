@@ -11,6 +11,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -19,19 +20,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.TipsAndUpdates
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,15 +34,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -213,6 +210,7 @@ private fun HomeScreen(
     var showGuideDialog by remember { mutableStateOf(false) }
     var showTipsDialog by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
+    var showIntroShareDialog by remember { mutableStateOf(false) } // [ADDED]
     
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -291,17 +289,20 @@ private fun HomeScreen(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                     horizontalArrangement = Arrangement.Start
                 ) {
+                    // [MODIFIED] Logo is now clickable to show Intro/Share Dialog
                     Image(
                         painter = painterResource(id = R.drawable.ic_logo),
                         contentDescription = "App Logo",
                         modifier = Modifier
                             .size(100.dp)
                             .clip(RoundedCornerShape(16.dp))
+                            .clickable { showIntroShareDialog = true }
                     )
 
                     Spacer(modifier = Modifier.width(16.dp))
 
                     Column(
+                        modifier = Modifier.clickable { showIntroShareDialog = true },
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
@@ -783,6 +784,158 @@ private fun HomeScreen(
                 onDismiss = { showReportDialog = false }
             )
         }
+
+        // [ADDED] App Intro & Share Dialog
+        if (showIntroShareDialog) {
+            AppIntroShareDialog(onDismiss = { showIntroShareDialog = false })
+        }
+    }
+}
+
+@Composable
+fun AppIntroShareDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val appLink = "https://play.google.com/store/apps/details?id=com.bes2.app"
+    val introTitle = "Bes2 (베스트투)"
+    val introSubtitle = "AI 기반 갤러리 정리 비서"
+    val fullShareText = "📸 복잡한 갤러리, AI 비서 Bes2가 정리해드려요! 베스트 사진만 남기고 용량 고민 끝.\n지금 다운로드: $appLink"
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 100.dp), // Push to bottom like a sheet
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Bes2 소개",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Intro Box (Similar to ReperMeta)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_logo),
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = introTitle, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = introSubtitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        IntroFeatureItem(Icons.Default.AutoFixHigh, "스마트 분류", "인물, 풍경, 음식 사진만 쏙쏙 골라내요.")
+                        IntroFeatureItem(Icons.Default.Collections, "갤러리 다이어트", "비슷한 사진 중 베스트 컷만 남겨드려요.")
+                        IntroFeatureItem(Icons.Default.DeleteSweep, "비우기 한판", "스크린샷과 잡동사니를 한 번에 정리해요.")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Text(text = "친구에게 공유하기", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ShareButton(
+                        icon = Icons.Default.Link,
+                        label = "링크 복사",
+                        backgroundColor = Color(0xFF03A9F4),
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Bes2 App Link", appLink)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "링크가 복사되었습니다!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    ShareButton(
+                        icon = Icons.Default.Share,
+                        label = "앱 추천하기",
+                        backgroundColor = Color(0xFF4CAF50),
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, fullShareText)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Bes2 공유하기"))
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun IntroFeatureItem(icon: ImageVector, title: String, desc: String) {
+    Row(
+        modifier = Modifier.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(text = title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Text(text = desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun RowScope.ShareButton(icon: ImageVector, label: String, backgroundColor: Color, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.weight(1f).clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(backgroundColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = label, style = MaterialTheme.typography.labelMedium)
     }
 }
 

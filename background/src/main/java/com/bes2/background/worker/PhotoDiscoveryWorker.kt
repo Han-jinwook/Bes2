@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.os.Build
 import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
@@ -147,7 +149,6 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         
         val cursor = galleryRepository.getAllImagesCursor()
         if (cursor == null || cursor.count == 0) {
-            Timber.tag(WORK_NAME).w("Cursor is null or empty. Scan will not proceed.")
             cursor?.close()
             return Pair(0, 0)
         }
@@ -182,12 +183,12 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
                     if (isScreenshotPath) {
                         isTrash = true
                     } else {
+                        // [CRITICAL FIX] Load bitmap with rotation!
                         val bitmap = loadBitmap(contentUri)
                         if (bitmap != null) {
                             val result = imageClassifier.classify(bitmap)
-                            when (result.category) {
-                                ImageCategory.DOCUMENT, ImageCategory.OBJECT -> isTrash = true
-                                else -> { /* It's a MEMORY, do nothing */ }
+                            if (result.category != ImageCategory.MEMORY) {
+                                isTrash = true
                             }
                             bitmap.recycle()
                         }
@@ -240,12 +241,53 @@ class PhotoDiscoveryWorker @AssistedInject constructor(
         return Pair(newTrashFound, newDietFound)
     }
     
-    private fun loadBitmap(uri: String): Bitmap? {
-        return try {
-            appContext.contentResolver.openInputStream(uri.toUri())?.use {
+    // [CRITICAL FIX] Load bitmap with correct rotation from Exif
+    private fun loadBitmap(uriString: String): Bitmap? {
+        val uri = uriString.toUri()
+        try {
+            val originalBitmap = appContext.contentResolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it)
+            } ?: return null
+
+            // Read Exif orientation
+            var rotation = 0
+            try {
+                appContext.contentResolver.openInputStream(uri)?.use {
+                    val exifInterface = ExifInterface(it)
+                    val orientation = exifInterface.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                    rotation = when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                        else -> 0
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore Exif errors, use 0 rotation
             }
-        } catch (e: Exception) { null }
+
+            return if (rotation != 0) {
+                val matrix = Matrix()
+                matrix.postRotate(rotation.toFloat())
+                val rotatedBitmap = Bitmap.createBitmap(
+                    originalBitmap, 0, 0,
+                    originalBitmap.width, originalBitmap.height,
+                    matrix, true
+                )
+                if (rotatedBitmap != originalBitmap) {
+                    originalBitmap.recycle()
+                }
+                rotatedBitmap
+            } else {
+                originalBitmap
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to load bitmap: $uriString")
+            return null
+        }
     }
 
     private fun createForegroundInfo(): ForegroundInfo {

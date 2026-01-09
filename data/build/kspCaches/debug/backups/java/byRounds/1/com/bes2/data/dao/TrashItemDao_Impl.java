@@ -7,6 +7,7 @@ import androidx.room.CoroutinesRoom;
 import androidx.room.EntityInsertionAdapter;
 import androidx.room.RoomDatabase;
 import androidx.room.RoomSQLiteQuery;
+import androidx.room.SharedSQLiteStatement;
 import androidx.room.util.CursorUtil;
 import androidx.room.util.DBUtil;
 import androidx.room.util.StringUtil;
@@ -38,6 +39,8 @@ public final class TrashItemDao_Impl implements TrashItemDao {
 
   private final EntityInsertionAdapter<TrashItemEntity> __insertionAdapterOfTrashItemEntity;
 
+  private final SharedSQLiteStatement __preparedStmtOfDeleteAllReadyTrashItems;
+
   public TrashItemDao_Impl(@NonNull final RoomDatabase __db) {
     this.__db = __db;
     this.__insertionAdapterOfTrashItemEntity = new EntityInsertionAdapter<TrashItemEntity>(__db) {
@@ -56,6 +59,14 @@ public final class TrashItemDao_Impl implements TrashItemDao {
         statement.bindLong(4, entity.getTimestamp());
         statement.bindLong(5, entity.getSize());
         statement.bindString(6, entity.getStatus());
+      }
+    };
+    this.__preparedStmtOfDeleteAllReadyTrashItems = new SharedSQLiteStatement(__db) {
+      @Override
+      @NonNull
+      public String createQuery() {
+        final String _query = "DELETE FROM trash_items WHERE status = 'READY'";
+        return _query;
       }
     };
   }
@@ -92,6 +103,29 @@ public final class TrashItemDao_Impl implements TrashItemDao {
           return Unit.INSTANCE;
         } finally {
           __db.endTransaction();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object deleteAllReadyTrashItems(final Continuation<? super Unit> $completion) {
+    return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
+      @Override
+      @NonNull
+      public Unit call() throws Exception {
+        final SupportSQLiteStatement _stmt = __preparedStmtOfDeleteAllReadyTrashItems.acquire();
+        try {
+          __db.beginTransaction();
+          try {
+            _stmt.executeUpdateDelete();
+            __db.setTransactionSuccessful();
+            return Unit.INSTANCE;
+          } finally {
+            __db.endTransaction();
+          }
+        } finally {
+          __preparedStmtOfDeleteAllReadyTrashItems.release(_stmt);
         }
       }
     }, $completion);

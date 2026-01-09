@@ -24,11 +24,9 @@ interface TrashItemDao {
     @Query("SELECT COUNT(*) FROM trash_items WHERE status = 'READY'")
     suspend fun getReadyTrashCount(): Int
 
-    // [ADDED] Fetch ready items with limit for mixing with screenshots
     @Query("SELECT * FROM trash_items WHERE status = 'READY' ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getReadyTrashItems(limit: Int): List<TrashItemEntity>
 
-    // [ADDED] Fetches all items that are ready for review without any limit
     @Query("SELECT * FROM trash_items WHERE status = 'READY' ORDER BY timestamp DESC")
     suspend fun getAllReadyTrashItems(): List<TrashItemEntity>
 
@@ -38,6 +36,10 @@ interface TrashItemDao {
     @Query("DELETE FROM trash_items WHERE uri IN (:uris)")
     suspend fun deleteByUris(uris: List<String>)
     
+    // [ADDED] To allow re-scanning, we delete previous results
+    @Query("DELETE FROM trash_items WHERE status = 'READY'")
+    suspend fun deleteAllReadyTrashItems()
+
     @Query("SELECT EXISTS(SELECT 1 FROM trash_items WHERE uri = :uri LIMIT 1)")
     suspend fun isUriProcessed(uri: String): Boolean
 }

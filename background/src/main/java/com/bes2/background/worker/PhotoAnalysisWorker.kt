@@ -73,6 +73,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
         Timber.tag(WORK_NAME).d("--- PhotoAnalysisWorker Started (Priority: $isInstantPriority) ---")
 
         var totalAnalyzed = 0
+        var newItemsFound = false
         
         try {
             while (true) {
@@ -90,6 +91,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                     break
                 }
                 
+                newItemsFound = true
                 Timber.tag(WORK_NAME).d("Analyzing batch of ${itemsToAnalyze.size} images.")
 
                 for (imageItem in itemsToAnalyze) {
@@ -101,13 +103,7 @@ class PhotoAnalysisWorker @AssistedInject constructor(
                             continue
                         }
 
-                        var areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
-                        
-                        // This hasSunglasses check might not be in the old logic, but keeping it as it's a good check.
-                        if (areEyesClosed) {
-                            if (imageClassifier.hasSunglasses(bitmap)) areEyesClosed = false
-                        }
-
+                        val areEyesClosed = eyeClosedDetector.areEyesClosed(bitmap)
                         val blurScore = ImageQualityAssessor.calculateBlurScore(bitmap)
                         val isBacklit = backlightingDetector.isBacklit(bitmap)
                         val isBlurry = blurScore < BLUR_THRESHOLD
@@ -172,11 +168,13 @@ class PhotoAnalysisWorker @AssistedInject constructor(
             throw e
         }
         
-        // [MODIFIED] Always trigger clustering worker, even if no new items were analyzed.
-        // This ensures that previously analyzed but un-clustered items are processed.
-        Timber.tag(WORK_NAME).d("Analysis phase finished. Triggering ClusteringWorker explicitly.")
-        val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
-        workManager.enqueue(clusteringRequest)
+        if (newItemsFound) {
+            Timber.tag(WORK_NAME).d("Analysis finished. Triggering ClusteringWorker explicitly.")
+            val clusteringRequest = OneTimeWorkRequestBuilder<ClusteringWorker>().build()
+            workManager
+                .beginWith(clusteringRequest) 
+                .enqueue()
+        }
 
         return@withContext Result.success()
     }
